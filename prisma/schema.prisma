@@ -1,0 +1,316 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("POSTGRES_PRISMA_URL")
+  directUrl  = env("POSTGRES_URL_NON_POOLING")
+}
+
+// ============================================
+// EMPRESA (Tenant) - Multi-tenant SaaS
+// ============================================
+model Empresa {
+  id              String   @id @default(cuid())
+  nome            String
+  cnpj            String?  @unique
+  email           String?
+  telefone        String?
+  endereco        String?
+  cidade          String?
+  estado          String?
+  logo            String?
+  ativa           Boolean  @default(true)
+  plano           Plano    @default(BASICO)
+  dataVencimento  DateTime?
+  isDemo          Boolean  @default(false)
+  diasDemo        Int      @default(7)
+  bloqueada       Boolean  @default(false)
+  motivoBloqueio  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  usuarios        Usuario[]
+  clientes        Cliente[]
+  tiposMaquina    TipoMaquina[]
+
+  @@map("empresas")
+}
+
+// ============================================
+// USUÁRIO - Usuários do sistema
+// ============================================
+model Usuario {
+  id           String      @id @default(cuid())
+  nome         String
+  email        String
+  senha        String
+  telefone     String?
+  foto         String?
+  ativo        Boolean     @default(true)
+  nivelAcesso  NivelAcesso @default(OPERADOR)
+  empresaId    String
+  ultimoAcesso DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  empresa      Empresa     @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  logs         LogAcesso[]
+  leituras     Leitura[]
+
+  @@unique([email, empresaId])
+  @@map("usuarios")
+}
+
+// ============================================
+// CLIENTE - Clientes que possuem máquinas
+// ============================================
+model Cliente {
+  id              String          @id @default(cuid())
+  nome            String
+  cpfCnpj         String?
+  email           String?
+  telefone        String?
+  telefone2       String?
+  endereco        String?
+  cidade          String?
+  estado          String?
+  cep             String?
+  observacoes     String?
+  ativo           Boolean         @default(true)
+  bloqueado       Boolean         @default(false)
+  motivoBloqueio  String?
+  empresaId       String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  empresa         Empresa         @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  maquinas        Maquina[]
+  assinaturas     Assinatura[]
+  pagamentos      Pagamento[]
+  leituras        Leitura[]
+
+  @@map("clientes")
+}
+
+// ============================================
+// TIPO DE MÁQUINA - Cadastro de tipos de máquina
+// ============================================
+model TipoMaquina {
+  id            String    @id @default(cuid())
+  descricao     String
+  nomeEntrada   String    @default("E")
+  nomeSaida     String    @default("S")
+  ativo         Boolean   @default(true)
+  empresaId     String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  empresa       Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  maquinas      Maquina[]
+
+  @@unique([descricao, empresaId])
+  @@map("tipos_maquina")
+}
+
+// ============================================
+// MÁQUINA - Máquinas dos clientes
+// ============================================
+model Maquina {
+  id              String        @id @default(cuid())
+  codigo          String
+  tipoId          String
+  descricao       String?
+  marca           String?
+  modelo          String?
+  numeroSerie     String?
+  dataAquisicao   DateTime?
+  valorAquisicao  Float?
+  valorMensal     Float?
+  localizacao     String?
+  status          StatusMaquina @default(ATIVA)
+  observacoes     String?
+  whatsapp        String?       // Grupo ou usuário WhatsApp para enviar foto da leitura
+  // Campos de controle de moedas
+  moeda           TipoMoeda     @default(M001)
+  entradaAtual    Float         @default(0)
+  saidaAtual      Float         @default(0)
+  clienteId       String
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  cliente         Cliente       @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  tipo            TipoMaquina   @relation(fields: [tipoId], references: [id], onDelete: Restrict)
+  faturamentos    Faturamento[]
+  leituras        Leitura[]
+
+  @@unique([codigo, clienteId])
+  @@map("maquinas")
+}
+
+// ============================================
+// ASSINATURA - Planos de cobrança
+// ============================================
+model Assinatura {
+  id              String            @id @default(cuid())
+  plano           String
+  descricao       String?
+  valorMensal     Float
+  diaVencimento   Int              @default(10)
+  dataInicio      DateTime
+  dataFim         DateTime?
+  status          StatusAssinatura @default(ATIVA)
+  clienteId       String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  cliente         Cliente           @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  pagamentos      Pagamento[]
+
+  @@map("assinaturas")
+}
+
+// ============================================
+// PAGAMENTO - Histórico de pagamentos
+// ============================================
+model Pagamento {
+  id              String          @id @default(cuid())
+  valor           Float
+  dataVencimento  DateTime
+  dataPagamento   DateTime?
+  status          StatusPagamento @default(PENDENTE)
+  formaPagamento  FormaPagamento?
+  observacoes     String?
+  clienteId       String
+  assinaturaId    String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  cliente         Cliente         @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  assinatura      Assinatura?     @relation(fields: [assinaturaId], references: [id], onDelete: SetNull)
+
+  @@map("pagamentos")
+}
+
+// ============================================
+// FATURAMENTO - Registro de faturamento das máquinas
+// ============================================
+model Faturamento {
+  id            String    @id @default(cuid())
+  maquinaId     String
+  dataReferencia DateTime
+  valorTotal    Float
+  quantidade    Int?
+  observacoes   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  maquina       Maquina   @relation(fields: [maquinaId], references: [id], onDelete: Cascade)
+
+  @@map("faturamentos")
+}
+
+// ============================================
+// LEITURA - Histórico de leituras das máquinas
+// ============================================
+model Leitura {
+  id                String    @id @default(cuid())
+  maquinaId         String
+  clienteId         String
+  usuarioId         String
+  dataLeitura       DateTime  @default(now())
+  entradaAnterior   Float     @default(0)
+  entradaNova       Float     @default(0)
+  saidaAnterior     Float     @default(0)
+  saidaNova         Float     @default(0)
+  diferencaEntrada  Float     @default(0)
+  diferencaSaida    Float     @default(0)
+  saldo             Float     @default(0)
+  moeda             TipoMoeda @default(M010)
+  observacoes       String?
+  despesa           String?   // Descrição da despesa extra
+  valorDespesa      Float?    // Valor da despesa extra
+  createdAt         DateTime  @default(now())
+
+  maquina           Maquina   @relation(fields: [maquinaId], references: [id], onDelete: Cascade)
+  cliente           Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  usuario           Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([clienteId, dataLeitura])
+  @@index([maquinaId, dataLeitura])
+  @@map("leituras")
+}
+
+// ============================================
+// LOG DE ACESSO - Auditoria do sistema
+// ============================================
+model LogAcesso {
+  id          String      @id @default(cuid())
+  acao        String
+  descricao   String?
+  ip          String?
+  usuarioId   String
+  createdAt   DateTime    @default(now())
+
+  usuario     Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("logs_acesso")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum NivelAcesso {
+  ADMINISTRADOR
+  SUPERVISOR
+  OPERADOR
+}
+
+enum Plano {
+  BASICO
+  PROFISSIONAL
+  PREMIUM
+  ENTERPRISE
+}
+
+enum StatusMaquina {
+  ATIVA
+  INATIVA
+  MANUTENCAO
+  VENDIDA
+}
+
+enum StatusAssinatura {
+  ATIVA
+  SUSPENSA
+  CANCELADA
+  VENCIDA
+}
+
+enum StatusPagamento {
+  PENDENTE
+  PAGO
+  ATRASADO
+  CANCELADO
+}
+
+enum FormaPagamento {
+  PIX
+  BOLETO
+  CARTAO_CREDITO
+  CARTAO_DEBITO
+  DINHEIRO
+  TRANSFERENCIA
+}
+
+enum TipoMoeda {
+  M001  // R$ 0,01
+  M005  // R$ 0,05
+  M010  // R$ 0,10
+  M025  // R$ 0,25
+}
