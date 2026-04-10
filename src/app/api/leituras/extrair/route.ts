@@ -191,15 +191,18 @@ Responda APENAS com este JSON (sem markdown, sem explicações):
       );
     }
 
-    // Validar resultado e garantir que sejam inteiros (remover decimais se a IA falhar)
-    if (resultado.entrada !== null && resultado.entrada !== undefined) {
-      resultado.entrada = Math.floor(Number(resultado.entrada));
-      if (isNaN(resultado.entrada)) resultado.entrada = null;
-    }
-    if (resultado.saida !== null && resultado.saida !== undefined) {
-      resultado.saida = Math.floor(Number(resultado.saida));
-      if (isNaN(resultado.saida)) resultado.saida = null;
-    }
+    // Função para sanitizar valor: remove ponto e vírgula, mantém todos os algarismos
+    // Exemplo: 2324.00 → 232400 | 1234.56 → 123456 | 2.324,00 → 232400
+    const sanitizarValor = (valor: any): number | null => {
+      if (valor === null || valor === undefined) return null;
+      // Converter para string, remover tudo que não for dígito
+      const digitos = String(valor).replace(/\D/g, '');
+      if (!digitos) return null;
+      return parseInt(digitos, 10);
+    };
+
+    resultado.entrada = sanitizarValor(resultado.entrada);
+    resultado.saida = sanitizarValor(resultado.saida);
     if (typeof resultado.confianca !== 'number') {
       resultado.confianca = 0;
     }
