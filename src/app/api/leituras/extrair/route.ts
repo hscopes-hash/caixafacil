@@ -51,13 +51,15 @@ Sua tarefa:
 3. O display de SAÍDA geralmente mostra um número menor
 
 REGRA IMPORTANTE PARA VALORES MONETÁRIOS:
-- Quando o número exibido no display tiver formato de moeda (com ponto ou vírgula como separador decimal, ex: "1.234,56" ou "1234.56"), retorne APENAS os algarismos numéricos, removendo todo e qualquer separador decimal.
-- Exemplo: se o display mostra "1.234,56", retorne 123456. Se mostra "12.34", retorne 1234.
-- Se o número NÃO tiver separador decimal (é um contador inteiro), retorne o número como está.
-- O valor final deve SEMPRE ser um número inteiro sem pontos, vírgulas ou casas decimais.
+- Quando o número exibido no display tiver formato de moeda (com ponto ou vírgula como separador decimal, ex: "2.324,00" ou "1234.56"), retorne APENAS os algarismos numéricos, removendo todo e qualquer ponto e vírgula.
+- Exemplo 1: se o display mostra "2.324,00", retorne "232400". Se mostra "1.234,56", retorne "123456".
+- Exemplo 2: se o display mostra "12.34", retorne "1234".
+- Exemplo 3: se o display mostra "0,50", retorne "050" ou "50".
+- Se o número NÃO tiver separador decimal (é um contador inteiro), retorne o número como está (ex: "1234").
+- Os valores devem ser retornados como STRING entre aspas no JSON, para preservar todos os dígitos incluindo zeros à esquerda.
 
 Responda APENAS com este JSON (sem markdown, sem explicações):
-{"entrada": NUMERO_INTEIRO_OU_NULL, "saida": NUMERO_INTEIRO_OU_NULL, "confianca": PERCENTUAL_0_100, "observacoes": "texto breve"}`;
+{"entrada": "STRING_COM_APENAS_DIGITOS_OU_NULL", "saida": "STRING_COM_APENAS_DIGITOS_OU_NULL", "confianca": PERCENTUAL_0_100, "observacoes": "texto breve"}`;
 
     // Extrair dados da imagem base64
     const base64Data = imagem.split(',')[1];
@@ -192,9 +194,9 @@ Responda APENAS com este JSON (sem markdown, sem explicações):
     }
 
     // Função para sanitizar valor: remove ponto e vírgula, mantém todos os algarismos
-    // Exemplo: 2324.00 → 232400 | 1234.56 → 123456 | 2.324,00 → 232400
+    // Exemplo: "2.324,00" → 232400 | "1234.56" → 123456 | "1234" → 1234
     const sanitizarValor = (valor: any): number | null => {
-      if (valor === null || valor === undefined) return null;
+      if (valor === null || valor === undefined || valor === 'null') return null;
       // Converter para string, remover tudo que não for dígito
       const digitos = String(valor).replace(/\D/g, '');
       if (!digitos) return null;
