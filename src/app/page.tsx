@@ -3182,7 +3182,7 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
                     onChange={(e) => setFormData({ ...formData, nomeEntrada: e.target.value })}
                     className="bg-muted border-border"
                     placeholder="E"
-                    maxLength={20}
+                    maxLength={21}
                   />
                   <p className="text-xs text-muted-foreground">Label do campo de entrada</p>
                 </div>
@@ -3193,7 +3193,7 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
                     onChange={(e) => setFormData({ ...formData, nomeSaida: e.target.value })}
                     className="bg-muted border-border"
                     placeholder="S"
-                    maxLength={20}
+                    maxLength={21}
                   />
                   <p className="text-xs text-muted-foreground">Label do campo de saída</p>
                 </div>
