@@ -4943,7 +4943,7 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
   const [mostrarApiKey, setMostrarApiKey] = useState(false);
   const [apiKeyOriginal, setApiKeyOriginal] = useState('');
   const [testando, setTestando] = useState(false);
-  const [resultadoTeste, setResultadoTeste] = useState<{ sucesso: boolean; mensagem: string } | null>(null);
+  const [resultadoTeste, setResultadoTeste] = useState<{ sucesso: boolean; mensagem: string; detalhe?: string } | null>(null);
 
   const modelosIA = [
     { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite (Padrão - Rápido)', provider: 'gemini' },
@@ -5004,7 +5004,14 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
         body: JSON.stringify({ empresaId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao testar conexão');
+      if (!res.ok) {
+        setResultadoTeste({
+          sucesso: false,
+          mensagem: data.error || 'Erro ao testar conexão',
+          detalhe: data.detalhe || data.status ? `HTTP ${data.status}` : undefined,
+        });
+        return;
+      }
       setResultadoTeste({ sucesso: true, mensagem: data.mensagem || 'Conexão realizada com sucesso!' });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao testar conexão';
@@ -5172,18 +5179,25 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
           </Button>
           {resultadoTeste && (
             <div
-              className={`flex items-center gap-2 text-sm p-3 rounded-lg ${
+              className={`text-sm p-3 rounded-lg ${
                 resultadoTeste.sucesso
                   ? 'bg-green-500/10 text-green-400'
                   : 'bg-red-500/10 text-red-400'
               }`}
             >
-              {resultadoTeste.sucesso ? (
-                <CheckCircle className="w-4 h-4" />
-              ) : (
-                <X className="w-4 h-4" />
-              )}
-              {resultadoTeste.mensagem}
+              <div className="flex items-start gap-2">
+                {resultadoTeste.sucesso ? (
+                  <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                ) : (
+                  <X className="w-4 h-4 mt-0.5 shrink-0" />
+                )}
+                <div>
+                  <p>{resultadoTeste.mensagem}</p>
+                  {resultadoTeste.detalhe && (
+                    <p className="mt-1 text-xs opacity-70 font-mono break-all">{resultadoTeste.detalhe}</p>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </CardContent>
