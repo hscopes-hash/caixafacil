@@ -2075,9 +2075,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
           imagem: fotoCapturada,
           nomeEntrada: maquinaFoto.tipo?.nomeEntrada || 'E',
           nomeSaida: maquinaFoto.tipo?.nomeSaida || 'S',
-          apiKey: empresa?.llmApiKey || undefined,
           model: empresa?.llmModel || undefined,
-          apiKeyFallback: empresa?.llmApiKeyFallback || undefined,
           modelFallback: empresa?.llmModelFallback || undefined,
         }),
       });
@@ -2221,9 +2219,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
           body: JSON.stringify({
             imagem: foto.imagem,
             codigosMaquinas,
-            apiKey: empresa?.llmApiKey || undefined,
             model: empresa?.llmModel || undefined,
-            apiKeyFallback: empresa?.llmApiKeyFallback || undefined,
             modelFallback: empresa?.llmModelFallback || undefined,
           }),
         });
@@ -2255,9 +2251,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                 imagem: foto.imagem,
                 nomeEntrada,
                 nomeSaida,
-                apiKey: empresa?.llmApiKey || undefined,
                 model: empresa?.llmModel || undefined,
-                apiKeyFallback: empresa?.llmApiKeyFallback || undefined,
                 modelFallback: empresa?.llmModelFallback || undefined,
               }),
             });
@@ -4942,15 +4936,10 @@ function GestaoEmpresasPage({ adminEmail }: { adminEmail: string }) {
 // ============================================
 function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
   const { updateEmpresa } = useAuthStore();
-  const [llmApiKey, setLlmApiKey] = useState('');
   const [llmModel, setLlmModel] = useState('');
-  const [llmApiKeyFallback, setLlmApiKeyFallback] = useState('');
   const [llmModelFallback, setLlmModelFallback] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
-  const [mostrarApiKey, setMostrarApiKey] = useState(false);
-  const [mostrarApiKeyFallback, setMostrarApiKeyFallback] = useState(false);
-  const [apiKeyOriginal, setApiKeyOriginal] = useState('');
   const [testando, setTestando] = useState(false);
   const [testandoFallback, setTestandoFallback] = useState(false);
   const [resultadoTeste, setResultadoTeste] = useState<{ sucesso: boolean; mensagem: string; detalhe?: string } | null>(null);
@@ -4973,11 +4962,8 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
     fetch(`/api/configuracoes?empresaId=${empresaId}`)
       .then((res) => res.json())
       .then((data) => {
-        setLlmApiKey(data.llmApiKey || '');
         setLlmModel(data.llmModel || '');
-        setLlmApiKeyFallback(data.llmApiKeyFallback || '');
         setLlmModelFallback(data.llmModelFallback || '');
-        setApiKeyOriginal(data.llmApiKey || '');
       })
       .catch((err) => {
         console.error('Erro ao carregar configurações:', err);
@@ -4992,12 +4978,11 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
       const res = await fetch('/api/configuracoes', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empresaId, llmApiKey, llmModel, llmApiKeyFallback, llmModelFallback }),
+        body: JSON.stringify({ empresaId, llmModel, llmModelFallback }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar configurações');
-      updateEmpresa({ llmApiKey, llmModel, llmApiKeyFallback, llmModelFallback });
-      setApiKeyOriginal(llmApiKey);
+      updateEmpresa({ llmModel, llmModelFallback });
       toast.success('Configurações salvas com sucesso!');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao salvar configurações';
@@ -5022,10 +5007,8 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
         testarFallback: tipo === 'fallback',
       };
       if (tipo === 'fallback') {
-        testBody.llmApiKeyFallback = llmApiKeyFallback;
         testBody.llmModelFallback = llmModelFallback;
       } else {
-        testBody.llmApiKey = llmApiKey;
         testBody.llmModel = llmModel;
       }
       const res = await fetch('/api/configuracoes/testar', {
@@ -5068,72 +5051,15 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
         <p className="text-sm text-muted-foreground mt-1">Configuração da IA Vision para extração de leituras</p>
       </div>
 
-      {/* Card 1 - Token de IA */}
-      <Card className="border-border">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <Key className="w-5 h-5 text-amber-500" />
-            Token de IA (API Key)
-          </CardTitle>
-          <CardDescription className="text-sm">
-            Informe a chave de API do Google AI Studio. Se não informada, será usada a configuração padrão do sistema.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Input
-                type={mostrarApiKey ? 'text' : 'password'}
-                value={llmApiKey}
-                onChange={(e) => setLlmApiKey(e.target.value)}
-                placeholder="AIza..."
-                className="pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setMostrarApiKey(!mostrarApiKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                aria-label={mostrarApiKey ? 'Ocultar chave' : 'Mostrar chave'}
-              >
-                {mostrarApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {llmModel?.startsWith('glm-') ? (
-              <>Obtenha sua chave em:{' '}
-              <a
-                href="https://open.bigmodel.cn/usercenter/apikeys"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-amber-500 hover:text-amber-400 underline"
-              >
-                https://open.bigmodel.cn/usercenter/apikeys
-              </a></>
-            ) : (
-              <>Obtenha sua chave em:{' '}
-              <a
-                href="https://aistudio.google.com/apikey"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-amber-500 hover:text-amber-400 underline"
-              >
-                https://aistudio.google.com/apikey
-              </a></>
-            )}
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Card 2 - Modelo de IA */}
+      {/* Card 1 - Modelo de IA Principal */}
       <Card className="border-border">
         <CardHeader className="pb-4">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
             <Cog className="w-5 h-5 text-amber-500" />
-            Modelo de IA
+            Modelo de IA Principal
           </CardTitle>
           <CardDescription className="text-sm">
-            Selecione o modelo de IA a ser utilizado. Se a IA selecionada apresentar problemas, alterne para outra opção.
+            Selecione o modelo de IA para extração de leituras. Se a IA apresentar problemas, alterne para outra opção.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -5159,15 +5085,10 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
 
           {/* Status Indicator */}
           <div className="flex items-center gap-2">
-            {llmModel && llmApiKey ? (
+            {llmModel ? (
               <Badge className="bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30">
                 <CheckCircle className="w-3 h-3 mr-1" />
-                Usando configuração personalizada
-              </Badge>
-            ) : llmModel ? (
-              <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/30">
-                <AlertTriangle className="w-3 h-3 mr-1" />
-                Usando modelo personalizado com API Key padrão
+                {modelosIA.find(m => m.value === llmModel)?.label || llmModel}
               </Badge>
             ) : (
               <Badge variant="secondary" className="text-muted-foreground">
@@ -5244,62 +5165,15 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
         <p className="text-sm text-muted-foreground mt-1">Quando a IA principal atingir o limite de requisições, o sistema usa automaticamente a reserva.</p>
       </div>
 
-      {/* Card 4 - Token Reserva */}
-      <Card className="border-border">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <Key className="w-5 h-5 text-amber-500" />
-            Token da IA Reserva
-          </CardTitle>
-          <CardDescription className="text-sm">
-            API Key do provedor reserva. Deve ser de um provedor diferente do principal para garantir disponibilidade.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Input
-                type={mostrarApiKeyFallback ? 'text' : 'password'}
-                value={llmApiKeyFallback}
-                onChange={(e) => setLlmApiKeyFallback(e.target.value)}
-                placeholder="AIza..."
-                className="pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setMostrarApiKeyFallback(!mostrarApiKeyFallback)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                aria-label={mostrarApiKeyFallback ? 'Ocultar chave' : 'Mostrar chave'}
-              >
-                {mostrarApiKeyFallback ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {llmModelFallback?.startsWith('glm-') ? (
-              <>Obtenha sua chave em:{' '}
-              <a href="https://open.bigmodel.cn/usercenter/apikeys" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:text-amber-400 underline">
-                https://open.bigmodel.cn/usercenter/apikeys
-              </a></>
-            ) : (
-              <>Obtenha sua chave em:{' '}
-              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:text-amber-400 underline">
-                https://aistudio.google.com/apikey
-              </a></>
-            )}
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Card 5 - Modelo Reserva */}
+      {/* Card 3 - Modelo Reserva */}
       <Card className="border-border">
         <CardHeader className="pb-4">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
             <Cog className="w-5 h-5 text-amber-500" />
-            Modelo Reserva
+            Modelo de IA Reserva
           </CardTitle>
           <CardDescription className="text-sm">
-            Selecione um modelo de IA diferente do principal. Será usado automaticamente quando o principal falhar.
+            Selecione um modelo diferente do principal. Será usado automaticamente quando o principal atingir o limite de requisições.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -5332,10 +5206,15 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
               </Badge>
             </div>
           )}
-          {!llmModelFallback && (
+          {!llmModelFallback ? (
             <Badge variant="secondary" className="text-muted-foreground">
               <Circle className="w-3 h-3 mr-1" />
               Nenhum modelo reserva configurado
+            </Badge>
+          ) : (
+            <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30">
+              <CheckCircle className="w-3 h-3 mr-1" />
+              {modelosIA.find(m => m.value === llmModelFallback)?.label || llmModelFallback}
             </Badge>
           )}
         </CardContent>

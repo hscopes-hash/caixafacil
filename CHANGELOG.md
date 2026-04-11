@@ -4,6 +4,16 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 
 ---
 
+## [v2.10.0.5] - 2026-04-11
+
+v2.10.0.5 - Simplificacao das Configuracoes: removido campo de API Key da interface
+v2.10.0.5 - Usuario agora seleciona apenas o modelo de IA (principal e reserva)
+v2.10.0.5 - API Key obtida automaticamente do sistema baseada no provedor do modelo
+v2.10.0.5 - Gemini usa LLM_API_KEY, GLM usa LLM_API_KEY_GLM (ou fallback para LLM_API_KEY)
+v2.10.0.5 - Criada funcao getApiKeyForModel() em zhipu-auth.ts para selecao automatica
+v2.10.0.5 - Todas as rotas de IA (extrair, identificar-lote, testar) usam API Key automatica
+v2.10.0.5 - Frontend nao envia mais apiKey nas requisicoes
+
 ## [v2.10.0.4] - 2026-04-11
 
 v2.10.0.4 - Quando nenhuma API Key informada pelo usuario, usa a padrao do sistema (env var LLM_API_KEY)

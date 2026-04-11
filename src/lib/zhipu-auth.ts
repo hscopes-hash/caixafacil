@@ -1,6 +1,19 @@
 import crypto from 'node:crypto';
 
 /**
+ * Retorna a API Key correta baseada no provedor do modelo.
+ * GLM usa LLM_API_KEY_GLM (ou fallback para LLM_API_KEY).
+ * Gemini usa LLM_API_KEY.
+ */
+export function getApiKeyForModel(model: string, empresaApiKey?: string | null, empresaApiKeyFallback?: string | null): string | null {
+  const provider = model.startsWith('glm-') ? 'glm' : 'gemini';
+  if (provider === 'glm') {
+    return empresaApiKeyFallback?.trim() || process.env.LLM_API_KEY_GLM?.trim() || process.env.LLM_API_KEY?.trim() || null;
+  }
+  return empresaApiKey?.trim() || process.env.LLM_API_KEY?.trim() || null;
+}
+
+/**
  * Gera um token JWT para autenticação com a API da Zhipu AI (GLM).
  *
  * A API Key da Zhipu AI tem formato: {id}.{secret}

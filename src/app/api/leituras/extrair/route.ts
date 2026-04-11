@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateZhipuToken } from '@/lib/zhipu-auth';
+import { generateZhipuToken, getApiKeyForModel } from '@/lib/zhipu-auth';
 
 // ============================================
 // FUNÇÕES COMPARTILHADAS - Multi-provedor com Fallback
@@ -113,7 +113,7 @@ async function callAI(prompt: string, imagem: string, apiKey: string, model: str
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { imagem, nomeEntrada, nomeSaida, apiKey: bodyApiKey, model: bodyModel, apiKeyFallback, modelFallback } = body;
+    const { imagem, nomeEntrada, nomeSaida, model: bodyModel, modelFallback } = body;
 
     if (!imagem) {
       return NextResponse.json({ error: 'Imagem é obrigatória' }, { status: 400 });
@@ -123,13 +123,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Formato de imagem inválido. Envie uma imagem em base64.' }, { status: 400 });
     }
 
-    // Configurações principais (prioridade: body > env)
-    const apiKey = bodyApiKey?.trim() || process.env.LLM_API_KEY?.trim();
+    // Modelo (prioridade: body > env > padrão)
     const model = bodyModel?.trim() || process.env.LLM_MODEL?.trim() || 'gemini-2.5-flash-lite';
 
+    // API Key: automática baseada no provedor do modelo
+    const apiKey = getApiKeyForModel(model);
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'API Key não configurada. Configure nas Configurações ou LLM_API_KEY no Vercel.' },
+        { error: 'API Key não configurada. Configure LLM_API_KEY no Vercel.' },
         { status: 500 }
       );
     }
@@ -172,15 +173,24 @@ Responda APENAS com este JSON (sem markdown, sem explicações):
       const primaryStatus = primaryError?.status;
       console.log(`[EXTRAIR] Erro principal (HTTP ${primaryStatus}):`, String(primaryError).substring(0, 200));
 
-      // Verificar se há fallback configurado e se o erro justifica tentar
-      const fallbackApiKey = apiKeyFallback?.trim();
+      // Verificar se há fallback configurado
       const fallbackModel = modelFallback?.trim();
 
-      if (!fallbackApiKey || !fallbackModel) {
+      if (!fallbackModel) {
         // Sem fallback configurado, retornar erro original
         const errorText = primaryError instanceof Error ? primaryError.message : String(primaryError);
         return NextResponse.json(
           { error: `Erro na IA (${model}): ${parseApiError(errorText, primaryStatus, getProvider(model))}` },
+          { status: 500 }
+        );
+      }
+
+      // API Key do fallback: automática baseada no provedor
+      const fallbackApiKey = getApiKeyForModel(fallbackModel);
+      if (!fallbackApiKey) {
+        const errorText = primaryError instanceof Error ? primaryError.message : String(primaryError);
+        return NextResponse.json(
+          { error: `Erro na IA (${model}): ${parseApiError(errorText, primaryStatus, getProvider(model))}. Reserva sem API Key configurada.` },
           { status: 500 }
         );
       }

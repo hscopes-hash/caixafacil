@@ -18,9 +18,7 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         nome: true,
-        llmApiKey: true,
         llmModel: true,
-        llmApiKeyFallback: true,
         llmModelFallback: true,
       },
     });
@@ -31,13 +29,11 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      llmApiKey: empresa.llmApiKey,
       llmModel: empresa.llmModel,
-      llmApiKeyFallback: empresa.llmApiKeyFallback,
       llmModelFallback: empresa.llmModelFallback,
-      temApiKey: !!empresa.llmApiKey,
-      temFallback: !!empresa.llmApiKeyFallback && !!empresa.llmModelFallback,
       modeloPadrao: process.env.LLM_MODEL || 'gemini-2.5-flash-lite',
+      temGeminiKey: !!process.env.LLM_API_KEY,
+      temGlmKey: !!(process.env.LLM_API_KEY_GLM || process.env.LLM_API_KEY),
     });
   } catch (error) {
     console.error('Erro ao buscar configurações:', error);
@@ -45,11 +41,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PUT - Atualizar configurações de IA da empresa
+// PUT - Atualizar configurações de IA da empresa (somente modelos)
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { empresaId, llmApiKey, llmModel, llmApiKeyFallback, llmModelFallback } = body;
+    const { empresaId, llmModel, llmModelFallback } = body;
 
     if (!empresaId) {
       return NextResponse.json({ error: 'empresaId é obrigatório' }, { status: 400 });
@@ -66,17 +62,9 @@ export async function PUT(request: NextRequest) {
 
     const dadosAtualizacao: Record<string, string | null> = {};
 
-    if (llmApiKey !== undefined && llmApiKey !== null) {
-      const keyTrimmed = llmApiKey.trim();
-      dadosAtualizacao.llmApiKey = keyTrimmed === '' ? null : keyTrimmed;
-    }
     if (llmModel !== undefined && llmModel !== null) {
       const modelTrimmed = llmModel.trim();
       dadosAtualizacao.llmModel = modelTrimmed === '' ? null : modelTrimmed;
-    }
-    if (llmApiKeyFallback !== undefined && llmApiKeyFallback !== null) {
-      const keyTrimmed = llmApiKeyFallback.trim();
-      dadosAtualizacao.llmApiKeyFallback = keyTrimmed === '' ? null : keyTrimmed;
     }
     if (llmModelFallback !== undefined && llmModelFallback !== null) {
       const modelTrimmed = llmModelFallback.trim();
@@ -88,9 +76,7 @@ export async function PUT(request: NextRequest) {
       data: dadosAtualizacao,
       select: {
         id: true,
-        llmApiKey: true,
         llmModel: true,
-        llmApiKeyFallback: true,
         llmModelFallback: true,
       },
     });
@@ -99,8 +85,6 @@ export async function PUT(request: NextRequest) {
       success: true,
       llmModel: empresaAtualizada.llmModel,
       llmModelFallback: empresaAtualizada.llmModelFallback,
-      temApiKey: !!empresaAtualizada.llmApiKey,
-      temFallback: !!empresaAtualizada.llmApiKeyFallback && !!empresaAtualizada.llmModelFallback,
       mensagem: 'Configurações salvas com sucesso',
     });
   } catch (error) {

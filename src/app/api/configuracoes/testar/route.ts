@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
-import { generateZhipuToken } from '@/lib/zhipu-auth';
+import { generateZhipuToken, getApiKeyForModel } from '@/lib/zhipu-auth';
 
 const prisma = new PrismaClient();
 
@@ -13,55 +13,45 @@ function getProvider(model: string): 'gemini' | 'glm' {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { empresaId, testarFallback, llmApiKeyFallback: bodyApiKeyFallback, llmModelFallback: bodyModelFallback, llmApiKey: bodyApiKey, llmModel: bodyModel } = body;
+    const { empresaId, testarFallback, llmModelFallback: bodyModelFallback, llmModel: bodyModel } = body;
 
     if (!empresaId) {
       return NextResponse.json({ error: 'empresaId é obrigatório' }, { status: 400 });
     }
 
-    // Prioridade unificada: corpo da requisição > banco de dados > variáveis de ambiente
-    let apiKey: string | null = null;
-    let model: string = '';
-    let origem: string = '';
-
-    // Buscar configurações do banco (usado tanto para principal quanto fallback)
+    // Buscar modelo configurado no banco
     const empresa = await prisma.empresa.findUnique({
       where: { id: empresaId },
-      select: { llmApiKey: true, llmModel: true, llmApiKeyFallback: true, llmModelFallback: true },
+      select: { llmModel: true, llmModelFallback: true },
     });
 
     if (!empresa) {
       return NextResponse.json({ error: 'Empresa não encontrada' }, { status: 404 });
     }
 
+    // Determinar modelo: corpo > banco > env > padrão
+    const defaultModel = process.env.LLM_MODEL?.trim() || 'gemini-2.5-flash-lite';
+    let model: string;
     if (testarFallback) {
-      apiKey = bodyApiKeyFallback?.trim() || empresa.llmApiKeyFallback?.trim() || process.env.LLM_API_KEY?.trim() || null;
-      model = bodyModelFallback?.trim() || empresa.llmModelFallback?.trim() || process.env.LLM_MODEL?.trim() || 'gemini-2.5-flash-lite';
-      if (!apiKey) origem = 'sem configurar';
-      else if (bodyApiKeyFallback?.trim()) origem = 'reserva (formulário)';
-      else if (empresa.llmApiKeyFallback?.trim()) origem = 'reserva (DB)';
-      else origem = 'sistema (env)';
+      model = bodyModelFallback?.trim() || empresa.llmModelFallback?.trim() || defaultModel;
     } else {
-      apiKey = bodyApiKey?.trim() || empresa.llmApiKey?.trim() || process.env.LLM_API_KEY?.trim() || null;
-      model = bodyModel?.trim() || empresa.llmModel?.trim() || process.env.LLM_MODEL?.trim() || 'gemini-2.5-flash-lite';
-      if (!apiKey) origem = 'sem configurar';
-      else if (bodyApiKey?.trim()) origem = 'principal (formulário)';
-      else if (empresa.llmApiKey?.trim()) origem = 'principal (DB)';
-      else origem = 'sistema (env)';
+      model = bodyModel?.trim() || empresa.llmModel?.trim() || defaultModel;
     }
 
+    // API Key: sempre do sistema baseada no provedor do modelo
+    const apiKey = getApiKeyForModel(model);
     if (!apiKey) {
+      const provedor = getProvider(model) === 'glm' ? 'LLM_API_KEY_GLM ou LLM_API_KEY' : 'LLM_API_KEY';
       return NextResponse.json(
-        { error: 'Nenhuma API Key configurada. Defina uma chave nas Configurações ou configure LLM_API_KEY no Vercel.' },
+        { error: `Nenhuma API Key configurada para ${getProvider(model) === 'glm' ? 'Zhipu AI' : 'Gemini'}. Configure ${provedor} no Vercel.` },
         { status: 400 }
       );
     }
 
     const provider = getProvider(model);
 
-    console.log(`=== TESTE CONEXÃO (${origem}) ===`);
-    console.log('Modelo:', model);
-    console.log('Provedor:', provider);
+    console.log(`=== TESTE CONEXÃO (${testarFallback ? 'Reserva' : 'Principal'}) ===`);
+    console.log('Modelo:', model, '| Provedor:', provider, '| Key env:', apiKey.substring(0, 8) + '...');
     console.log('=======================');
 
     let response: Response;
@@ -72,13 +62,12 @@ export async function POST(request: NextRequest) {
 
     try {
       if (provider === 'glm') {
-        // Zhipu AI requer JWT gerado a partir da API Key ({id}.{secret})
         let authToken: string;
         try {
           authToken = generateZhipuToken(apiKey);
         } catch (jwtError) {
           return NextResponse.json(
-            { error: `API Key Zhipu AI inválida. O formato deve ser {id}.{secret}. Obtenha em https://open.bigmodel.cn/usercenter/apikeys`, detalhe: String(jwtError) },
+            { error: `API Key Zhipu AI inválida. O formato deve ser {id}.{secret}. Configure LLM_API_KEY_GLM no Vercel.`, detalhe: String(jwtError) },
             { status: 400 }
           );
         }
@@ -113,7 +102,7 @@ export async function POST(request: NextRequest) {
       clearTimeout(timeoutId);
       if (fetchError?.name === 'AbortError') {
         return NextResponse.json(
-          { error: `Tempo esgotado (30s). O modelo "${model}" pode estar lento ou indisponível no momento. Tente um modelo mais rápido.` },
+          { error: `Tempo esgotado (30s). O modelo "${model}" pode estar lento ou indisponível no momento.` },
           { status: 400 }
         );
       }
@@ -137,7 +126,7 @@ export async function POST(request: NextRequest) {
           const glmMsg = errorJson?.error?.message || '';
           errorDetalhe = `[${errorJson?.error?.code || ''}] ${glmMsg}`;
           if (response.status === 401 || response.status === 403) {
-            errorMsg = `API Key inválida para Zhipu AI. Verifique em https://open.bigmodel.cn/usercenter/apikeys`;
+            errorMsg = `API Key inválida para Zhipu AI. Verifique LLM_API_KEY_GLM no Vercel.`;
           } else if (response.status === 400) {
             errorMsg = `Requisição inválida: ${glmMsg || responseText.substring(0, 200)}`;
           } else if (response.status === 429) {
@@ -151,7 +140,7 @@ export async function POST(request: NextRequest) {
           const geminiMsg = errorJson?.error?.message || '';
           errorDetalhe = geminiMsg;
           if (response.status === 401 || response.status === 403) {
-            errorMsg = `API Key inválida para Google Gemini. Verifique em https://aistudio.google.com/apikey`;
+            errorMsg = `API Key inválida para Google Gemini. Verifique LLM_API_KEY no Vercel.`;
           } else if (response.status === 400) {
             errorMsg = `Requisição inválida: ${geminiMsg || responseText.substring(0, 200)}`;
           } else if (response.status === 429) {
@@ -187,7 +176,6 @@ export async function POST(request: NextRequest) {
       mensagem: `Conexão OK! ${origemLabel}: ${provedorLabel} - ${model}`,
       modelo: model,
       provider,
-      apiKeyFonte: origem,
     });
   } catch (error) {
     console.error('Erro ao testar conexão:', error);
