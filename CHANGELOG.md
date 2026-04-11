@@ -4,6 +4,16 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 
 ---
 
+## [v2.8.1.0] - 2026-04-11
+
+v2.8.1.0 - Corrigido processamento de lote: agora usa 2 passos separados para maior precisao
+v2.8.1.0 - Passo 1: API identificar-lote focada apenas em identificar o codigo da maquina na etiqueta
+v2.8.1.0 - Passo 2: API extrair (a mesma da extração manual) com nomeEntrada/nomeSaida do tipo da maquina
+v2.8.1.0 - Corrigido bug: lote agora usa os campos personalizados de cada tipo de maquina (E/S, ENTRADA/SAIDA, etc.)
+v2.8.1.0 - Adicionado tratamento de erros HTTP 429 (rate limit), 401, 403, 404 na API de identificacao
+v2.8.1.0 - Ajustado delay entre fotos para 1 segundo (2 chamadas API por foto)
+v2.8.1.0 - Melhorada contagem de resultados: processadas, nao encontradas e com erro
+
 ## [v2.8.0.0] - 2026-04-11
 
 v2.8.0.0 - Novo recurso: Lancamento de Lote na Cobranca - tirar fotos em sequencia e processar automaticamente

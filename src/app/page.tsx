@@ -1670,7 +1670,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
   const [valorDespesaSalva, setValorDespesaSalva] = useState<number>(0);
   // Estados para Lançamento de Lote
   const [loteModalOpen, setLoteModalOpen] = useState(false);
-  const [fotosLote, setFotosLote] = useState<{ id: string; imagem: string; status: 'pendente' | 'processando' | 'concluido' | 'erro'; resultado?: { codigoMaquina: string; codigoReconhecido: boolean; entrada: number | null; saida: number | null; confianca: number; observacoes: string }; erro?: string }[]>([]);
+  const [fotosLote, setFotosLote] = useState<{ id: string; imagem: string; status: 'pendente' | 'processando' | 'concluido' | 'erro'; resultado?: { codigoMaquina: string; codigoReconhecido: boolean; entrada?: number | null; saida?: number | null; confianca: number; observacoes: string; confiancaOCR?: number }; erro?: string }[]>([]);
   const [processandoLote, setProcessandoLote] = useState(false);
   const [loteProgresso, setLoteProgresso] = useState(0);
   const loteIdCounter = useRef(0);
@@ -2194,6 +2194,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     // Preparar lista de códigos de máquinas do cliente
     const codigosMaquinas = maquinas.map(m => m.codigo);
 
+    // Snapshot das máquinas no momento do processamento (para acesso dentro de setMaquinas)
+    let maquinasSnapshot = [...maquinas];
+
     for (let i = 0; i < fotosLote.length; i++) {
       const foto = fotosLote[i];
       if (foto.status !== 'pendente') continue;
@@ -2204,7 +2207,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
       ));
 
       try {
-        const res = await fetch('/api/leituras/identificar-lote', {
+        // =============================================
+        // PASSO 1: Identificar a máquina pela etiqueta
+        // =============================================
+        const resIdentificar = await fetch('/api/leituras/identificar-lote', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2213,42 +2219,118 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
           }),
         });
 
-        const data = await res.json();
+        const dataIdentificar = await resIdentificar.json();
 
-        if (!res.ok) {
-          throw new Error(data.error || 'Erro ao processar foto');
+        if (!resIdentificar.ok) {
+          throw new Error(dataIdentificar.error || 'Erro ao identificar máquina');
         }
 
-        // Marcar como concluído
-        setFotosLote(prev => prev.map((f, idx) =>
-          idx === i ? { ...f, status: 'concluido', resultado: data } : f
-        ));
+        // Se a máquina foi encontrada, prosseguir para extração de valores
+        if (dataIdentificar.codigoReconhecido) {
+          // Buscar dados completos da máquina identificada
+          const maquinaIdentificada = maquinasSnapshot.find(
+            m => m.codigo.toUpperCase() === dataIdentificar.codigoMaquina.toUpperCase()
+          );
 
-        // Se a máquina foi reconhecida e encontrada, aplicar os valores
-        if (data.codigoReconhecido && (data.entrada !== null || data.saida !== null)) {
-          const indexMaquina = maquinas.findIndex(m => m.codigo.toUpperCase() === data.codigoMaquina.toUpperCase());
-          if (indexMaquina !== -1) {
-            setMaquinas(prev => {
-              const novasMaquinas = [...prev];
-              if (data.entrada !== null) {
-                novasMaquinas[indexMaquina].novaEntrada = String(data.entrada);
-                const entradaAtual = novasMaquinas[indexMaquina].entradaAtual || 0;
-                novasMaquinas[indexMaquina].diferencaEntrada = data.entrada - entradaAtual;
-              }
-              if (data.saida !== null) {
-                novasMaquinas[indexMaquina].novaSaida = String(data.saida);
-                const saidaAtual = novasMaquinas[indexMaquina].saidaAtual || 0;
-                novasMaquinas[indexMaquina].diferencaSaida = data.saida - saidaAtual;
-              }
-              novasMaquinas[indexMaquina].saldoMaquina = calcularValor(
-                novasMaquinas[indexMaquina].moeda,
-                novasMaquinas[indexMaquina].diferencaEntrada - novasMaquinas[indexMaquina].diferencaSaida
-              );
-              return novasMaquinas;
+          if (maquinaIdentificada) {
+            const nomeEntrada = maquinaIdentificada.tipo?.nomeEntrada || 'E';
+            const nomeSaida = maquinaIdentificada.tipo?.nomeSaida || 'S';
+
+            // =============================================
+            // PASSO 2: Extrair valores com nomeEntrada/nomeSaida corretos
+            // =============================================
+            const resExtrair = await fetch('/api/leituras/extrair', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                imagem: foto.imagem,
+                nomeEntrada,
+                nomeSaida,
+              }),
             });
-            // Marcar como foto aplicada
-            setMaquinasComFotoAplicada(prev => new Set(prev).add(maquinas[indexMaquina].id));
+
+            const dataExtrair = await resExtrair.json();
+
+            if (!resExtrair.ok) {
+              throw new Error(dataExtrair.error || 'Erro ao extrair valores');
+            }
+
+            // Marcar como concluído com todos os dados
+            setFotosLote(prev => prev.map((f, idx) =>
+              idx === i ? {
+                ...f,
+                status: 'concluido',
+                resultado: {
+                  codigoMaquina: dataIdentificar.codigoMaquina,
+                  codigoReconhecido: true,
+                  entrada: dataExtrair.entrada,
+                  saida: dataExtrair.saida,
+                  confianca: dataIdentificar.confianca,
+                  confiancaOCR: dataExtrair.confianca,
+                  observacoes: dataIdentificar.observacoes || dataExtrair.observacoes || '',
+                },
+              } : f
+            ));
+
+            // Aplicar valores nos campos da máquina
+            if (dataExtrair.entrada !== null || dataExtrair.saida !== null) {
+              const indexMaquina = maquinasSnapshot.findIndex(
+                m => m.codigo.toUpperCase() === dataIdentificar.codigoMaquina.toUpperCase()
+              );
+
+              if (indexMaquina !== -1) {
+                const novasMaquinas = [...maquinasSnapshot];
+                if (dataExtrair.entrada !== null) {
+                  novasMaquinas[indexMaquina].novaEntrada = String(dataExtrair.entrada);
+                  const entradaAtual = novasMaquinas[indexMaquina].entradaAtual || 0;
+                  novasMaquinas[indexMaquina].diferencaEntrada = dataExtrair.entrada - entradaAtual;
+                }
+                if (dataExtrair.saida !== null) {
+                  novasMaquinas[indexMaquina].novaSaida = String(dataExtrair.saida);
+                  const saidaAtual = novasMaquinas[indexMaquina].saidaAtual || 0;
+                  novasMaquinas[indexMaquina].diferencaSaida = dataExtrair.saida - saidaAtual;
+                }
+                novasMaquinas[indexMaquina].saldoMaquina = calcularValor(
+                  novasMaquinas[indexMaquina].moeda,
+                  novasMaquinas[indexMaquina].diferencaEntrada - novasMaquinas[indexMaquina].diferencaSaida
+                );
+
+                maquinasSnapshot = novasMaquinas;
+                setMaquinas(novasMaquinas);
+
+                // Marcar como foto aplicada
+                setMaquinasComFotoAplicada(prev => new Set(prev).add(maquinasSnapshot[indexMaquina].id));
+              }
+            }
+          } else {
+            // Máquina identificada mas não encontrada no snapshot
+            setFotosLote(prev => prev.map((f, idx) =>
+              idx === i ? {
+                ...f,
+                status: 'concluido',
+                resultado: {
+                  codigoMaquina: dataIdentificar.codigoMaquina,
+                  codigoReconhecido: true,
+                  confianca: dataIdentificar.confianca,
+                  observacoes: dataIdentificar.observacoes || '',
+                },
+              } : f
+            ));
           }
+        } else {
+          // Máquina não reconhecida na lista
+          setFotosLote(prev => prev.map((f, idx) =>
+            idx === i ? {
+              ...f,
+              status: 'concluido',
+              resultado: {
+                codigoMaquina: dataIdentificar.codigoMaquina,
+                codigoReconhecido: false,
+                confianca: dataIdentificar.confianca,
+                observacoes: dataIdentificar.observacoes || 'Máquina não encontrada na lista do cliente',
+              },
+            } : f
+          ));
         }
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
@@ -2259,23 +2341,26 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
 
       setLoteProgresso(i + 1);
 
-      // Pequeno delay entre processamentos para não sobrecarregar a API
+      // Delay entre processamentos para não sobrecarregar a API (2 chamadas por foto)
       if (i < fotosLote.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 
     setProcessandoLote(false);
 
-    const concluidas = fotosLote.filter(f => f.status === 'concluido' && f.resultado?.codigoReconhecido).length;
-    const erros = fotosLote.filter(f => f.status === 'erro').length;
+    // Contar resultados
+    const fotosProcessadas = fotosLote.filter(f => f.status === 'concluido' || f.status === 'erro');
+    const concluidas = fotosProcessadas.filter(f => f.status === 'concluido' && f.resultado?.codigoReconhecido && (f.resultado.entrada !== null || f.resultado.saida !== null)).length;
+    const naoEncontradas = fotosProcessadas.filter(f => f.status === 'concluido' && !f.resultado?.codigoReconhecido).length;
+    const erros = fotosProcessadas.filter(f => f.status === 'erro').length;
 
-    if (erros === 0 && concluidas > 0) {
+    if (erros === 0 && naoEncontradas === 0 && concluidas > 0) {
       toast.success(`${concluidas} foto(s) processada(s) com sucesso!`);
     } else if (concluidas > 0) {
-      toast.warning(`${concluidas} processada(s), ${erros} com erro.`);
-    } else {
-      toast.error('Nenhuma foto processada com sucesso.');
+      toast.warning(`${concluidas} processada(s), ${naoEncontradas} nao encontrada(s), ${erros} com erro.`);
+    } else if (erros > 0) {
+      toast.error(`${erros} foto(s) com erro. Tente novamente.`);
     }
   };
 
