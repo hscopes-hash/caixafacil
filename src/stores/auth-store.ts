@@ -27,6 +27,8 @@ export interface Empresa {
   ativa: boolean;
   plano: string;
   bloqueada: boolean;
+  llmApiKey?: string;
+  llmModel?: string;
 }
 
 interface AuthState {

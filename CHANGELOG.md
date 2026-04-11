@@ -4,6 +4,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 
 ---
 
+## [v2.9.0.0] - 2026-04-11
+
+v2.9.0.0 - Novo recurso: Configurações de IA Vision no menu lateral (somente ADMIN)
+v2.9.0.0 - Campo para informar Token de IA (API Key) personalizado por empresa
+v2.9.0.0 - Menu suspenso com modelos de IA alternativos (Gemini 2.5 Flash Lite, Flash, Pro, 2.0 Flash, 1.5 Flash, 1.5 Pro)
+v2.9.0.0 - Se uma IA der problema, basta selecionar outra e continuar usando o app
+v2.9.0.0 - Botão Testar Conexão para verificar se a API Key e modelo estão funcionando
+v2.9.0.0 - Indicador de status: personalizada (verde), modelo personalizado (amarelo), padrão do sistema (cinza)
+v2.9.0.0 - Configurações armazenadas por empresa no banco de dados (campos llmApiKey e llmModel)
+v2.9.0.0 - Rotas de IA (extrair e identificar-lote) agora aceitam apiKey e model customizados via request body
+v2.9.0.0 - Prioridade de configuração: empresa > variáveis de ambiente (fallback)
+
 ## [v2.8.1.0] - 2026-04-11
 
 v2.8.1.0 - Corrigido processamento de lote: agora usa 2 passos separados para maior precisao

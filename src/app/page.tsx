@@ -24,7 +24,8 @@ import {
   Music, Circle, Gamepad2, Gift, TrendingUp, TrendingDown, Clock,
   Plus, Pencil, Trash2, Eye, Ban, CheckCircle, AlertTriangle, Building2,
   ClipboardList, Printer, Camera, X, Image as ImageIcon, Layers, MessageCircle, LogIn,
-  CalendarDays, ShieldAlert, FileText, Sun, Moon, DatabaseBackup, Download, Upload, HardDrive
+  CalendarDays, ShieldAlert, FileText, Sun, Moon, DatabaseBackup, Download, Upload, HardDrive, SlidersHorizontal,
+  Key, Wifi, EyeOff
 } from 'lucide-react';
 import { VERSION_DISPLAY, VERSION_WITH_DATE } from '@/lib/version';
 
@@ -2074,6 +2075,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
           imagem: fotoCapturada,
           nomeEntrada: maquinaFoto.tipo?.nomeEntrada || 'E',
           nomeSaida: maquinaFoto.tipo?.nomeSaida || 'S',
+          apiKey: empresa?.llmApiKey || undefined,
+          model: empresa?.llmModel || undefined,
         }),
       });
 
@@ -2216,6 +2219,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
           body: JSON.stringify({
             imagem: foto.imagem,
             codigosMaquinas,
+            apiKey: empresa?.llmApiKey || undefined,
+            model: empresa?.llmModel || undefined,
           }),
         });
 
@@ -2246,6 +2251,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                 imagem: foto.imagem,
                 nomeEntrada,
                 nomeSaida,
+                apiKey: empresa?.llmApiKey || undefined,
+                model: empresa?.llmModel || undefined,
               }),
             });
 
@@ -4925,10 +4932,271 @@ function GestaoEmpresasPage({ adminEmail }: { adminEmail: string }) {
 }
 
 // ============================================
+// CONFIGURACOES PAGE
+// ============================================
+function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
+  const { updateEmpresa } = useAuthStore();
+  const [llmApiKey, setLlmApiKey] = useState('');
+  const [llmModel, setLlmModel] = useState('');
+  const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [mostrarApiKey, setMostrarApiKey] = useState(false);
+  const [apiKeyOriginal, setApiKeyOriginal] = useState('');
+  const [testando, setTestando] = useState(false);
+  const [resultadoTeste, setResultadoTeste] = useState<{ sucesso: boolean; mensagem: string } | null>(null);
+
+  const modelosIA = [
+    { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite (Padrão - Rápido)' },
+    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Equilibrado)' },
+    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (Preciso - Lento)' },
+    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (Alternativa)' },
+    { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (Legado)' },
+    { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (Legado Preciso)' },
+  ];
+
+  useEffect(() => {
+    if (!empresaId) return;
+    setCarregando(true);
+    fetch(`/api/configuracoes?empresaId=${empresaId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setLlmApiKey(data.llmApiKey || '');
+        setLlmModel(data.llmModel || '');
+        setApiKeyOriginal(data.llmApiKey || '');
+      })
+      .catch((err) => {
+        console.error('Erro ao carregar configurações:', err);
+        toast.error('Erro ao carregar configurações');
+      })
+      .finally(() => setCarregando(false));
+  }, [empresaId]);
+
+  const handleSalvar = async () => {
+    setSalvando(true);
+    try {
+      const res = await fetch('/api/configuracoes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empresaId, llmApiKey, llmModel }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar configurações');
+      updateEmpresa({ llmApiKey, llmModel });
+      setApiKeyOriginal(llmApiKey);
+      toast.success('Configurações salvas com sucesso!');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao salvar configurações';
+      toast.error(message);
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const handleTestarConexao = async () => {
+    setTestando(true);
+    setResultadoTeste(null);
+    try {
+      const res = await fetch('/api/configuracoes/testar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empresaId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao testar conexão');
+      setResultadoTeste({ sucesso: true, mensagem: data.mensagem || 'Conexão realizada com sucesso!' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao testar conexão';
+      setResultadoTeste({ sucesso: false, mensagem: message });
+    } finally {
+      setTestando(false);
+    }
+  };
+
+  if (carregando) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-bold text-foreground">Configurações</h2>
+        <p className="text-sm text-muted-foreground mt-1">Configuração da IA Vision para extração de leituras</p>
+      </div>
+
+      {/* Card 1 - Token de IA */}
+      <Card className="border-border">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Key className="w-5 h-5 text-amber-500" />
+            Token de IA (API Key)
+          </CardTitle>
+          <CardDescription className="text-sm">
+            Informe a chave de API do Google AI Studio. Se não informada, será usada a configuração padrão do sistema.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Input
+                type={mostrarApiKey ? 'text' : 'password'}
+                value={llmApiKey}
+                onChange={(e) => setLlmApiKey(e.target.value)}
+                placeholder="AIza..."
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setMostrarApiKey(!mostrarApiKey)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label={mostrarApiKey ? 'Ocultar chave' : 'Mostrar chave'}
+              >
+                {mostrarApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Obtenha sua chave em:{' '}
+            <a
+              href="https://aistudio.google.com/apikey"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-amber-500 hover:text-amber-400 underline"
+            >
+              https://aistudio.google.com/apikey
+            </a>
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Card 2 - Modelo de IA */}
+      <Card className="border-border">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Cog className="w-5 h-5 text-amber-500" />
+            Modelo de IA
+          </CardTitle>
+          <CardDescription className="text-sm">
+            Selecione o modelo de IA a ser utilizado. Se a IA selecionada apresentar problemas, alterne para outra opção.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Select value={llmModel} onValueChange={setLlmModel}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Selecione um modelo..." />
+            </SelectTrigger>
+            <SelectContent>
+              {modelosIA.map((modelo) => (
+                <SelectItem key={modelo.value} value={modelo.value}>
+                  {modelo.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Status Indicator */}
+          <div className="flex items-center gap-2">
+            {llmModel && llmApiKey ? (
+              <Badge className="bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30">
+                <CheckCircle className="w-3 h-3 mr-1" />
+                Usando configuração personalizada
+              </Badge>
+            ) : llmModel ? (
+              <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/30">
+                <AlertTriangle className="w-3 h-3 mr-1" />
+                Usando modelo personalizado com API Key padrão
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="text-muted-foreground">
+                <Circle className="w-3 h-3 mr-1" />
+                Usando configuração padrão do sistema
+              </Badge>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Card 3 - Testar Conexão */}
+      <Card className="border-border">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Wifi className="w-5 h-5 text-amber-500" />
+            Status da Conexão
+          </CardTitle>
+          <CardDescription className="text-sm">
+            Teste a conexão com a API de IA para verificar se as configurações estão corretas.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button
+            variant="outline"
+            onClick={handleTestarConexao}
+            disabled={testando}
+            className="w-full sm:w-auto"
+          >
+            {testando ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2" />
+                Testando...
+              </>
+            ) : (
+              <>
+                <Wifi className="w-4 h-4 mr-2" />
+                Testar Conexão
+              </>
+            )}
+          </Button>
+          {resultadoTeste && (
+            <div
+              className={`flex items-center gap-2 text-sm p-3 rounded-lg ${
+                resultadoTeste.sucesso
+                  ? 'bg-green-500/10 text-green-400'
+                  : 'bg-red-500/10 text-red-400'
+              }`}
+            >
+              {resultadoTeste.sucesso ? (
+                <CheckCircle className="w-4 h-4" />
+              ) : (
+                <X className="w-4 h-4" />
+              )}
+              {resultadoTeste.mensagem}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Save Button */}
+      <div className="flex justify-end">
+        <Button
+          onClick={handleSalvar}
+          disabled={salvando}
+          className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white"
+        >
+          {salvando ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2" />
+              Salvando...
+            </>
+          ) : (
+            <>
+              <Settings className="w-4 h-4 mr-2" />
+              Salvar Configurações
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
 // MAIN APP COMPONENT
 // ============================================
 export default function App() {
-  const { usuario, empresa, isAuthenticated, logout } = useAuthStore();
+  const { usuario, empresa, isAuthenticated, logout, updateEmpresa } = useAuthStore();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
@@ -5050,6 +5318,13 @@ export default function App() {
                         <DatabaseBackup className="w-5 h-5" />
                         <span>Backup / Restaurar</span>
                       </button>
+                      <button
+                        onClick={() => { setActiveTab('configuracoes'); setMenuOpen(false); }}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'configuracoes' ? 'bg-amber-500/20 text-amber-400' : 'text-muted-foreground hover:bg-card'}`}
+                      >
+                        <SlidersHorizontal className="w-5 h-5" />
+                        <span>Configurações</span>
+                      </button>
                     </>
                   )}
                   {usuario?.email === 'hscopes@gmail.com' && (
@@ -5135,6 +5410,9 @@ export default function App() {
         )}
         {activeTab === 'backup-restore' && isAdmin && (
           <BackupRestorePage empresaId={empresa?.id || ''} nomeEmpresa={empresa?.nome || ''} />
+        )}
+        {activeTab === 'configuracoes' && isAdmin && (
+          <ConfiguracoesPage empresaId={empresa?.id || ''} />
         )}
         {activeTab === 'gestao-empresas' && usuario?.email === 'hscopes@gmail.com' && (
           <GestaoEmpresasPage adminEmail={usuario.email} />

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { imagem, nomeEntrada, nomeSaida } = body;
+    const { imagem, nomeEntrada, nomeSaida, apiKey: bodyApiKey, model: bodyModel } = body;
 
     if (!imagem) {
       return NextResponse.json(
@@ -21,9 +21,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Configurações da API Gemini
-    const apiKey = process.env.LLM_API_KEY?.trim();
-    const model = process.env.LLM_MODEL?.trim() || 'gemini-2.5-flash-lite';
+    // Configurações da API Gemini (prioridade: body > env)
+    const apiKey = bodyApiKey?.trim() || process.env.LLM_API_KEY?.trim();
+    const model = bodyModel?.trim() || process.env.LLM_MODEL?.trim() || 'gemini-2.5-flash-lite';
 
     if (!apiKey) {
       return NextResponse.json(

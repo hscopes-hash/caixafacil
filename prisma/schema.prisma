@@ -31,6 +31,9 @@ model Empresa {
   diasDemo        Int      @default(7)
   bloqueada       Boolean  @default(false)
   motivoBloqueio  String?
+  // Configurações de IA Vision por empresa
+  llmApiKey       String?   // Token de IA personalizado (substitui LLM_API_KEY do env)
+  llmModel        String?   // Modelo de IA personalizado (substitui LLM_MODEL do env)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
