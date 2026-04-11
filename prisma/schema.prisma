@@ -81,6 +81,7 @@ model Cliente {
   estado          String?
   cep             String?
   observacoes     String?
+  whatsapp        String?         // Link do grupo WhatsApp para envio de foto de leitura
   ativo           Boolean         @default(true)
   bloqueado       Boolean         @default(false)
   motivoBloqueio  String?
@@ -134,7 +135,6 @@ model Maquina {
   localizacao     String?
   status          StatusMaquina @default(ATIVA)
   observacoes     String?
-  whatsapp        String?       // Grupo ou usuário WhatsApp para enviar foto da leitura
   // Campos de controle de moedas
   moeda           TipoMoeda     @default(M001)
   entradaAtual    Float         @default(0)

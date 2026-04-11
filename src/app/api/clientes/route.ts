@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
       estado,
       cep,
       observacoes,
+      whatsapp,
       empresaId,
     } = body;
 
@@ -95,6 +96,7 @@ export async function POST(request: NextRequest) {
         estado,
         cep,
         observacoes,
+        whatsapp,
         empresaId,
       },
     });

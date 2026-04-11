@@ -59,6 +59,7 @@ export async function PUT(
       estado,
       cep,
       observacoes,
+      whatsapp,
       bloqueado,
       motivoBloqueio,
       ativo,
@@ -76,6 +77,7 @@ export async function PUT(
     if (estado !== undefined) data.estado = estado;
     if (cep !== undefined) data.cep = cep;
     if (observacoes !== undefined) data.observacoes = observacoes;
+    if (whatsapp !== undefined) data.whatsapp = whatsapp;
     if (bloqueado !== undefined) {
       data.bloqueado = bloqueado;
       data.motivoBloqueio = motivoBloqueio;

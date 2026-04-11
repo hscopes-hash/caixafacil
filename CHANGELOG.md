@@ -4,6 +4,20 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 
 ---
 
+## [v2.7.1.1] - 2026-04-11
+
+v2.7.1.1 - Corrigido envio de foto para grupo WhatsApp: fallback agora salva a foto automaticamente no dispositivo e copia a mensagem antes de abrir o grupo
+v2.7.1.1 - Melhorada experiencia do Web Share API: removida verificacao dupla navigator.share && navigator.canShare
+v2.7.1.1 - Ajustado delay na abertura do grupo WhatsApp para dar tempo ao download iniciar
+v2.7.1.1 - Mensagens de toast mais claras instruindo o usuario sobre os proximos passos
+
+## [v2.7.1.0] - 2026-04-11
+
+v2.7.1.0 - Campo Grupo WhatsApp movido do cadastro de Maquina para o cadastro de Cliente
+v2.7.1.0 - Corrigido envio de foto para WhatsApp: agora usa Web Share API para compartilhar a imagem junto com o texto
+v2.7.1.0 - Fallback para navegadores sem suporte a Web Share: copia mensagem e abre link do grupo
+v2.7.1.0 - Atualizado schema Prisma, APIs de clientes e maquinas para refletir nova posicao do campo whatsapp
+
 ## [v2.7.0.0] - 2026-04-10
 
 v2.7.0.0 - Criado painel administrativo SaaS completo em /admin

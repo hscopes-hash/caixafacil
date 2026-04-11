@@ -43,6 +43,7 @@ interface Cliente {
   estado?: string;
   cep?: string;
   observacoes?: string;
+  whatsapp?: string;
   ativo: boolean;
   bloqueado: boolean;
   motivoBloqueio?: string;
@@ -75,7 +76,6 @@ interface Maquina {
   localizacao?: string;
   status: 'ATIVA' | 'INATIVA' | 'MANUTENCAO' | 'VENDIDA';
   observacoes?: string;
-  whatsapp?: string;
   moeda: 'M001' | 'M005' | 'M010' | 'M025';
   entradaAtual: number;
   saidaAtual: number;
@@ -557,6 +557,7 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
     estado: '',
     cep: '',
     observacoes: '',
+    whatsapp: '',
   });
 
   useEffect(() => {
@@ -659,6 +660,7 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
       estado: '',
       cep: '',
       observacoes: '',
+      whatsapp: '',
     });
     setClienteEditando(null);
   };
@@ -676,6 +678,7 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
       estado: cliente.estado || '',
       cep: cliente.cep || '',
       observacoes: cliente.observacoes || '',
+      whatsapp: cliente.whatsapp || '',
     });
     setDialogOpen(true);
   };
@@ -783,6 +786,16 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
                     onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
                     className="bg-muted border-border"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label>Grupo WhatsApp</Label>
+                  <Input
+                    value={formData.whatsapp}
+                    onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
+                    className="bg-muted border-border"
+                    placeholder="https://chat.whatsapp.com/XXXXX"
+                  />
+                  <p className="text-xs text-muted-foreground">Link do grupo para enviar foto da leitura das máquinas</p>
                 </div>
               </div>
               <DialogFooter>
@@ -903,7 +916,6 @@ function MaquinasPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: bool
     localizacao: '',
     status: 'ATIVA' as Maquina['status'],
     observacoes: '',
-    whatsapp: '',
     moeda: 'M001' as Maquina['moeda'],
     entradaAtual: '0',
     saidaAtual: '0',
@@ -1019,7 +1031,6 @@ function MaquinasPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: bool
       localizacao: '',
       status: 'ATIVA',
       observacoes: '',
-      whatsapp: '',
       moeda: 'M001',
       entradaAtual: '0',
       saidaAtual: '0',
@@ -1041,7 +1052,6 @@ function MaquinasPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: bool
       localizacao: maquina.localizacao || '',
       status: maquina.status,
       observacoes: maquina.observacoes || '',
-      whatsapp: maquina.whatsapp || '',
       moeda: maquina.moeda || 'M001',
       entradaAtual: maquina.entradaAtual?.toString() || '0',
       saidaAtual: maquina.saidaAtual?.toString() || '0',
@@ -1173,16 +1183,6 @@ function MaquinasPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: bool
                     onChange={(e) => setFormData({ ...formData, localizacao: e.target.value })}
                     className="bg-muted border-border"
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label>Grupo WhatsApp</Label>
-                  <Input
-                    value={formData.whatsapp}
-                    onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
-                    className="bg-muted border-border"
-                    placeholder="https://chat.whatsapp.com/XXXXX"
-                  />
-                  <p className="text-xs text-muted-foreground">Link do grupo para enviar foto da leitura</p>
                 </div>
                 {/* Controle de Moedas */}
                 <div className="border-t border-border pt-4 mt-2">
@@ -1938,37 +1938,27 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     }
   };
 
-  // Enviar foto para WhatsApp da máquina (somente grupos)
-  const enviarFotoWhatsApp = () => {
+  // Enviar foto para WhatsApp do grupo do cliente
+  const enviarFotoWhatsApp = async () => {
     if (!maquinaFoto) {
       toast.error('Nenhuma máquina selecionada');
       return;
     }
 
-    // Pegar o WhatsApp da máquina (deve ser link de grupo)
-    const whatsappOriginal = (maquinaFoto.whatsapp || '').trim();
-    
-    if (!whatsappOriginal) {
-      toast.error('Máquina não possui grupo WhatsApp cadastrado');
+    if (!fotoCapturada) {
+      toast.error('Nenhuma foto capturada');
       return;
     }
 
-    // Verificar se é um link de grupo do WhatsApp
-    // Formatos aceitos:
-    // - https://chat.whatsapp.com/XXXXXXXXXXX
-    // - chat.whatsapp.com/XXXXXXXXXXX
-    // - XXXXXXXXXXX (só o código)
+    // Pegar o WhatsApp do cliente (deve ser link de grupo)
+    const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
     
-    let grupoUrl = '';
-    
-    if (whatsappOriginal.includes('chat.whatsapp.com')) {
-      // Já é um link completo
-      grupoUrl = whatsappOriginal;
-    } else {
-      // É apenas o código do grupo
-      grupoUrl = `https://chat.whatsapp.com/${whatsappOriginal}`;
+    if (!whatsappOriginal) {
+      toast.error('Cliente não possui grupo WhatsApp cadastrado. Cadastre no formulário do cliente.');
+      return;
     }
 
+    // Montar mensagem
     const now = new Date();
     const dataStr = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     
@@ -1989,17 +1979,77 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     mensagem += `━━━━━━━━━━━━━━━━━\n`;
     mensagem += `Cliente: ${clienteSelecionado?.nome || 'N/A'}`;
 
-    const mensagemCodificada = encodeURIComponent(mensagem);
-    
-    // Para grupos, abre o link do grupo e copia a mensagem
-    navigator.clipboard.writeText(mensagem).then(() => {
-      window.open(grupoUrl, '_blank');
-      toast.success('Mensagem copiada! Cole no grupo que será aberto.');
-    }).catch(() => {
-      window.open(grupoUrl, '_blank');
-      toast.info('Grupo aberto. Copie a mensagem abaixo:');
-      console.log(mensagem);
-    });
+    // Montar URL do grupo
+    const grupoUrl = whatsappOriginal.includes('chat.whatsapp.com')
+      ? whatsappOriginal
+      : `https://chat.whatsapp.com/${whatsappOriginal}`;
+
+    // Converter foto base64 para Blob/File
+    try {
+      const response = await fetch(fotoCapturada);
+      const blob = await response.blob();
+      const fileName = `leitura_${maquinaFoto.codigo}_${now.getTime()}.jpg`;
+      const file = new File([blob], fileName, { type: 'image/jpeg' });
+
+      // =============================================
+      // 1) Web Share API (melhor experiência - mobile)
+      // =============================================
+      if (navigator.share) {
+        const shareData: ShareData = {
+          title: `Leitura - ${maquinaFoto.codigo}`,
+          text: mensagem,
+        };
+
+        // Verificar se o navegador suporta compartilhar arquivos
+        const canShareFiles = navigator.canShare && navigator.canShare({ files: [file] });
+        if (canShareFiles) {
+          (shareData as ShareData & { files: File[] }).files = [file];
+        }
+
+        try {
+          await navigator.share(shareData);
+          toast.success('Compartilhado com sucesso!');
+          return;
+        } catch (shareError: unknown) {
+          // Se o usuário cancelou o compartilhamento, não mostrar erro
+          if (shareError instanceof Error && shareError.name === 'AbortError') {
+            return;
+          }
+          // Se o share falhou por outro motivo, cai no fallback abaixo
+          console.warn('Web Share falhou, usando fallback:', shareError);
+        }
+      }
+
+      // =============================================
+      // 2) Fallback: baixar foto + copiar mensagem + abrir grupo
+      // =============================================
+      // Criar link de download da foto para o usuário salvar
+      const fotoUrl = URL.createObjectURL(blob);
+      const linkDownload = document.createElement('a');
+      linkDownload.href = fotoUrl;
+      linkDownload.download = fileName;
+      document.body.appendChild(linkDownload);
+      linkDownload.click();
+      document.body.removeChild(linkDownload);
+      // Liberar URL após um momento
+      setTimeout(() => URL.revokeObjectURL(fotoUrl), 5000);
+
+      // Copiar mensagem para a área de transferência
+      try {
+        await navigator.clipboard.writeText(mensagem);
+        toast.success('Foto salva e mensagem copiada! O grupo abrirá em seguida. Cole a mensagem e anexe a foto salva.');
+      } catch {
+        toast.info('Foto salva! O grupo abrirá. Envie a foto e a mensagem manualmente.');
+      }
+
+      // Abrir o grupo do WhatsApp com delay para dar tempo do download iniciar
+      setTimeout(() => {
+        window.open(grupoUrl, '_blank');
+      }, 800);
+    } catch (error) {
+      console.error('Erro ao preparar compartilhamento:', error);
+      toast.error('Erro ao compartilhar. Tente novamente.');
+    }
   };
 
   // Extrair leitura da foto usando IA
@@ -2821,8 +2871,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                       </Button>
                     </div>
 
-                    {/* Botão Enviar WhatsApp - só aparece após extrair leitura */}
-                    {leituraExtraida && maquinaFoto?.whatsapp && (
+                    {/* Botão Enviar WhatsApp - só aparece após extrair leitura e cliente ter grupo cadastrado */}
+                    {leituraExtraida && clienteSelecionado?.whatsapp && (
                       <Button
                         className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
                         onClick={enviarFotoWhatsApp}
