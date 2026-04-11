@@ -2077,6 +2077,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
           nomeSaida: maquinaFoto.tipo?.nomeSaida || 'S',
           apiKey: empresa?.llmApiKey || undefined,
           model: empresa?.llmModel || undefined,
+          apiKeyFallback: empresa?.llmApiKeyFallback || undefined,
+          modelFallback: empresa?.llmModelFallback || undefined,
         }),
       });
 
@@ -2221,6 +2223,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
             codigosMaquinas,
             apiKey: empresa?.llmApiKey || undefined,
             model: empresa?.llmModel || undefined,
+            apiKeyFallback: empresa?.llmApiKeyFallback || undefined,
+            modelFallback: empresa?.llmModelFallback || undefined,
           }),
         });
 
@@ -2253,6 +2257,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                 nomeSaida,
                 apiKey: empresa?.llmApiKey || undefined,
                 model: empresa?.llmModel || undefined,
+                apiKeyFallback: empresa?.llmApiKeyFallback || undefined,
+                modelFallback: empresa?.llmModelFallback || undefined,
               }),
             });
 
@@ -4938,12 +4944,17 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
   const { updateEmpresa } = useAuthStore();
   const [llmApiKey, setLlmApiKey] = useState('');
   const [llmModel, setLlmModel] = useState('');
+  const [llmApiKeyFallback, setLlmApiKeyFallback] = useState('');
+  const [llmModelFallback, setLlmModelFallback] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [mostrarApiKey, setMostrarApiKey] = useState(false);
+  const [mostrarApiKeyFallback, setMostrarApiKeyFallback] = useState(false);
   const [apiKeyOriginal, setApiKeyOriginal] = useState('');
   const [testando, setTestando] = useState(false);
+  const [testandoFallback, setTestandoFallback] = useState(false);
   const [resultadoTeste, setResultadoTeste] = useState<{ sucesso: boolean; mensagem: string; detalhe?: string } | null>(null);
+  const [resultadoTesteFallback, setResultadoTesteFallback] = useState<{ sucesso: boolean; mensagem: string; detalhe?: string } | null>(null);
 
   const modelosIA = [
     { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite (Padrão - Rápido)', provider: 'gemini' },
@@ -4964,6 +4975,8 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
       .then((data) => {
         setLlmApiKey(data.llmApiKey || '');
         setLlmModel(data.llmModel || '');
+        setLlmApiKeyFallback(data.llmApiKeyFallback || '');
+        setLlmModelFallback(data.llmModelFallback || '');
         setApiKeyOriginal(data.llmApiKey || '');
       })
       .catch((err) => {
@@ -4979,11 +4992,11 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
       const res = await fetch('/api/configuracoes', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empresaId, llmApiKey, llmModel }),
+        body: JSON.stringify({ empresaId, llmApiKey, llmModel, llmApiKeyFallback, llmModelFallback }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar configurações');
-      updateEmpresa({ llmApiKey, llmModel });
+      updateEmpresa({ llmApiKey, llmModel, llmApiKeyFallback, llmModelFallback });
       setApiKeyOriginal(llmApiKey);
       toast.success('Configurações salvas com sucesso!');
     } catch (err: unknown) {
@@ -4994,30 +5007,35 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
     }
   };
 
-  const handleTestarConexao = async () => {
-    setTestando(true);
-    setResultadoTeste(null);
+  const handleTestarConexao = async (tipo: 'principal' | 'fallback') => {
+    if (tipo === 'principal') {
+      setTestando(true);
+      setResultadoTeste(null);
+    } else {
+      setTestandoFallback(true);
+      setResultadoTesteFallback(null);
+    }
     try {
       const res = await fetch('/api/configuracoes/testar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empresaId }),
+        body: JSON.stringify({ empresaId, testarFallback: tipo === 'fallback' }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        setResultadoTeste({
-          sucesso: false,
-          mensagem: data.error || 'Erro ao testar conexão',
-          detalhe: data.detalhe || data.status ? `HTTP ${data.status}` : undefined,
-        });
-        return;
-      }
-      setResultadoTeste({ sucesso: true, mensagem: data.mensagem || 'Conexão realizada com sucesso!' });
+      const resultado = {
+        sucesso: res.ok,
+        mensagem: res.ok ? (data.mensagem || 'Conexão realizada com sucesso!') : (data.error || 'Erro ao testar conexão'),
+        detalhe: !res.ok ? (data.detalhe || data.status ? `HTTP ${data.status}` : undefined) : undefined,
+      };
+      if (tipo === 'principal') setResultadoTeste(resultado);
+      else setResultadoTesteFallback(resultado);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao testar conexão';
-      setResultadoTeste({ sucesso: false, mensagem: message });
+      if (tipo === 'principal') setResultadoTeste({ sucesso: false, mensagem: message });
+      else setResultadoTesteFallback({ sucesso: false, mensagem: message });
     } finally {
-      setTestando(false);
+      if (tipo === 'principal') setTestando(false);
+      else setTestandoFallback(false);
     }
   };
 
@@ -5028,6 +5046,8 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
       </div>
     );
   }
+
+  const getProviderLocal = (m: string) => m.startsWith('glm-') ? 'glm' : 'gemini';
 
   return (
     <div className="space-y-6">
@@ -5161,7 +5181,7 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
         <CardContent className="space-y-3">
           <Button
             variant="outline"
-            onClick={handleTestarConexao}
+            onClick={() => handleTestarConexao('principal')}
             disabled={testando}
             className="w-full sm:w-auto"
           >
@@ -5195,6 +5215,158 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
                   <p>{resultadoTeste.mensagem}</p>
                   {resultadoTeste.detalhe && (
                     <p className="mt-1 text-xs opacity-70 font-mono break-all">{resultadoTeste.detalhe}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Separator className="my-2 bg-border" />
+      <div>
+        <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+          <ShieldAlert className="w-5 h-5 text-amber-500" />
+          IA Reserva (Fallback)
+        </h3>
+        <p className="text-sm text-muted-foreground mt-1">Quando a IA principal atingir o limite de requisições, o sistema usa automaticamente a reserva.</p>
+      </div>
+
+      {/* Card 4 - Token Reserva */}
+      <Card className="border-border">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Key className="w-5 h-5 text-amber-500" />
+            Token da IA Reserva
+          </CardTitle>
+          <CardDescription className="text-sm">
+            API Key do provedor reserva. Deve ser de um provedor diferente do principal para garantir disponibilidade.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Input
+                type={mostrarApiKeyFallback ? 'text' : 'password'}
+                value={llmApiKeyFallback}
+                onChange={(e) => setLlmApiKeyFallback(e.target.value)}
+                placeholder="AIza..."
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setMostrarApiKeyFallback(!mostrarApiKeyFallback)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label={mostrarApiKeyFallback ? 'Ocultar chave' : 'Mostrar chave'}
+              >
+                {mostrarApiKeyFallback ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {llmModelFallback?.startsWith('glm-') ? (
+              <>Obtenha sua chave em:{' '}
+              <a href="https://open.bigmodel.cn/usercenter/apikeys" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:text-amber-400 underline">
+                https://open.bigmodel.cn/usercenter/apikeys
+              </a></>
+            ) : (
+              <>Obtenha sua chave em:{' '}
+              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:text-amber-400 underline">
+                https://aistudio.google.com/apikey
+              </a></>
+            )}
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Card 5 - Modelo Reserva */}
+      <Card className="border-border">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Cog className="w-5 h-5 text-amber-500" />
+            Modelo Reserva
+          </CardTitle>
+          <CardDescription className="text-sm">
+            Selecione um modelo de IA diferente do principal. Será usado automaticamente quando o principal falhar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Select value={llmModelFallback} onValueChange={setLlmModelFallback}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Selecione um modelo reserva..." />
+            </SelectTrigger>
+            <SelectContent>
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Google Gemini</div>
+              {modelosIA.filter(m => m.provider === 'gemini').map((modelo) => (
+                <SelectItem key={modelo.value} value={modelo.value}>
+                  {modelo.label}
+                </SelectItem>
+              ))}
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t border-border mt-1 pt-2">Zhipu AI (GLM)</div>
+              {modelosIA.filter(m => m.provider === 'glm').map((modelo) => (
+                <SelectItem key={modelo.value} value={modelo.value}>
+                  {modelo.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Aviso se reserva é do mesmo provedor */}
+          {llmModel && llmModelFallback && getProviderLocal(llmModel) === getProviderLocal(llmModelFallback) && (
+            <div className="flex items-center gap-2">
+              <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/30">
+                <AlertTriangle className="w-3 h-3 mr-1" />
+                Mesmo provedor - Troque para maximizar disponibilidade
+              </Badge>
+            </div>
+          )}
+          {!llmModelFallback && (
+            <Badge variant="secondary" className="text-muted-foreground">
+              <Circle className="w-3 h-3 mr-1" />
+              Nenhum modelo reserva configurado
+            </Badge>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Card 6 - Testar Conexão Reserva */}
+      <Card className="border-border">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Wifi className="w-5 h-5 text-amber-500" />
+            Testar IA Reserva
+          </CardTitle>
+          <CardDescription className="text-sm">
+            Verifique se a IA reserva está configurada corretamente.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button
+            variant="outline"
+            onClick={() => handleTestarConexao('fallback')}
+            disabled={testandoFallback || (!llmApiKeyFallback && !llmModelFallback)}
+            className="w-full sm:w-auto"
+          >
+            {testandoFallback ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2" />
+                Testando...
+              </>
+            ) : (
+              <>
+                <Wifi className="w-4 h-4 mr-2" />
+                Testar Conexão Reserva
+              </>
+            )}
+          </Button>
+          {resultadoTesteFallback && (
+            <div className={`text-sm p-3 rounded-lg ${resultadoTesteFallback.sucesso ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+              <div className="flex items-start gap-2">
+                {resultadoTesteFallback.sucesso ? <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" /> : <X className="w-4 h-4 mt-0.5 shrink-0" />}
+                <div>
+                  <p>{resultadoTesteFallback.mensagem}</p>
+                  {resultadoTesteFallback.detalhe && (
+                    <p className="mt-1 text-xs opacity-70 font-mono break-all">{resultadoTesteFallback.detalhe}</p>
                   )}
                 </div>
               </div>

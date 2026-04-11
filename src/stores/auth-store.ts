@@ -29,6 +29,8 @@ export interface Empresa {
   bloqueada: boolean;
   llmApiKey?: string;
   llmModel?: string;
+  llmApiKeyFallback?: string;
+  llmModelFallback?: string;
 }
 
 interface AuthState {

@@ -1,39 +1,110 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Função para detectar o provedor com base no nome do modelo
+// ============================================
+// FUNÇÕES COMPARTILHADAS - Multi-provedor com Fallback
+// ============================================
+
 function getProvider(model: string): 'gemini' | 'glm' {
   if (model.startsWith('glm-')) return 'glm';
   return 'gemini';
 }
 
-// Função para extrair texto da resposta de qualquer provedor
 function extractContent(data: any, provider: string): string | null {
   if (provider === 'glm') {
-    // Resposta OpenAI-compatible: data.choices[0].message.content
     return data?.choices?.[0]?.message?.content || null;
   }
-  // Gemini: data.candidates[0].content.parts[0].text
   return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
 }
 
-// Extrair valores de leitura de uma imagem (Gemini ou GLM)
+// Faz chamada à API de IA e retorna o conteúdo de texto
+async function callAI(prompt: string, imagem: string, apiKey: string, model: string): Promise<{ content: string; provider: string }> {
+  const provider = getProvider(model);
+  const base64Data = imagem.split(',')[1];
+  const mimeType = imagem.split(';')[0].split(':')[1];
+
+  let response: Response;
+
+  if (provider === 'glm') {
+    const url = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              { type: 'image_url', image_url: { url: imagem } },
+            ],
+          },
+        ],
+        temperature: 0.1,
+        max_tokens: 200,
+      }),
+    });
+  } else {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: mimeType, data: base64Data } },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 200,
+        },
+      }),
+    });
+  }
+
+  const responseText = await response.text();
+
+  if (!response.ok) {
+    const error = new Error(responseText);
+    (error as any).status = response.status;
+    throw error;
+  }
+
+  const data = JSON.parse(responseText);
+  const content = extractContent(data, provider);
+
+  if (!content) {
+    if (data?.promptFeedback?.blockReason) {
+      throw new Error(`Imagem bloqueada: ${data.promptFeedback.blockReason}`);
+    }
+    throw new Error('Resposta vazia da IA');
+  }
+
+  return { content, provider };
+}
+
+// Extrair valores de leitura de uma imagem usando IA (com fallback automático em 429)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { imagem, nomeEntrada, nomeSaida, apiKey: bodyApiKey, model: bodyModel } = body;
+    const { imagem, nomeEntrada, nomeSaida, apiKey: bodyApiKey, model: bodyModel, apiKeyFallback, modelFallback } = body;
 
     if (!imagem) {
       return NextResponse.json({ error: 'Imagem é obrigatória' }, { status: 400 });
     }
 
     if (!imagem.startsWith('data:image/')) {
-      return NextResponse.json(
-        { error: 'Formato de imagem inválido. Envie uma imagem em base64.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Formato de imagem inválido. Envie uma imagem em base64.' }, { status: 400 });
     }
 
-    // Configurações (prioridade: body > env)
+    // Configurações principais (prioridade: body > env)
     const apiKey = bodyApiKey?.trim() || process.env.LLM_API_KEY?.trim();
     const model = bodyModel?.trim() || process.env.LLM_MODEL?.trim() || 'gemini-2.5-flash-lite';
 
@@ -43,14 +114,6 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-
-    const provider = getProvider(model);
-
-    console.log('=== DEBUG IA ===');
-    console.log('Provedor:', provider);
-    console.log('Modelo:', model);
-    console.log('API Key (primeiros 10 chars):', apiKey.substring(0, 10));
-    console.log('==================');
 
     // Prompt otimizado para leitura de contadores
     const prompt = `Analise esta foto de um contador de máquina de entretenimento.
@@ -75,135 +138,60 @@ REGRA IMPORTANTE PARA VALORES MONETÁRIOS:
 Responda APENAS com este JSON (sem markdown, sem explicações):
 {"entrada": "STRING_COM_APENAS_DIGITOS_OU_NULL", "saida": "STRING_COM_APENAS_DIGITOS_OU_NULL", "confianca": PERCENTUAL_0_100, "observacoes": "texto breve"}`;
 
-    const base64Data = imagem.split(',')[1];
-    const mimeType = imagem.split(';')[0].split(':')[1];
+    let content: string;
+    let usedModel = model;
+    let usedProvider = getProvider(model);
+    let usedFallback = false;
 
-    let response: Response;
+    // ===== TENTATIVA 1: Modelo principal =====
+    try {
+      console.log(`[EXTRAIR] Tentando modelo principal: ${model}`);
+      const result = await callAI(prompt, imagem, apiKey, model);
+      content = result.content;
+      usedProvider = result.provider;
+    } catch (primaryError: any) {
+      const primaryStatus = primaryError?.status;
+      console.log(`[EXTRAIR] Erro principal (HTTP ${primaryStatus}):`, String(primaryError).substring(0, 200));
 
-    if (provider === 'glm') {
-      // ===== Zhipu AI (GLM) - OpenAI-compatible API =====
-      const url = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
-      const payload = {
-        model: model,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              { type: 'image_url', image_url: { url: imagem } },
-            ],
-          },
-        ],
-        temperature: 0.1,
-        max_tokens: 200,
-      };
+      // Verificar se há fallback configurado e se o erro justifica tentar
+      const fallbackApiKey = apiKeyFallback?.trim();
+      const fallbackModel = modelFallback?.trim();
 
-      console.log('URL GLM:', url);
+      if (!fallbackApiKey || !fallbackModel) {
+        // Sem fallback configurado, retornar erro original
+        const errorText = primaryError instanceof Error ? primaryError.message : String(primaryError);
+        return NextResponse.json(
+          { error: `Erro na IA (${model}): ${parseApiError(errorText, primaryStatus, getProvider(model))}` },
+          { status: 500 }
+        );
+      }
 
-      response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(payload),
-      });
-    } else {
-      // ===== Google Gemini API =====
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-      const payload = {
-        contents: [
-          {
-            parts: [
-              { text: prompt },
-              { inline_data: { mime_type: mimeType, data: base64Data } },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 200,
-        },
-      };
+      // Tentar com modelo reserva
+      console.log(`[EXTRAIR] Usando FALLBACK: ${fallbackModel}`);
+      usedFallback = true;
 
-      console.log('URL Gemini:', url.replace(apiKey, 'API_KEY_HIDDEN'));
-
-      response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-    }
-
-    const responseText = await response.text();
-    console.log('Status:', response.status);
-    console.log('Resposta:', responseText.substring(0, 500));
-
-    if (!response.ok) {
       try {
-        const errorJson = JSON.parse(responseText);
-        const errorMsg = errorJson?.error?.message || errorJson?.message || responseText;
-
-        if (response.status === 401 || response.status === 403) {
-          const hint = provider === 'glm'
-            ? 'Verifique sua chave em https://open.bigmodel.cn/usercenter/apikeys'
-            : 'Verifique sua chave em https://aistudio.google.com/apikey';
-          return NextResponse.json(
-            { error: `API Key inválida. ${hint}` },
-            { status: 500 }
-          );
-        }
-
-        if (response.status === 404) {
-          return NextResponse.json(
-            { error: `Modelo "${model}" não encontrado para o provedor ${provider}.` },
-            { status: 500 }
-          );
-        }
-
-        if (response.status === 429) {
-          return NextResponse.json(
-            { error: 'Limite de requisições atingido. Aguarde um momento e tente novamente.' },
-            { status: 500 }
-          );
-        }
-
+        const result = await callAI(prompt, imagem, fallbackApiKey, fallbackModel);
+        content = result.content;
+        usedModel = fallbackModel;
+        usedProvider = result.provider;
+        console.log(`[EXTRAIR] FALLBACK OK: ${fallbackModel}`);
+      } catch (fallbackError: any) {
+        console.log(`[EXTRAIR] FALLBACK também falhou:`, String(fallbackError).substring(0, 200));
+        const fallbackErrorText = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
         return NextResponse.json(
-          { error: `Erro ${response.status}: ${errorMsg}` },
-          { status: 500 }
-        );
-      } catch {
-        return NextResponse.json(
-          { error: `Erro ${response.status}: ${responseText.substring(0, 200)}` },
+          { error: `Modelo principal e reserva falharam. Principal (${model}): ${parseApiError(primaryError instanceof Error ? primaryError.message : String(primaryError), primaryStatus, getProvider(model))} | Reserva (${fallbackModel}): ${parseApiError(fallbackErrorText, fallbackError?.status, getProvider(fallbackModel))}` },
           { status: 500 }
         );
       }
     }
 
-    const data = JSON.parse(responseText);
-    const content = extractContent(data, provider);
-
-    if (!content) {
-      // Verificar bloqueio por segurança
-      if (data?.promptFeedback?.blockReason) {
-        return NextResponse.json(
-          { error: `Imagem bloqueada: ${data.promptFeedback.blockReason}` },
-          { status: 500 }
-        );
-      }
-      return NextResponse.json({ error: 'Resposta vazia da IA' }, { status: 500 });
-    }
-
-    console.log('Conteúdo extraído:', content);
+    console.log(`[EXTRAIR] Conteúdo extraído (provedor: ${usedProvider}):`, content.substring(0, 200));
 
     // Extrair JSON da resposta
     let resultado;
     try {
-      let cleanContent = content
-        .replace(/```json\s*/gi, '')
-        .replace(/```\s*/gi, '')
-        .trim();
-
+      let cleanContent = content.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
       const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
       resultado = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(cleanContent);
     } catch {
@@ -232,8 +220,9 @@ Responda APENAS com este JSON (sem markdown, sem explicações):
       saida: resultado.saida,
       confianca: resultado.confianca,
       observacoes: resultado.observacoes || '',
-      provider,
-      model,
+      provider: usedProvider,
+      model: usedModel,
+      fallback: usedFallback,
     });
 
   } catch (error) {
@@ -241,4 +230,20 @@ Responda APENAS com este JSON (sem markdown, sem explicações):
     const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: `Erro: ${errorMessage}` }, { status: 500 });
   }
+}
+
+// Função auxiliar para traduzir erros da API
+function parseApiError(errorText: string, status?: number, provider?: string): string {
+  try {
+    const errorJson = JSON.parse(errorText);
+    const msg = errorJson?.error?.message || errorJson?.message || '';
+
+    if (status === 429) return 'Limite de requisições atingido';
+    if (status === 401 || status === 403) return 'API Key inválida';
+    if (status === 404) return `Modelo não encontrado`;
+    if (msg) return msg.substring(0, 150);
+  } catch {
+    // não é JSON
+  }
+  return errorText.substring(0, 150);
 }

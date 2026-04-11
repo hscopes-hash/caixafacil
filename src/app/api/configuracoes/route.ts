@@ -20,6 +20,8 @@ export async function GET(request: NextRequest) {
         nome: true,
         llmApiKey: true,
         llmModel: true,
+        llmApiKeyFallback: true,
+        llmModelFallback: true,
       },
     });
 
@@ -27,17 +29,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Empresa não encontrada' }, { status: 404 });
     }
 
-    // Mascarar a API Key para segurança (mostra primeiros e últimos caracteres)
-    const apiKeyMascarada = empresa.llmApiKey
-      ? empresa.llmApiKey.substring(0, 8) + '...' + empresa.llmApiKey.substring(empresa.llmApiKey.length - 4)
-      : null;
-
     return NextResponse.json({
       success: true,
       llmApiKey: empresa.llmApiKey,
-      llmApiKeyMascarada: apiKeyMascarada,
       llmModel: empresa.llmModel,
+      llmApiKeyFallback: empresa.llmApiKeyFallback,
+      llmModelFallback: empresa.llmModelFallback,
       temApiKey: !!empresa.llmApiKey,
+      temFallback: !!empresa.llmApiKeyFallback && !!empresa.llmModelFallback,
       modeloPadrao: process.env.LLM_MODEL || 'gemini-2.5-flash-lite',
     });
   } catch (error) {
@@ -50,13 +49,12 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { empresaId, llmApiKey, llmModel } = body;
+    const { empresaId, llmApiKey, llmModel, llmApiKeyFallback, llmModelFallback } = body;
 
     if (!empresaId) {
       return NextResponse.json({ error: 'empresaId é obrigatório' }, { status: 400 });
     }
 
-    // Verificar se a empresa existe
     const empresaExistente = await prisma.empresa.findUnique({
       where: { id: empresaId },
       select: { id: true },
@@ -66,22 +64,25 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Empresa não encontrada' }, { status: 404 });
     }
 
-    // Preparar dados para atualização
     const dadosAtualizacao: Record<string, string | null> = {};
 
-    // API Key: permitir limpar (enviar string vazia) ou definir nova
     if (llmApiKey !== undefined && llmApiKey !== null) {
       const keyTrimmed = llmApiKey.trim();
       dadosAtualizacao.llmApiKey = keyTrimmed === '' ? null : keyTrimmed;
     }
-
-    // Modelo: permitir limpar ou definir
     if (llmModel !== undefined && llmModel !== null) {
       const modelTrimmed = llmModel.trim();
       dadosAtualizacao.llmModel = modelTrimmed === '' ? null : modelTrimmed;
     }
+    if (llmApiKeyFallback !== undefined && llmApiKeyFallback !== null) {
+      const keyTrimmed = llmApiKeyFallback.trim();
+      dadosAtualizacao.llmApiKeyFallback = keyTrimmed === '' ? null : keyTrimmed;
+    }
+    if (llmModelFallback !== undefined && llmModelFallback !== null) {
+      const modelTrimmed = llmModelFallback.trim();
+      dadosAtualizacao.llmModelFallback = modelTrimmed === '' ? null : modelTrimmed;
+    }
 
-    // Atualizar no banco
     const empresaAtualizada = await prisma.empresa.update({
       where: { id: empresaId },
       data: dadosAtualizacao,
@@ -89,13 +90,17 @@ export async function PUT(request: NextRequest) {
         id: true,
         llmApiKey: true,
         llmModel: true,
+        llmApiKeyFallback: true,
+        llmModelFallback: true,
       },
     });
 
     return NextResponse.json({
       success: true,
       llmModel: empresaAtualizada.llmModel,
+      llmModelFallback: empresaAtualizada.llmModelFallback,
       temApiKey: !!empresaAtualizada.llmApiKey,
+      temFallback: !!empresaAtualizada.llmApiKeyFallback && !!empresaAtualizada.llmModelFallback,
       mensagem: 'Configurações salvas com sucesso',
     });
   } catch (error) {

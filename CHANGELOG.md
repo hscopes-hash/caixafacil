@@ -4,6 +4,16 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 
 ---
 
+## [v2.10.0.0] - 2026-04-11
+
+v2.10.0.0 - Fallback automatico de IA: quando a principal falha, usa a reserva automaticamente
+v2.10.0.0 - Campos de IA Reserva: Token e Modelo separados para provedor diferente
+v2.10.0.0 - Recomendacao visual: avisa se principal e reserva sao do mesmo provedor
+v2.10.0.0 - Botao Testar Conexao Reserva independente para validar fallback
+v2.10.0.0 - Rotas de IA (extrair e identificar-lote) tentam fallback em qualquer erro
+v2.10.0.0 - Informacao de qual modelo foi usado (principal ou fallback) retornada na resposta
+v2.10.0.0 - Todas as chamadas frontend enviam apiKeyFallback e modelFallback junto
+
 ## [v2.9.1.0] - 2026-04-11
 
 v2.9.1.0 - Adicionados modelos GLM (Zhipu AI) ao menu de configurações de IA
