@@ -4954,7 +4954,9 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
     { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Equilibrado)', provider: 'gemini' },
     { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (Preciso - Lento)', provider: 'gemini' },
     { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (Alternativa)', provider: 'gemini' },
-    { value: 'glm-4v-flash', label: 'GLM-4V Flash (Zhipu AI - Rápido/Gratuito)', provider: 'glm' },
+    { value: 'glm-4v-flash', label: 'GLM-4V Flash (Zhipu AI - Gratuito)', provider: 'glm' },
+    { value: 'glm-4.6v-flash', label: 'GLM-4.6V Flash (Zhipu AI - Rápido)', provider: 'glm' },
+    { value: 'glm-4.6v', label: 'GLM-4.6V (Zhipu AI - Equilibrado)', provider: 'glm' },
     { value: 'glm-5v-turbo', label: 'GLM-5V Turbo (Zhipu AI - Preciso)', provider: 'glm' },
   ];
 
