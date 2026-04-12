@@ -1641,6 +1641,7 @@ interface MaquinaLeitura extends Maquina {
 }
 
 function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { empresaId: string; isSupervisor: boolean; usuarioId: string; usuarioNome: string }) {
+  const { empresa } = useAuthStore();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
   const [maquinas, setMaquinas] = useState<MaquinaLeitura[]>([]);
