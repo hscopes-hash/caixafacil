@@ -23,14 +23,14 @@ async function callAI(prompt: string, imagem: string, apiKey: string, model: str
   const mimeType = imagem.split(';')[0].split(':')[1];
 
   let response: Response;
+  const AI_TIMEOUT = 25000; // 25s cada chamada (principal+fallback ~55s, dentro do limite do Vercel)
 
   if (provider === 'glm') {
     // Zhipu AI requer JWT gerado a partir da API Key ({id}.{secret})
     const authToken = generateZhipuToken(apiKey);
     const url = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
-    // Timeout de 60 segundos para chamadas com imagem
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    const timeoutId = setTimeout(() => controller.abort(), AI_TIMEOUT);
     try {
       response = await fetch(url, {
         method: 'POST',
@@ -61,7 +61,7 @@ async function callAI(prompt: string, imagem: string, apiKey: string, model: str
     // OpenRouter usa Bearer token simples e formato OpenAI-compatible
     const url = 'https://openrouter.ai/api/v1/chat/completions';
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    const timeoutId = setTimeout(() => controller.abort(), AI_TIMEOUT);
     try {
       response = await fetch(url, {
         method: 'POST',
@@ -90,9 +90,8 @@ async function callAI(prompt: string, imagem: string, apiKey: string, model: str
     }
   } else {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    // Timeout de 60 segundos para chamadas com imagem
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    const timeoutId = setTimeout(() => controller.abort(), AI_TIMEOUT);
     try {
       response = await fetch(url, {
         method: 'POST',

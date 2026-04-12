@@ -2216,18 +2216,26 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
         // =============================================
         // PASSO 1: Identificar a máquina pela etiqueta
         // =============================================
-        const resIdentificar = await fetch('/api/leituras/identificar-lote', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imagem: foto.imagem,
-            codigosMaquinas,
-            model: empresa?.llmModel || undefined,
-            modelFallback: empresa?.llmModelFallback || undefined,
-            llmApiKey: empresa?.llmApiKey || undefined,
-            llmApiKeyFallback: empresa?.llmApiKeyFallback || undefined,
-          }),
-        });
+        const controllerIdentificar = new AbortController();
+        const timeoutIdentificar = setTimeout(() => controllerIdentificar.abort(), 90000); // 90s timeout
+        let resIdentificar: Response;
+        try {
+          resIdentificar = await fetch('/api/leituras/identificar-lote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controllerIdentificar.signal,
+            body: JSON.stringify({
+              imagem: foto.imagem,
+              codigosMaquinas,
+              model: empresa?.llmModel || undefined,
+              modelFallback: empresa?.llmModelFallback || undefined,
+              llmApiKey: empresa?.llmApiKey || undefined,
+              llmApiKeyFallback: empresa?.llmApiKeyFallback || undefined,
+            }),
+          });
+        } finally {
+          clearTimeout(timeoutIdentificar);
+        }
 
         const dataIdentificar = await resIdentificar.json();
 
