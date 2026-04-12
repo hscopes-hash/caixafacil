@@ -172,14 +172,20 @@ export async function POST(request: NextRequest) {
     // Modelo (prioridade: body > env > padrão)
     const model = bodyModel?.trim() || process.env.LLM_MODEL?.trim() || 'gemini-2.5-flash-lite';
 
+    // Log para depuração
+    const maskKey = (k?: string) => k ? `${k.substring(0, 6)}...${k.substring(k.length - 4)}` : 'NÃO ENVIADA';
+    console.log(`[IDENTIFICAR-LOTE] model=${model}, llmApiKey=${maskKey(llmApiKey as string)}, llmApiKeyFallback=${maskKey(llmApiKeyFallback as string)}, fallback=${modelFallback || 'nenhum'}`);
+
     // API Key: automática baseada no provedor do modelo
     const apiKey = getApiKeyForModel(model, llmApiKey, llmApiKeyFallback);
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'API Key não configurada. Configure LLM_API_KEY no Vercel.' },
+        { error: 'API Key não configurada. Configure nas Configurações da empresa.', detalhe: `Provedor: ${getProvider(model)}, modelo: ${model}` },
         { status: 500 }
       );
     }
+
+    console.log(`[IDENTIFICAR-LOTE] apiKey resolvida para provider ${getProvider(model)}: ${maskKey(apiKey)}`);
 
     const listaCodigos = codigosMaquinas.map((c: string) => `"${c}"`).join(', ');
 

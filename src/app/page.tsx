@@ -3052,7 +3052,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                               </div>
                             )}
                             {foto.status === 'erro' && (
-                              <p className="text-xs text-danger truncate">{foto.erro || 'Erro'}</p>
+                              <p className="text-xs text-danger break-words max-w-full">{foto.erro || 'Erro'}</p>
                             )}
                           </div>
                           {foto.status === 'pendente' && !processandoLote && (
