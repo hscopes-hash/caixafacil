@@ -4944,8 +4944,8 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
   const [salvando, setSalvando] = useState(false);
   const [testando, setTestando] = useState(false);
   const [testandoFallback, setTestandoFallback] = useState(false);
-  const [resultadoTeste, setResultadoTeste] = useState<{ sucesso: boolean; mensagem: string; detalhe?: string } | null>(null);
-  const [resultadoTesteFallback, setResultadoTesteFallback] = useState<{ sucesso: boolean; mensagem: string; detalhe?: string } | null>(null);
+  const [resultadoTeste, setResultadoTeste] = useState<{ sucesso: boolean; mensagem: string; detalhe?: string; tempoMs?: number } | null>(null);
+  const [resultadoTesteFallback, setResultadoTesteFallback] = useState<{ sucesso: boolean; mensagem: string; detalhe?: string; tempoMs?: number } | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
   const [showApiKeyFallback, setShowApiKeyFallback] = useState(false);
 
@@ -5032,16 +5032,19 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
         testBody.llmModel = llmModel;
         testBody.llmApiKey = llmApiKey;
       }
+      const inicio = performance.now();
       const res = await fetch('/api/configuracoes/testar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(testBody),
       });
       const data = await res.json();
+      const tempoMs = Math.round(performance.now() - inicio);
       const resultado = {
         sucesso: res.ok,
         mensagem: res.ok ? (data.mensagem || 'Conexão realizada com sucesso!') : (data.error || 'Erro ao testar conexão'),
         detalhe: !res.ok ? (data.detalhe || data.status ? `HTTP ${data.status}` : undefined) : undefined,
+        tempoMs,
       };
       if (tipo === 'principal') setResultadoTeste(resultado);
       else setResultadoTesteFallback(resultado);
@@ -5196,8 +5199,13 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
           <div className={`text-sm p-3 rounded-lg ${resultadoTeste.sucesso ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
             <div className="flex items-start gap-2">
               {resultadoTeste.sucesso ? <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" /> : <X className="w-4 h-4 mt-0.5 shrink-0" />}
-              <div>
-                <p>{resultadoTeste.mensagem}</p>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <p>{resultadoTeste.mensagem}</p>
+                  {resultadoTeste.tempoMs != null && (
+                    <span className="text-xs opacity-60 shrink-0">{resultadoTeste.tempoMs}ms</span>
+                  )}
+                </div>
                 {resultadoTeste.detalhe && (
                   <p className="mt-1 text-xs opacity-70 font-mono break-all">{resultadoTeste.detalhe}</p>
                 )}
@@ -5347,8 +5355,13 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
           <div className={`text-sm p-3 rounded-lg ${resultadoTesteFallback.sucesso ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
             <div className="flex items-start gap-2">
               {resultadoTesteFallback.sucesso ? <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" /> : <X className="w-4 h-4 mt-0.5 shrink-0" />}
-              <div>
-                <p>{resultadoTesteFallback.mensagem}</p>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <p>{resultadoTesteFallback.mensagem}</p>
+                  {resultadoTesteFallback.tempoMs != null && (
+                    <span className="text-xs opacity-60 shrink-0">{resultadoTesteFallback.tempoMs}ms</span>
+                  )}
+                </div>
                 {resultadoTesteFallback.detalhe && (
                   <p className="mt-1 text-xs opacity-70 font-mono break-all">{resultadoTesteFallback.detalhe}</p>
                 )}
