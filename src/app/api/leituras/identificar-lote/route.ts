@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateZhipuToken, getApiKeyForModel } from '@/lib/zhipu-auth';
+import { generateZhipuToken, getApiKeyForModel, detectProvider } from '@/lib/zhipu-auth';
 
 // ============================================
 // FUNÇÕES COMPARTILHADAS - Multi-provedor com Fallback
 // ============================================
 
-function getProvider(model: string): 'gemini' | 'glm' {
-  if (model.startsWith('glm-')) return 'glm';
-  return 'gemini';
+function getProvider(model: string): 'gemini' | 'glm' | 'openrouter' {
+  return detectProvider(model);
 }
 
 function extractContent(data: any, provider: string): string | null {
-  if (provider === 'glm') {
+  if (provider === 'glm' || provider === 'openrouter') {
     return data?.choices?.[0]?.message?.content || null;
   }
   return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
@@ -39,6 +38,37 @@ async function callAI(prompt: string, imagem: string, apiKey: string, model: str
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: prompt },
+                { type: 'image_url', image_url: { url: imagem } },
+              ],
+            },
+          ],
+          temperature,
+          max_tokens: maxTokens,
+        }),
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  } else if (provider === 'openrouter') {
+    // OpenRouter usa Bearer token simples e formato OpenAI-compatible
+    const url = 'https://openrouter.ai/api/v1/chat/completions';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
           model: model,

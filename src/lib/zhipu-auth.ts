@@ -1,15 +1,35 @@
 import crypto from 'node:crypto';
 
+// ============================================
+// DETECÇÃO DE PROVEDOR
+// ============================================
+
+export type Provider = 'gemini' | 'glm' | 'openrouter';
+
+/**
+ * Detecta o provedor baseado no nome do modelo.
+ * OpenRouter: contém "/" (ex: google/gemini-2.0-flash-exp:free)
+ * GLM: começa com "glm-"
+ * Gemini: demais casos
+ */
+export function detectProvider(model: string): Provider {
+  if (model.includes('/')) return 'openrouter';
+  if (model.startsWith('glm-')) return 'glm';
+  return 'gemini';
+}
+
 /**
  * Retorna a API Key correta baseada no provedor do modelo.
- * GLM usa LLM_API_KEY_GLM (ou fallback para LLM_API_KEY).
- * Gemini usa LLM_API_KEY.
+ * - OpenRouter: usa a key do usuário (mesma lógica do Gemini)
+ * - GLM: usa LLM_API_KEY_GLM (ou fallback para LLM_API_KEY)
+ * - Gemini: usa LLM_API_KEY
  */
 export function getApiKeyForModel(model: string, empresaApiKey?: string | null, empresaApiKeyFallback?: string | null): string | null {
-  const provider = model.startsWith('glm-') ? 'glm' : 'gemini';
+  const provider = detectProvider(model);
   if (provider === 'glm') {
     return empresaApiKeyFallback?.trim() || process.env.LLM_API_KEY_GLM?.trim() || process.env.LLM_API_KEY?.trim() || null;
   }
+  // OpenRouter e Gemini usam a API Key do formulário ou env var
   return empresaApiKey?.trim() || process.env.LLM_API_KEY?.trim() || null;
 }
 

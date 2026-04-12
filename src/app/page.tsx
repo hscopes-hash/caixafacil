@@ -4955,15 +4955,24 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
     { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (Preciso - Lento)', provider: 'gemini' },
     { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (Alternativa)', provider: 'gemini' },
     { value: 'glm-4.6v-flash', label: 'GLM-4.6V Flash (Zhipu AI - Gratuito)', provider: 'glm' },
-    { value: 'glm-4.6v', label: 'GLM-4.6V (Zhipu AI - Equilibrado/Pago)', provider: 'glm' },
-    { value: 'glm-5v-turbo', label: 'GLM-5V Turbo (Zhipu AI - Preciso/Pago)', provider: 'glm' },
+    { value: 'glm-4.6v', label: 'GLM-4.6V (Zhipu AI - Pago)', provider: 'glm' },
+    { value: 'glm-5v-turbo', label: 'GLM-5V Turbo (Zhipu AI - Pago)', provider: 'glm' },
+    { value: 'google/gemini-2.0-flash-exp:free', label: 'Gemini 2.0 Flash (OpenRouter - Gratuito)', provider: 'openrouter' },
+    { value: 'qwen/qwen2.5-vl-72b-instruct:free', label: 'Qwen 2.5 VL 72B (OpenRouter - Gratuito)', provider: 'openrouter' },
+    { value: 'meta-llama/llama-4-scout:free', label: 'Llama 4 Scout (OpenRouter - Gratuito)', provider: 'openrouter' },
   ];
 
-  const getProviderLocal = (m: string) => m.startsWith('glm-') ? 'glm' : 'gemini';
+  const getProviderLocal = (m: string) => m.includes('/') ? 'openrouter' : m.startsWith('glm-') ? 'glm' : 'gemini';
   const getKeyLink = (provider: string) => provider === 'glm'
     ? 'https://z.ai/manage-apikey/apikey-list'
+    : provider === 'openrouter'
+    ? 'https://openrouter.ai/settings/keys'
     : 'https://aistudio.google.com/apikey';
-  const getKeyLabel = (provider: string) => provider === 'glm' ? 'Obter API Key Zhipu AI' : 'Obter API Key Google Gemini';
+  const getKeyLabel = (provider: string) => provider === 'glm'
+    ? 'Obter API Key Zhipu AI'
+    : provider === 'openrouter'
+    ? 'Obter API Key OpenRouter'
+    : 'Obter API Key Google Gemini';
 
   useEffect(() => {
     if (!empresaId) return;
@@ -5093,6 +5102,12 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
                   {modelo.label}
                 </SelectItem>
               ))}
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t border-border mt-1 pt-2">OpenRouter (Gratuito)</div>
+              {modelosIA.filter(m => m.provider === 'openrouter').map((modelo) => (
+                <SelectItem key={modelo.value} value={modelo.value}>
+                  {modelo.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -5118,7 +5133,7 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Provedor: <span className="font-medium text-foreground">{providerPrincipal === 'glm' ? 'Zhipu AI (GLM)' : 'Google Gemini'}</span>
+              Provedor: <span className="font-medium text-foreground">{providerPrincipal === 'glm' ? 'Zhipu AI (GLM)' : providerPrincipal === 'openrouter' ? 'OpenRouter' : 'Google Gemini'}</span>
               {providerPrincipal === 'glm' && !llmApiKey && (
                 <span className="text-amber-400 ml-1"> - Formato: id.secret</span>
               )}
@@ -5241,6 +5256,12 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
                   {modelo.label}
                 </SelectItem>
               ))}
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t border-border mt-1 pt-2">OpenRouter (Gratuito)</div>
+              {modelosIA.filter(m => m.provider === 'openrouter').map((modelo) => (
+                <SelectItem key={modelo.value} value={modelo.value}>
+                  {modelo.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -5266,7 +5287,7 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Provedor: <span className="font-medium text-foreground">{providerReserva === 'glm' ? 'Zhipu AI (GLM)' : 'Google Gemini'}</span>
+              Provedor: <span className="font-medium text-foreground">{providerReserva === 'glm' ? 'Zhipu AI (GLM)' : providerReserva === 'openrouter' ? 'OpenRouter' : 'Google Gemini'}</span>
               {providerReserva === 'glm' && !llmApiKeyFallback && (
                 <span className="text-amber-400 ml-1"> - Formato: id.secret</span>
               )}
