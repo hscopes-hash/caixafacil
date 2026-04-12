@@ -4964,6 +4964,32 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
   const [showApiKey, setShowApiKey] = useState(false);
   const [showApiKeyFallback, setShowApiKeyFallback] = useState(false);
 
+  // Funções auxiliares
+  const getProviderLocal = (m: string) => m.includes('/') ? 'openrouter' : m.startsWith('glm-') ? 'glm' : 'gemini';
+
+  // Função para trocar modelo e avisar se API Key precisa ser atualizada
+  const handleModelChange = (novoModelo: string, tipo: 'principal' | 'fallback') => {
+    const providerAnterior = tipo === 'principal'
+      ? (llmModel ? getProviderLocal(llmModel) : null)
+      : (llmModelFallback ? getProviderLocal(llmModelFallback) : null);
+    const providerNovo = getProviderLocal(novoModelo);
+
+    if (providerAnterior && providerAnterior !== providerNovo) {
+      if (tipo === 'principal') {
+        setLlmModel(novoModelo);
+        setLlmApiKey('');
+        toast.info(`Provedor alterado para ${providerNovo === 'gemini' ? 'Google Gemini' : providerNovo === 'glm' ? 'Zhipu AI' : 'OpenRouter'}. Insira a API Key correspondente.`);
+      } else {
+        setLlmModelFallback(novoModelo);
+        setLlmApiKeyFallback('');
+        toast.info(`Provedor reserva alterado para ${providerNovo === 'gemini' ? 'Google Gemini' : providerNovo === 'glm' ? 'Zhipu AI' : 'OpenRouter'}. Insira a API Key correspondente.`);
+      }
+    } else {
+      if (tipo === 'principal') setLlmModel(novoModelo);
+      else setLlmModelFallback(novoModelo);
+    }
+  };
+
   const modelosIA = [
     { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite (Padrão - Rápido)', provider: 'gemini' },
     { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite (Alternativa rápida)', provider: 'gemini' },
@@ -4978,7 +5004,6 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
     { value: 'nvidia/nemotron-nano-12b-v2-vl:free', label: 'Nemotron 12B VL (OpenRouter - Gratuito)', provider: 'openrouter' },
   ];
 
-  const getProviderLocal = (m: string) => m.includes('/') ? 'openrouter' : m.startsWith('glm-') ? 'glm' : 'gemini';
   const getKeyLink = (provider: string) => provider === 'glm'
     ? 'https://z.ai/manage-apikey/apikey-list'
     : provider === 'openrouter'
@@ -5104,7 +5129,7 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Select value={llmModel} onValueChange={setLlmModel}>
+          <Select value={llmModel} onValueChange={(v) => handleModelChange(v, 'principal')}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Selecione um modelo..." />
             </SelectTrigger>
@@ -5252,7 +5277,7 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Select value={llmModelFallback} onValueChange={setLlmModelFallback}>
+          <Select value={llmModelFallback} onValueChange={(v) => handleModelChange(v, 'fallback')}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Selecione um modelo reserva..." />
             </SelectTrigger>
