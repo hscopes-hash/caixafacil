@@ -4974,19 +4974,21 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
       : (llmModelFallback ? getProviderLocal(llmModelFallback) : null);
     const providerNovo = getProviderLocal(novoModelo);
 
-    if (providerAnterior && providerAnterior !== providerNovo) {
-      if (tipo === 'principal') {
-        setLlmModel(novoModelo);
+    // Sempre que o provedor mudar, limpar a API Key (cada provedor usa key diferente)
+    const providerMudou = providerAnterior !== null && providerAnterior !== providerNovo;
+
+    if (tipo === 'principal') {
+      setLlmModel(novoModelo);
+      if (providerMudou) {
         setLlmApiKey('');
         toast.info(`Provedor alterado para ${providerNovo === 'gemini' ? 'Google Gemini' : providerNovo === 'glm' ? 'Zhipu AI' : 'OpenRouter'}. Insira a API Key correspondente.`);
-      } else {
-        setLlmModelFallback(novoModelo);
+      }
+    } else {
+      setLlmModelFallback(novoModelo);
+      if (providerMudou) {
         setLlmApiKeyFallback('');
         toast.info(`Provedor reserva alterado para ${providerNovo === 'gemini' ? 'Google Gemini' : providerNovo === 'glm' ? 'Zhipu AI' : 'OpenRouter'}. Insira a API Key correspondente.`);
       }
-    } else {
-      if (tipo === 'principal') setLlmModel(novoModelo);
-      else setLlmModelFallback(novoModelo);
     }
   };
 
