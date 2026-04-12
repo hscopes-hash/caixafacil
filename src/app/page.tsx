@@ -4954,10 +4954,8 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
     { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Equilibrado)', provider: 'gemini' },
     { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (Preciso - Lento)', provider: 'gemini' },
     { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (Alternativa)', provider: 'gemini' },
-    { value: 'glm-4v-flash', label: 'GLM-4V Flash (Zhipu AI - Rápido)', provider: 'glm' },
-    { value: 'glm-4v-plus', label: 'GLM-4V Plus (Zhipu AI - Equilibrado)', provider: 'glm' },
-    { value: 'glm-4v', label: 'GLM-4V (Zhipu AI - Preciso)', provider: 'glm' },
-    { value: 'glm-4v-long', label: 'GLM-4V Long (Zhipu AI - Alta Resolução)', provider: 'glm' },
+    { value: 'glm-4v-flash', label: 'GLM-4V Flash (Zhipu AI - Rápido/Gratuito)', provider: 'glm' },
+    { value: 'glm-5v-turbo', label: 'GLM-5V Turbo (Zhipu AI - Preciso)', provider: 'glm' },
   ];
 
   const getProviderLocal = (m: string) => m.startsWith('glm-') ? 'glm' : 'gemini';
