@@ -2457,9 +2457,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
             alturaOriginal = Math.round(alturaOriginal * ratio);
           }
           
-          // Altura da tarja proporcional ao tamanho da fonte
-          const tamanhoFonteBase = Math.max(16, Math.min(32, Math.round(larguraOriginal / 60)));
-          const alturaTarja = Math.round(tamanhoFonteBase * 3.5);
+          // Fonte grande e legível: mínimo 26px, máximo 52px
+          // Para 720px → 29px | Para 1200px → 48px | Para 1920px → 52px(cap)
+          const tamanhoFonteBase = Math.max(26, Math.min(52, Math.round(larguraOriginal / 25)));
+          const alturaTarja = Math.round(tamanhoFonteBase * 3.2);
           
           // Nova altura total = imagem + tarja
           canvas.width = larguraOriginal;
@@ -2482,7 +2483,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
 
           // Tamanho da fonte adaptativo à largura da imagem
           const tamanhoFonte = tamanhoFonteBase;
-          const padding = Math.max(10, Math.round(larguraOriginal * 0.025));
+          const padding = Math.max(12, Math.round(larguraOriginal * 0.03));
 
           // Posições verticais das linhas (centralizadas na tarja)
           const espacamentoEntreLinhas = Math.round(tamanhoFonte * 1.5);
