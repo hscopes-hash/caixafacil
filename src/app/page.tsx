@@ -2080,6 +2080,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
           modelFallback: empresa?.llmModelFallback || undefined,
           llmApiKey: empresa?.llmApiKey || undefined,
           llmApiKeyFallback: empresa?.llmApiKeyFallback || undefined,
+          llmApiKeyGlm: empresa?.llmApiKeyGlm || undefined,
+          llmApiKeyOpenrouter: empresa?.llmApiKeyOpenrouter || undefined,
         }),
       });
 
@@ -2231,6 +2233,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
               modelFallback: empresa?.llmModelFallback || undefined,
               llmApiKey: empresa?.llmApiKey || undefined,
               llmApiKeyFallback: empresa?.llmApiKeyFallback || undefined,
+              llmApiKeyGlm: empresa?.llmApiKeyGlm || undefined,
+              llmApiKeyOpenrouter: empresa?.llmApiKeyOpenrouter || undefined,
             }),
           });
         } finally {
@@ -2268,6 +2272,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                 modelFallback: empresa?.llmModelFallback || undefined,
                 llmApiKey: empresa?.llmApiKey || undefined,
                 llmApiKeyFallback: empresa?.llmApiKeyFallback || undefined,
+                llmApiKeyGlm: empresa?.llmApiKeyGlm || undefined,
+                llmApiKeyOpenrouter: empresa?.llmApiKeyOpenrouter || undefined,
               }),
             });
 
@@ -4955,6 +4961,8 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
   const [llmModel, setLlmModel] = useState('');
   const [llmApiKeyFallback, setLlmApiKeyFallback] = useState('');
   const [llmModelFallback, setLlmModelFallback] = useState('');
+  const [savedKeyGlm, setSavedKeyGlm] = useState('');
+  const [savedKeyOpenrouter, setSavedKeyOpenrouter] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [testando, setTestando] = useState(false);
@@ -4974,20 +4982,31 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
       : (llmModelFallback ? getProviderLocal(llmModelFallback) : null);
     const providerNovo = getProviderLocal(novoModelo);
 
-    // Sempre que o provedor mudar, limpar a API Key (cada provedor usa key diferente)
+    // Sempre que o provedor mudar, preencher com a key salva do provedor
     const providerMudou = providerAnterior !== null && providerAnterior !== providerNovo;
 
     if (tipo === 'principal') {
       setLlmModel(novoModelo);
       if (providerMudou) {
-        setLlmApiKey('');
-        toast.info(`Provedor alterado para ${providerNovo === 'gemini' ? 'Google Gemini' : providerNovo === 'glm' ? 'Zhipu AI' : 'OpenRouter'}. Insira a API Key correspondente.`);
+        // Restaurar key salva do provedor, se existir
+        const keySalva = providerNovo === 'glm' ? savedKeyGlm : providerNovo === 'openrouter' ? savedKeyOpenrouter : '';
+        setLlmApiKey(keySalva);
+        if (keySalva) {
+          toast.success(`API Key do provedor restaurada automaticamente.`);
+        } else {
+          toast.info(`Provedor alterado para ${providerNovo === 'gemini' ? 'Google Gemini' : providerNovo === 'glm' ? 'Zhipu AI' : 'OpenRouter'}. Insira a API Key correspondente.`);
+        }
       }
     } else {
       setLlmModelFallback(novoModelo);
       if (providerMudou) {
-        setLlmApiKeyFallback('');
-        toast.info(`Provedor reserva alterado para ${providerNovo === 'gemini' ? 'Google Gemini' : providerNovo === 'glm' ? 'Zhipu AI' : 'OpenRouter'}. Insira a API Key correspondente.`);
+        const keySalva = providerNovo === 'glm' ? savedKeyGlm : providerNovo === 'openrouter' ? savedKeyOpenrouter : '';
+        setLlmApiKeyFallback(keySalva);
+        if (keySalva) {
+          toast.success(`API Key do provedor restaurada automaticamente.`);
+        } else {
+          toast.info(`Provedor reserva alterado para ${providerNovo === 'gemini' ? 'Google Gemini' : providerNovo === 'glm' ? 'Zhipu AI' : 'OpenRouter'}. Insira a API Key correspondente.`);
+        }
       }
     }
   };
@@ -5027,6 +5046,8 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
         setLlmModel(data.llmModel || '');
         setLlmApiKeyFallback(data.llmApiKeyFallback || '');
         setLlmModelFallback(data.llmModelFallback || '');
+        setSavedKeyGlm(data.llmApiKeyGlm || '');
+        setSavedKeyOpenrouter(data.llmApiKeyOpenrouter || '');
       })
       .catch((err) => {
         console.error('Erro ao carregar configurações:', err);
@@ -5038,14 +5059,29 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
   const handleSalvar = async () => {
     setSalvando(true);
     try {
+      // Determinar keys por provedor baseado nos modelos selecionados
+      const providerPrincipal = llmModel ? getProviderLocal(llmModel) : null;
+      const providerReserva = llmModelFallback ? getProviderLocal(llmModelFallback) : null;
+
+      // Salvar a key principal no campo do provedor correspondente
+      let newKeyGlm = savedKeyGlm;
+      let newKeyOpenrouter = savedKeyOpenrouter;
+      if (llmApiKey && providerPrincipal === 'glm') newKeyGlm = llmApiKey;
+      if (llmApiKey && providerPrincipal === 'openrouter') newKeyOpenrouter = llmApiKey;
+      // Mesma lógica para a key de fallback
+      if (llmApiKeyFallback && providerReserva === 'glm') newKeyGlm = llmApiKeyFallback;
+      if (llmApiKeyFallback && providerReserva === 'openrouter') newKeyOpenrouter = llmApiKeyFallback;
+
       const res = await fetch('/api/configuracoes', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empresaId, llmApiKey, llmModel, llmApiKeyFallback, llmModelFallback }),
+        body: JSON.stringify({ empresaId, llmApiKey, llmModel, llmApiKeyFallback, llmModelFallback, llmApiKeyGlm: newKeyGlm, llmApiKeyOpenrouter: newKeyOpenrouter }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar configurações');
-      updateEmpresa({ llmApiKey, llmModel, llmApiKeyFallback, llmModelFallback });
+      updateEmpresa({ llmApiKey, llmModel, llmApiKeyFallback, llmModelFallback, llmApiKeyGlm: newKeyGlm, llmApiKeyOpenrouter: newKeyOpenrouter });
+      setSavedKeyGlm(newKeyGlm);
+      setSavedKeyOpenrouter(newKeyOpenrouter);
       toast.success('Configurações salvas com sucesso!');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao salvar configurações';

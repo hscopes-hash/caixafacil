@@ -154,7 +154,7 @@ function parseApiError(errorText: string, status?: number, provider?: string): s
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { imagem, codigosMaquinas, model: bodyModel, modelFallback, llmApiKey, llmApiKeyFallback } = body;
+    const { imagem, codigosMaquinas, model: bodyModel, modelFallback, llmApiKey, llmApiKeyFallback, llmApiKeyGlm, llmApiKeyOpenrouter } = body;
 
     if (!imagem) {
       return NextResponse.json({ error: 'Imagem é obrigatória' }, { status: 400 });
@@ -175,8 +175,8 @@ export async function POST(request: NextRequest) {
     const maskKey = (k?: string) => k ? `${k.substring(0, 6)}...${k.substring(k.length - 4)}` : 'NÃO ENVIADA';
     console.log(`[IDENTIFICAR-LOTE] model=${model}, llmApiKey=${maskKey(llmApiKey as string)}, llmApiKeyFallback=${maskKey(llmApiKeyFallback as string)}, fallback=${modelFallback || 'nenhum'}`);
 
-    // API Key: automática baseada no provedor do modelo
-    const apiKey = getApiKeyForModel(model, llmApiKey, llmApiKeyFallback);
+    // API Key: automática baseada no provedor do modelo (com fallback para keys salvas por provedor)
+    const apiKey = getApiKeyForModel(model, llmApiKey, llmApiKeyFallback, llmApiKeyGlm, llmApiKeyOpenrouter);
     if (!apiKey) {
       return NextResponse.json(
         { error: 'API Key não configurada. Configure nas Configurações da empresa.', detalhe: `Provedor: ${getProvider(model)}, modelo: ${model}` },
@@ -227,7 +227,7 @@ Responda APENAS com este JSON (sem markdown, sem explicações):
         );
       }
 
-      const fallbackApiKey = getApiKeyForModel(fallbackModel, llmApiKeyFallback, llmApiKey);
+      const fallbackApiKey = getApiKeyForModel(fallbackModel, llmApiKeyFallback, llmApiKey, llmApiKeyGlm, llmApiKeyOpenrouter);
       if (!fallbackApiKey) {
         const errorText = primaryError instanceof Error ? primaryError.message : String(primaryError);
         return NextResponse.json(

@@ -142,7 +142,7 @@ async function callAI(prompt: string, imagem: string, apiKey: string, model: str
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { imagem, nomeEntrada, nomeSaida, model: bodyModel, modelFallback, llmApiKey, llmApiKeyFallback } = body;
+    const { imagem, nomeEntrada, nomeSaida, model: bodyModel, modelFallback, llmApiKey, llmApiKeyFallback, llmApiKeyGlm, llmApiKeyOpenrouter } = body;
 
     if (!imagem) {
       return NextResponse.json({ error: 'Imagem é obrigatória' }, { status: 400 });
@@ -155,8 +155,8 @@ export async function POST(request: NextRequest) {
     // Modelo (prioridade: body > env > padrão)
     const model = bodyModel?.trim() || process.env.LLM_MODEL?.trim() || 'gemini-2.5-flash-lite';
 
-    // API Key: automática baseada no provedor do modelo
-    const apiKey = getApiKeyForModel(model, llmApiKey, llmApiKeyFallback);
+    // API Key: automática baseada no provedor do modelo (com fallback para keys salvas por provedor)
+    const apiKey = getApiKeyForModel(model, llmApiKey, llmApiKeyFallback, llmApiKeyGlm, llmApiKeyOpenrouter);
     if (!apiKey) {
       return NextResponse.json(
         { error: 'API Key não configurada. Configure LLM_API_KEY no Vercel.' },
@@ -215,7 +215,7 @@ Responda APENAS com este JSON (sem markdown, sem explicações):
       }
 
       // API Key do fallback: automática baseada no provedor
-      const fallbackApiKey = getApiKeyForModel(fallbackModel, llmApiKeyFallback, llmApiKey);
+      const fallbackApiKey = getApiKeyForModel(fallbackModel, llmApiKeyFallback, llmApiKey, llmApiKeyGlm, llmApiKeyOpenrouter);
       if (!fallbackApiKey) {
         const errorText = primaryError instanceof Error ? primaryError.message : String(primaryError);
         return NextResponse.json(
