@@ -164,35 +164,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Prompt otimizado para leitura de contadores
+    // Prompt simples: buscar valores após os rótulos configurados
     const nomeE = nomeEntrada || 'E';
     const nomeS = nomeSaida || 'S';
-    const prompt = `Analise esta foto de um contador de máquina de entretenimento.
+    const prompt = `Veja esta foto de um display de máquina de entretenimento.
 
-IMPORTANTE: Você deve encontrar EXATAMENTE DOIS displays numéricos na foto. Cada display tem um rótulo de texto ao lado.
+Procure na imagem os textos "${nomeE}" e "${nomeS}". Ao lado de cada um deles aparece um valor numérico. Leia esses valores.
 
-PASSO 1 - IDENTIFICAR TODOS OS DISPLAYS:
-- Procure na foto TODOS os displays de LED ou LCD que mostram números.
-- Para cada display encontrado, anote: (a) o rótulo de texto exibido ao lado dele, (b) o valor numérico mostrado.
+Exemplo: se ao lado de "${nomeE}" está "1.234,56", o valor é 123456. Se ao lado de "${nomeS}" está "789,00", o valor é 78900.
 
-PASSO 2 - MAPEAR PARA O JSON:
-- Encontre o display cujo rótulo de texto é EXATAMENTE "${nomeE}" (procure esta sequência de letras). O valor numérico deste display vai no campo "entrada".
-- Encontre o display cujo rótulo de texto é EXATAMENTE "${nomeS}" (procure esta sequência de letras). O valor numérico deste display vai no campo "saida".
-- NÃO use "entrada" ou "saida" como rótulo de busca. Use APENAS "${nomeE}" e "${nomeS}".
+Regras:
+- Remova pontos e vírgulas do valor. Ex: "2.324,00" vira "232400", "0,50" vira "050", "1234" fica "1234".
+- Retorne null se o rótulo não aparecer na foto ou o valor não for legível.
+- NUNCA retorne zero a menos que o display mostre exatamente 0.
 
-ATENÇÃO - ZEROS E VALORES INVÁLIDOS:
-- Se o display "${nomeS}" mostrar um valor diferente de zero (ex: 1234.56), NÃO retorne zero. Retorne o valor real que está exibido.
-- Se você encontrar apenas um display, retorne null para o outro.
-- Se um display mostrar 0.00 ou 0000, retorne "0".
-- NUNCA invente valores. Leia APENAS o que está visível na foto.
-
-REGRA PARA VALORES MONETÁRIOS:
-- Remova pontos de milhar e vírgulas decimais. Ex: "2.324,00" vira "232400". "0,50" vira "050".
-- Se não tiver separador decimal, retorne o número como está. Ex: "1234" vira "1234".
-- Retorne SEMPRE como STRING entre aspas.
-
-Responda APENAS com este JSON (sem markdown):
-{"entrada": "VALOR_NUMERICO_DO_DISPLAY_${nomeE}_AQUI", "saida": "VALOR_NUMERICO_DO_DISPLAY_${nomeS}_AQUI", "confianca": PERCENTUAL, "observacoes": "descreva onde esta cada display e qual valor leu"}`;
+Responda apenas com o JSON:
+{"entrada": "valor_apos_${nomeE}", "saida": "valor_apos_${nomeS}", "confianca": 0_ate_100, "observacoes": "texto"}`;
 
     let content: string;
     let usedModel = model;
