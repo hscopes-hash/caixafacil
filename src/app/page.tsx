@@ -2457,8 +2457,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
             alturaOriginal = Math.round(alturaOriginal * ratio);
           }
           
-          // Altura da tarja fixa para 2 linhas
-          const alturaTarja = 32;
+          // Altura da tarja proporcional ao tamanho da fonte
+          const tamanhoFonteBase = Math.max(16, Math.min(32, Math.round(larguraOriginal / 60)));
+          const alturaTarja = Math.round(tamanhoFonteBase * 3.5);
           
           // Nova altura total = imagem + tarja
           canvas.width = larguraOriginal;
@@ -2480,12 +2481,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
           ctx.textAlign = 'left';
 
           // Tamanho da fonte adaptativo à largura da imagem
-          const tamanhoFonte = Math.max(6, Math.min(10, Math.round(larguraOriginal / 48)));
-          const padding = Math.max(6, Math.round(larguraOriginal * 0.02));
+          const tamanhoFonte = tamanhoFonteBase;
+          const padding = Math.max(10, Math.round(larguraOriginal * 0.025));
 
-          // Posições verticais das linhas
-          const linha1Y = alturaOriginal + 11;
-          const linha2Y = alturaOriginal + 23;
+          // Posições verticais das linhas (centralizadas na tarja)
+          const espacamentoEntreLinhas = Math.round(tamanhoFonte * 1.5);
+          const inicioTarja = alturaOriginal + alturaTarja / 2;
+          const linha1Y = inicioTarja - espacamentoEntreLinhas / 2;
+          const linha2Y = inicioTarja + espacamentoEntreLinhas / 2;
 
           // === LINHA 1: CABEÇALHOS ===
           ctx.fillStyle = '#ffffff'; // branco
