@@ -2458,7 +2458,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
           }
           
           // Altura da tarja fixa para 2 linhas
-          const alturaTarja = 55;
+          const alturaTarja = 32;
           
           // Nova altura total = imagem + tarja
           canvas.width = larguraOriginal;
@@ -2480,31 +2480,31 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
           ctx.textAlign = 'left';
 
           // Tamanho da fonte adaptativo à largura da imagem
-          const tamanhoFonte = Math.max(9, Math.min(14, Math.round(larguraOriginal / 32)));
+          const tamanhoFonte = Math.max(6, Math.min(10, Math.round(larguraOriginal / 48)));
           const padding = Math.max(6, Math.round(larguraOriginal * 0.02));
 
           // Posições verticais das linhas
-          const linha1Y = alturaOriginal + 18;
-          const linha2Y = alturaOriginal + 40;
+          const linha1Y = alturaOriginal + 11;
+          const linha2Y = alturaOriginal + 23;
 
           // === LINHA 1: CABEÇALHOS ===
           ctx.fillStyle = '#ffffff'; // branco
           ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`;
           
           // Cabeçalhos com separadores |
-          const cabecalho = `Data Hora        |  Usuário   |  ENTRADA  |  SAÍDA`;
+          const cabecalho = `Data Hora    | User   | ENTR | SAÍDA`;
           ctx.fillText(cabecalho, padding, linha1Y);
 
           // === LINHA 2: VALORES ===
           ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`;
           
           // Formatar valores
-          const usuarioLimitado = operador.substring(0, 8).padEnd(8);
-          const entradaStr = String(entrada ?? '-').padStart(6);
-          const saidaStr = String(saida ?? '-').padStart(6);
+          const usuarioLimitado = operador.substring(0, 6).padEnd(6);
+          const entradaStr = String(entrada ?? '-').padStart(5);
+          const saidaStr = String(saida ?? '-').padStart(5);
           
           // Construir linha de valores com separadores |
-          const valores = `${data}  |  ${usuarioLimitado}  |  ${entradaStr}  |  ${saidaStr}`;
+          const valores = `${data} | ${usuarioLimitado} | ${entradaStr} | ${saidaStr}`;
           ctx.fillText(valores, padding, linha2Y);
 
           // Converter para base64 com qualidade reduzida
