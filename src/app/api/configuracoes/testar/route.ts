@@ -28,11 +28,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Empresa não encontrada' }, { status: 404 });
     }
 
-    // Determinar modelo: corpo > banco > env > padrão
-    const defaultModel = process.env.LLM_MODEL?.trim() || 'gemini-2.5-flash-lite';
+    // Determinar modelo: corpo > banco > padrao
+    const defaultModel = 'gemini-2.5-flash-lite';
     const model = bodyModel?.trim() || empresa.llmModel?.trim() || defaultModel;
 
-    // API Key: corpo > banco > env > padrão
+    // API Key: do banco de dados (Config. IA)
     const empresaKey = bodyApiKey?.trim() || empresa.llmApiKey?.trim() || null;
     const apiKey = getApiKeyForModel(model, empresaKey, empresa.llmApiKeyGlm, empresa.llmApiKeyOpenrouter);
     if (!apiKey) {

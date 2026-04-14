@@ -150,14 +150,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Formato de imagem inválido.' }, { status: 400 });
     }
 
-    // Modelo (prioridade: body > env > padrão)
-    const model = bodyModel?.trim() || process.env.LLM_MODEL?.trim() || 'gemini-2.5-flash-lite';
+    // Modelo (prioridade: body > padrao)
+    const model = bodyModel?.trim() || 'gemini-2.5-flash-lite';
 
-    // API Key: automática baseada no provedor do modelo
+    // API Key: do banco de dados (Config. IA)
     const apiKey = getApiKeyForModel(model, llmApiKey, llmApiKeyGlm, llmApiKeyOpenrouter);
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'API Key não configurada. Configure nas Configurações da empresa.' },
+        { error: 'API Key não configurada. O super admin deve configurar nas Config. de IA.' },
         { status: 500 }
       );
     }

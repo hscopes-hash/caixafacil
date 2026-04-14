@@ -19,21 +19,18 @@ export function detectProvider(model: string): Provider {
 }
 
 /**
- * Retorna a API Key correta baseada no provedor do modelo.
- * - GLM: key do provedor > env var LLM_API_KEY_GLM > LLM_API_KEY
- * - OpenRouter: key do provedor > env var LLM_API_KEY
- * - Gemini: key informada > env var LLM_API_KEY
+ * Retorna a API Key do banco de dados (Config. IA).
+ * Sem variáveis de ambiente - a key deve ser configurada pelo super admin no app.
  */
 export function getApiKeyForModel(model: string, empresaApiKey?: string | null, empresaApiKeyGlm?: string | null, empresaApiKeyOpenrouter?: string | null): string | null {
   const provider = detectProvider(model);
   if (provider === 'glm') {
-    return empresaApiKey?.trim() || empresaApiKeyGlm?.trim() || process.env.LLM_API_KEY_GLM?.trim() || process.env.LLM_API_KEY?.trim() || null;
+    return empresaApiKey?.trim() || empresaApiKeyGlm?.trim() || null;
   }
   if (provider === 'openrouter') {
-    return empresaApiKey?.trim() || empresaApiKeyOpenrouter?.trim() || process.env.LLM_API_KEY?.trim() || null;
+    return empresaApiKey?.trim() || empresaApiKeyOpenrouter?.trim() || null;
   }
-  // Gemini: key informada > env var
-  return empresaApiKey?.trim() || process.env.LLM_API_KEY?.trim() || null;
+  return empresaApiKey?.trim() || null;
 }
 
 /**

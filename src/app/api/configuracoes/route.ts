@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
       llmApiKeyGlm: empresa.llmApiKeyGlm || '',
       llmApiKeyOpenrouter: empresa.llmApiKeyOpenrouter || '',
       llmApiKeyMasked: maskApiKey(empresa.llmApiKey),
-      modeloPadrao: process.env.LLM_MODEL || 'gemini-2.5-flash-lite',
+      modeloPadrao: 'gemini-2.5-flash-lite',
     });
   } catch (error) {
     console.error('Erro ao buscar configurações:', error);
