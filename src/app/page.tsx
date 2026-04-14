@@ -2397,23 +2397,36 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
             // =============================================
             // PASSO 2: Extrair valores com nomeEntrada/nomeSaida corretos
             // =============================================
-            const resExtrair = await fetch('/api/leituras/extrair', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                imagem: foto.imagem,
-                nomeEntrada,
-                nomeSaida,
-                model: empresa?.llmModel || undefined,
-                modelFallback: empresa?.llmModelFallback || undefined,
-                llmApiKey: empresa?.llmApiKey || undefined,
-                llmApiKeyFallback: empresa?.llmApiKeyFallback || undefined,
-                llmApiKeyGlm: empresa?.llmApiKeyGlm || undefined,
-                llmApiKeyOpenrouter: empresa?.llmApiKeyOpenrouter || undefined,
-              }),
-            });
+            const controllerExtrairManual = new AbortController();
+            const timeoutExtrairManual = setTimeout(() => controllerExtrairManual.abort(), 60000);
+            let resExtrair: Response;
+            try {
+              resExtrair = await fetch('/api/leituras/extrair', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: controllerExtrairManual.signal,
+                body: JSON.stringify({
+                  imagem: foto.imagem,
+                  nomeEntrada,
+                  nomeSaida,
+                  model: empresa?.llmModel || undefined,
+                  modelFallback: empresa?.llmModelFallback || undefined,
+                  llmApiKey: empresa?.llmApiKey || undefined,
+                  llmApiKeyFallback: empresa?.llmApiKeyFallback || undefined,
+                  llmApiKeyGlm: empresa?.llmApiKeyGlm || undefined,
+                  llmApiKeyOpenrouter: empresa?.llmApiKeyOpenrouter || undefined,
+                }),
+              });
+            } finally {
+              clearTimeout(timeoutExtrairManual);
+            }
 
-            const dataExtrair = await resExtrair.json();
+            let dataExtrair: any;
+            try {
+              dataExtrair = await resExtrair.json();
+            } catch (jsonErr) {
+              throw new Error(`Resposta invalida do servidor: ${jsonErr instanceof Error ? jsonErr.message : 'JSON invalido'}`);
+            }
 
             if (!resExtrair.ok) {
               throw new Error(dataExtrair.error || 'Erro ao extrair valores');
@@ -2670,7 +2683,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
   // PROCESSAMENTO EM BACKGROUND DO LOTE
   // Processa fotos automaticamente conforme sao adicionadas
   // =============================================
-  const processarFotoEmBackground = async (fotoId: string, imagemBase64: string) => {
+  const processarFotoEmBackground = async (fotoId: string, imagemBase64: string, tentativa = 1) => {
     // Timeout global de seguranca: se toda a funcao demorar mais de 120s, abortar
     const globalController = new AbortController();
     const globalTimeout = setTimeout(() => globalController.abort(), 120000);
@@ -2863,7 +2876,32 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
-      console.error(`[Lote] Erro foto ${fotoId}:`, errorMsg);
+      console.error(`[Lote] Erro foto ${fotoId} (tentativa ${tentativa}):`, errorMsg);
+
+      // Auto-retry para erros de rate limit ou formato invalido (max 2 tentativas)
+      const deveRetentar = tentativa < 2 && (
+        errorMsg.includes('Limite de requisicoes') ||
+        errorMsg.includes('rate limit') ||
+        errorMsg.includes('429') ||
+        errorMsg.includes('formato valido') ||
+        errorMsg.includes('JSON invalido') ||
+        errorMsg.includes('Timeout')
+      );
+
+      if (deveRetentar) {
+        console.log(`[Lote] Retentando foto ${fotoId} em 30s (tentativa ${tentativa + 1}/2)...`);
+        // Marcar como erro temporario com info de retry
+        setFotosLote(prev => prev.map(f =>
+          f.id === fotoId ? { ...f, status: 'erro' as const, erro: `Tentativa ${tentativa} falhou. Aguardando 30s para tentativa ${tentativa + 1}...` } : f
+        ));
+        // Esperar 30s e tentar novamente
+        await new Promise(resolve => setTimeout(resolve, 30000));
+        // Verificar se a foto ainda existe e esta com erro antes de retentar
+        clearTimeout(globalTimeout);
+        processarFotoEmBackground(fotoId, imagemBase64, tentativa + 1);
+        return;
+      }
+
       setFotosLote(prev => prev.map(f =>
         f.id === fotoId ? { ...f, status: 'erro' as const, erro: errorMsg } : f
       ));
