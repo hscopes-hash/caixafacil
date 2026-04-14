@@ -1806,6 +1806,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
   const [loteProgresso, setLoteProgresso] = useState(0);
   const loteIdCounter = useRef(0);
   const processandoEmBackground = useRef(false);
+  const fotosLoteRef = useRef(fotosLote);
+  fotosLoteRef.current = fotosLote;
+  const maquinasRef = useRef(maquinas);
+  maquinasRef.current = maquinas;
+  const empresaRef = useRef(empresa);
+  empresaRef.current = empresa;
   
   // Refs para os inputs de entrada e saída
   const entradaRefs = useRef<{ [key: number]: HTMLInputElement | null }>({});
@@ -2664,23 +2670,26 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
   // PROCESSAMENTO EM BACKGROUND DO LOTE
   // Processa fotos automaticamente conforme sao adicionadas
   // =============================================
-  const processarFotoEmBackground = async (fotoId: string) => {
-    // Encontrar a foto pelo ID
-    let fotoIndex = -1;
-    let fotoData: string | null = null;
-    setFotosLote(prev => {
-      const idx = prev.findIndex(f => f.id === fotoId);
-      if (idx === -1) return prev;
-      fotoIndex = idx;
-      fotoData = prev[idx].imagem;
-      // Marcar como processando
-      return prev.map((f, i) => i === idx ? { ...f, status: 'processando' as const } : f);
-    });
+  const processarFotoEmBackground = async (fotoId: string, imagemBase64: string) => {
+    // Marcar como processando
+    setFotosLote(prev => prev.map(f =>
+      f.id === fotoId ? { ...f, status: 'processando' as const } : f
+    ));
 
-    if (fotoIndex === -1 || !fotoData) return;
+    const currentMaquinas = maquinasRef.current;
+    const currentEmpresa = empresaRef.current;
 
-    const codigosMaquinas = maquinas.map(m => m.codigo);
-    let maquinasSnapshot = [...maquinas];
+    if (!currentMaquinas || currentMaquinas.length === 0) {
+      setFotosLote(prev => prev.map(f =>
+        f.id === fotoId ? { ...f, status: 'pendente' as const } : f
+      ));
+      return;
+    }
+
+    const codigosMaquinas = currentMaquinas.map(m => m.codigo);
+    let maquinasSnapshot = [...currentMaquinas];
+
+    console.log(`[Lote] Processando foto ${fotoId}...`);
 
     try {
       // PASSO 1: Identificar a máquina
@@ -2693,14 +2702,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
           headers: { 'Content-Type': 'application/json' },
           signal: controller.signal,
           body: JSON.stringify({
-            imagem: fotoData,
+            imagem: imagemBase64,
             codigosMaquinas,
-            model: empresa?.llmModel || undefined,
-            modelFallback: empresa?.llmModelFallback || undefined,
-            llmApiKey: empresa?.llmApiKey || undefined,
-            llmApiKeyFallback: empresa?.llmApiKeyFallback || undefined,
-            llmApiKeyGlm: empresa?.llmApiKeyGlm || undefined,
-            llmApiKeyOpenrouter: empresa?.llmApiKeyOpenrouter || undefined,
+            model: currentEmpresa?.llmModel || undefined,
+            modelFallback: currentEmpresa?.llmModelFallback || undefined,
+            llmApiKey: currentEmpresa?.llmApiKey || undefined,
+            llmApiKeyFallback: currentEmpresa?.llmApiKeyFallback || undefined,
+            llmApiKeyGlm: currentEmpresa?.llmApiKeyGlm || undefined,
+            llmApiKeyOpenrouter: currentEmpresa?.llmApiKeyOpenrouter || undefined,
           }),
         });
       } finally {
@@ -2712,6 +2721,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
         throw new Error(dataIdentificar.error || 'Erro ao identificar máquina');
       }
 
+      console.log(`[Lote] Foto ${fotoId} identificada: ${dataIdentificar.codigoMaquina}`);
+
       if (dataIdentificar.codigoReconhecido) {
         const maquinaIdentificada = maquinasSnapshot.find(
           m => m.codigo.toUpperCase() === dataIdentificar.codigoMaquina.toUpperCase()
@@ -2722,19 +2733,20 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
           const nomeSaida = maquinaIdentificada.tipo?.nomeSaida || 'S';
 
           // PASSO 2: Extrair valores
+          console.log(`[Lote] Extraindo valores para ${dataIdentificar.codigoMaquina}...`);
           const resExtrair = await fetch('/api/leituras/extrair', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              imagem: fotoData,
+              imagem: imagemBase64,
               nomeEntrada,
               nomeSaida,
-              model: empresa?.llmModel || undefined,
-              modelFallback: empresa?.llmModelFallback || undefined,
-              llmApiKey: empresa?.llmApiKey || undefined,
-              llmApiKeyFallback: empresa?.llmApiKeyFallback || undefined,
-              llmApiKeyGlm: empresa?.llmApiKeyGlm || undefined,
-              llmApiKeyOpenrouter: empresa?.llmApiKeyOpenrouter || undefined,
+              model: currentEmpresa?.llmModel || undefined,
+              modelFallback: currentEmpresa?.llmModelFallback || undefined,
+              llmApiKey: currentEmpresa?.llmApiKey || undefined,
+              llmApiKeyFallback: currentEmpresa?.llmApiKeyFallback || undefined,
+              llmApiKeyGlm: currentEmpresa?.llmApiKeyGlm || undefined,
+              llmApiKeyOpenrouter: currentEmpresa?.llmApiKeyOpenrouter || undefined,
             }),
           });
 
@@ -2816,17 +2828,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+      console.error(`[Lote] Erro foto ${fotoId}:`, errorMsg);
       setFotosLote(prev => prev.map(f =>
         f.id === fotoId ? { ...f, status: 'erro' as const, erro: errorMsg } : f
       ));
     }
 
-    // Atualizar progresso
-    setFotosLote(prev => {
-      const concluidas = prev.filter(f => f.status === 'concluido' || f.status === 'erro').length;
-      setLoteProgresso(concluidas);
-      return prev; // não altera o estado, só usa para calcular
-    });
+    console.log(`[Lote] Foto ${fotoId} finalizada`);
   };
 
   // Efeito: processar automaticamente fotos pendentes em background
@@ -2834,13 +2842,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     const pendentes = fotosLote.filter(f => f.status === 'pendente');
     const processando = fotosLote.some(f => f.status === 'processando');
 
-    // Se há pendentes e nada está processando agora, iniciar
     if (pendentes.length > 0 && !processando && !processandoEmBackground.current && maquinas.length > 0) {
       processandoEmBackground.current = true;
       const fotoParaProcessar = pendentes[0];
-      processarFotoEmBackground(fotoParaProcessar.id).finally(() => {
-        processandoEmBackground.current = false;
-      });
+      processarFotoEmBackground(fotoParaProcessar.id, fotoParaProcessar.imagem)
+        .catch(err => console.error('[Lote] Erro inesperado:', err))
+        .finally(() => {
+          processandoEmBackground.current = false;
+        });
     }
   }, [fotosLote, maquinas]);
 
