@@ -25,7 +25,7 @@ import {
   Plus, Pencil, Trash2, Eye, Ban, CheckCircle, AlertTriangle, Building2,
   ClipboardList, Printer, Camera, X, Image as ImageIcon, Layers, MessageCircle, LogIn,
   CalendarDays, ShieldAlert, FileText, Sun, Moon, DatabaseBackup, Download, Upload, HardDrive, SlidersHorizontal,
-  Key, Wifi, EyeOff, ChevronDown
+  Key, Wifi, EyeOff, ChevronDown, RotateCcw
 } from 'lucide-react';
 import { VERSION_DISPLAY, VERSION_WITH_DATE } from '@/lib/version';
 
@@ -2671,6 +2671,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
   // Processa fotos automaticamente conforme sao adicionadas
   // =============================================
   const processarFotoEmBackground = async (fotoId: string, imagemBase64: string) => {
+    // Timeout global de seguranca: se toda a funcao demorar mais de 120s, abortar
+    const globalController = new AbortController();
+    const globalTimeout = setTimeout(() => globalController.abort(), 120000);
+
     // Marcar como processando
     setFotosLote(prev => prev.map(f =>
       f.id === fotoId ? { ...f, status: 'processando' as const } : f
@@ -2683,6 +2687,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
       setFotosLote(prev => prev.map(f =>
         f.id === fotoId ? { ...f, status: 'pendente' as const } : f
       ));
+      clearTimeout(globalTimeout);
       return;
     }
 
@@ -2692,9 +2697,19 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     console.log(`[Lote] Processando foto ${fotoId}...`);
 
     try {
+      // Verificar se o timeout global foi atingido antes de cada passo
+      const checkGlobalTimeout = () => {
+        if (globalController.signal.aborted) {
+          throw new DOMException('Timeout global de processamento atingido (120s)', 'AbortError');
+        }
+      };
+
       // PASSO 1: Identificar a máquina
+      checkGlobalTimeout();
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 90000);
+      const timeout = setTimeout(() => controller.abort(), 60000);
+      // Se o timeout global disparar, abortar tambem esta requisicao
+      globalController.signal.addEventListener(() => controller.abort(), { once: true });
       let resIdentificar: Response;
       try {
         resIdentificar = await fetch('/api/leituras/identificar-lote', {
@@ -2716,7 +2731,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
         clearTimeout(timeout);
       }
 
-      const dataIdentificar = await resIdentificar.json();
+      let dataIdentificar: any;
+      try {
+        dataIdentificar = await resIdentificar.json();
+      } catch (jsonErr) {
+        throw new Error(`Resposta invalida do servidor de identificacao: ${jsonErr instanceof Error ? jsonErr.message : 'JSON invalido'}`);
+      }
       if (!resIdentificar.ok) {
         throw new Error(dataIdentificar.error || 'Erro ao identificar máquina');
       }
@@ -2732,25 +2752,40 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
           const nomeEntrada = maquinaIdentificada.tipo?.nomeEntrada || 'E';
           const nomeSaida = maquinaIdentificada.tipo?.nomeSaida || 'S';
 
-          // PASSO 2: Extrair valores
+          // PASSO 2: Extrair valores (com timeout!)
+          checkGlobalTimeout();
           console.log(`[Lote] Extraindo valores para ${dataIdentificar.codigoMaquina}...`);
-          const resExtrair = await fetch('/api/leituras/extrair', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              imagem: imagemBase64,
-              nomeEntrada,
-              nomeSaida,
-              model: currentEmpresa?.llmModel || undefined,
-              modelFallback: currentEmpresa?.llmModelFallback || undefined,
-              llmApiKey: currentEmpresa?.llmApiKey || undefined,
-              llmApiKeyFallback: currentEmpresa?.llmApiKeyFallback || undefined,
-              llmApiKeyGlm: currentEmpresa?.llmApiKeyGlm || undefined,
-              llmApiKeyOpenrouter: currentEmpresa?.llmApiKeyOpenrouter || undefined,
-            }),
-          });
+          const controllerExtrair = new AbortController();
+          const timeoutExtrair = setTimeout(() => controllerExtrair.abort(), 60000);
+          globalController.signal.addEventListener(() => controllerExtrair.abort(), { once: true });
+          let resExtrair: Response;
+          try {
+            resExtrair = await fetch('/api/leituras/extrair', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              signal: controllerExtrair.signal,
+              body: JSON.stringify({
+                imagem: imagemBase64,
+                nomeEntrada,
+                nomeSaida,
+                model: currentEmpresa?.llmModel || undefined,
+                modelFallback: currentEmpresa?.llmModelFallback || undefined,
+                llmApiKey: currentEmpresa?.llmApiKey || undefined,
+                llmApiKeyFallback: currentEmpresa?.llmApiKeyFallback || undefined,
+                llmApiKeyGlm: currentEmpresa?.llmApiKeyGlm || undefined,
+                llmApiKeyOpenrouter: currentEmpresa?.llmApiKeyOpenrouter || undefined,
+              }),
+            });
+          } finally {
+            clearTimeout(timeoutExtrair);
+          }
 
-          const dataExtrair = await resExtrair.json();
+          let dataExtrair: any;
+          try {
+            dataExtrair = await resExtrair.json();
+          } catch (jsonErr) {
+            throw new Error(`Resposta invalida do servidor de extracao: ${jsonErr instanceof Error ? jsonErr.message : 'JSON invalido'}`);
+          }
           if (!resExtrair.ok) {
             throw new Error(dataExtrair.error || 'Erro ao extrair valores');
           }
@@ -2832,6 +2867,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
       setFotosLote(prev => prev.map(f =>
         f.id === fotoId ? { ...f, status: 'erro' as const, erro: errorMsg } : f
       ));
+    } finally {
+      clearTimeout(globalTimeout);
     }
 
     console.log(`[Lote] Foto ${fotoId} finalizada`);
@@ -3531,7 +3568,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                               </div>
                             )}
                             {foto.status === 'erro' && (
-                              <p className="text-xs text-danger break-words max-w-full">{foto.erro || 'Erro'}</p>
+                              <>
+                                <p className="text-xs text-danger break-words max-w-full">{foto.erro || 'Erro'}</p>
+                                <button
+                                  className="text-xs text-amber-400 hover:text-amber-300 underline mt-0.5"
+                                  onClick={() => setFotosLote(prev => prev.map(f =>
+                                    f.id === foto.id ? { ...f, status: 'pendente' as const, erro: undefined } : f
+                                  ))}
+                                >
+                                  Tentar novamente
+                                </button>
+                              </>
                             )}
                           </div>
                           {foto.status === 'pendente' && !processandoLote && (
@@ -3548,7 +3595,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                             <CheckCircle className="w-4 h-4 text-success flex-shrink-0" />
                           )}
                           {foto.status === 'erro' && (
-                            <AlertTriangle className="w-4 h-4 text-danger flex-shrink-0" />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-amber-400 hover:text-amber-300 flex-shrink-0"
+                              onClick={() => setFotosLote(prev => prev.map(f =>
+                                f.id === foto.id ? { ...f, status: 'pendente' as const, erro: undefined } : f
+                              ))}
+                              title="Tentar novamente"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                            </Button>
                           )}
                         </div>
                       ))}
