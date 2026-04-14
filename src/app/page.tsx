@@ -2875,18 +2875,43 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
   };
 
   // Efeito: processar automaticamente fotos pendentes em background
+  // Inclui delay de 30s entre fotos para evitar rate limiting da API
+  const ultimaFotoProcessadaRef = useRef<number>(0);
+  const DELAY_ENTRE_FOTOS = 30000; // 30 segundos entre cada processamento
+
   useEffect(() => {
     const pendentes = fotosLote.filter(f => f.status === 'pendente');
     const processando = fotosLote.some(f => f.status === 'processando');
 
     if (pendentes.length > 0 && !processando && !processandoEmBackground.current && maquinas.length > 0) {
-      processandoEmBackground.current = true;
-      const fotoParaProcessar = pendentes[0];
-      processarFotoEmBackground(fotoParaProcessar.id, fotoParaProcessar.imagem)
-        .catch(err => console.error('[Lote] Erro inesperado:', err))
-        .finally(() => {
-          processandoEmBackground.current = false;
-        });
+      const tempoDesdeUltima = Date.now() - ultimaFotoProcessadaRef.current;
+      const delayNecessario = Math.max(0, DELAY_ENTRE_FOTOS - tempoDesdeUltima);
+
+      if (delayNecessario > 0) {
+        // Aguardar o delay antes de processar a proxima foto
+        console.log(`[Lote] Aguardando ${Math.round(delayNecessario / 1000)}s antes de processar proxima foto (rate limit)...`);
+        const timer = setTimeout(() => {
+          processandoEmBackground.current = true;
+          const fotoParaProcessar = pendentes[0];
+          processarFotoEmBackground(fotoParaProcessar.id, fotoParaProcessar.imagem)
+            .catch(err => console.error('[Lote] Erro inesperado:', err))
+            .finally(() => {
+              processandoEmBackground.current = false;
+              ultimaFotoProcessadaRef.current = Date.now();
+            });
+        }, delayNecessario);
+
+        return () => clearTimeout(timer);
+      } else {
+        processandoEmBackground.current = true;
+        const fotoParaProcessar = pendentes[0];
+        processarFotoEmBackground(fotoParaProcessar.id, fotoParaProcessar.imagem)
+          .catch(err => console.error('[Lote] Erro inesperado:', err))
+          .finally(() => {
+            processandoEmBackground.current = false;
+            ultimaFotoProcessadaRef.current = Date.now();
+          });
+      }
     }
   }, [fotosLote, maquinas]);
 
@@ -3639,7 +3664,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                       />
                     </div>
                     {!processandoLote && (
-                      <p className="text-xs text-center text-muted-foreground">Voce pode continuar tirando fotos</p>
+                      <p className="text-xs text-center text-muted-foreground">Voce pode continuar tirando fotos. Proxima foto em ate 30s.</p>
                     )}
                   </div>
                 )}
