@@ -149,6 +149,9 @@ function LoginPage() {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [loading, setLoading] = useState(false);
+  const [canInstall, setCanInstall] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
   const login = useAuthStore((state) => state.login);
 
   // Email do super admin
@@ -159,10 +162,45 @@ function LoginPage() {
       .then((res) => res.json())
       .then(setEmpresas)
       .catch(console.error);
+
+    // Detectar se já está instalado como app
+    const standalone = window.matchMedia('(display-mode: standalone)').matches;
+    setIsStandalone(standalone);
+
+    // Detectar capacidade de instalação PWA
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+      if (!standalone) setCanInstall(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
   // Verificar se é super admin
   const isSuperAdminLogin = email === SUPER_ADMIN_EMAIL;
+
+  // Instalar PWA
+  const handleInstallApp = async () => {
+    if (installPrompt) {
+      installPrompt.prompt();
+      const { outcome } = await installPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setCanInstall(false);
+        setInstallPrompt(null);
+        toast.success('App instalado com sucesso!');
+      }
+    } else {
+      // Fallback para iOS/Safari: mostrar instruções
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      if (isIOS || isSafari) {
+        toast.info('Toque no botão de compartilhar (quadrado com seta) e depois em "Adicionar à Tela Inicial"', { duration: 6000 });
+      } else {
+        toast.info('Use o menu do navegador e selecione "Instalar app" ou "Adicionar à tela inicial"', { duration: 5000 });
+      }
+    }
+  };
 
   // Quando o email do super admin é digitado, pular para credenciais automaticamente
   useEffect(() => {
@@ -372,6 +410,27 @@ function LoginPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Botão Instalar App */}
+        {!isStandalone && (
+          canInstall ? (
+            <button
+              onClick={handleInstallApp}
+              className="w-full mt-4 flex items-center justify-center gap-2 p-3 rounded-xl bg-gradient-to-r from-[#00d4aa] to-[#00b894] hover:from-[#00c49a] hover:to-[#00a888] transition-all group shadow-lg shadow-[#00d4aa]/20"
+            >
+              <Download className="w-5 h-5 text-[#0f172a] group-hover:scale-110 transition-transform" />
+              <span className="text-sm font-bold text-[#0f172a]">Instalar LeiturasOficial</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleInstallApp}
+              className="w-full mt-4 flex items-center justify-center gap-2 p-3 rounded-xl bg-gradient-to-r from-[#1e3a5f] to-[#0f172a] border border-[#00d4aa]/30 hover:border-[#00d4aa]/60 transition-all group"
+            >
+              <Download className="w-5 h-5 text-[#00d4aa] group-hover:scale-110 transition-transform" />
+              <span className="text-sm font-medium text-[#00d4aa]">Instalar como App</span>
+            </button>
+          )
+        )}
       </div>
     </div>
   );
