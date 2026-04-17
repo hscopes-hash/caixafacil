@@ -3212,7 +3212,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     const now = new Date();
     const dataStr = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear().toString().slice(-2)} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
     
-    let mensagem = `${clienteSelecionado?.nome?.toUpperCase() || 'CLIENTE'}\n`;
+    let mensagem = `__________________\n`;
+    mensagem += `${clienteSelecionado?.nome?.toUpperCase() || 'CLIENTE'}\n`;
     mensagem += `Data: ${dataStr}\n`;
     mensagem += `Lançado por: ${usuarioNome}\n`;
     mensagem += `_____________\n`;
@@ -3237,9 +3238,47 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     return mensagem;
   };
 
-  // Enviar pelo WhatsApp
-  const enviarWhatsApp = () => {
+  // Enviar pelo WhatsApp - fotos com tarja + separador + extrato
+  const enviarWhatsApp = async () => {
     const mensagem = gerarMensagemWhatsApp();
+
+    // Coletar fotos processadas (com tarja) das máquinas salvas
+    const fotosProcessadas: File[] = [];
+    for (const m of maquinasSalvas) {
+      const foto = maquinasComFotoAplicada.get(m.id);
+      if (foto) {
+        try {
+          const response = await fetch(foto);
+          const blob = await response.blob();
+          const fileName = `leitura_${m.codigo}_${Date.now()}.jpg`;
+          fotosProcessadas.push(new File([blob], fileName, { type: 'image/jpeg' }));
+        } catch (err) {
+          console.error(`Erro ao processar foto da máquina ${m.codigo}:`, err);
+        }
+      }
+    }
+
+    // Se houver fotos, enviar primeiro via Web Share API (fotos sem legenda)
+    if (fotosProcessadas.length > 0 && navigator.share) {
+      try {
+        const shareData: ShareData = {
+          title: 'Fotos da Leitura',
+        };
+        const canShareFiles = navigator.canShare && navigator.canShare({ files: fotosProcessadas });
+        if (canShareFiles) {
+          (shareData as ShareData & { files: File[] }).files = fotosProcessadas;
+          await navigator.share(shareData);
+          toast.success('Fotos enviadas! Agora envie o extrato.');
+        }
+      } catch (shareError: unknown) {
+        if (shareError instanceof Error && shareError.name === 'AbortError') {
+          return;
+        }
+        console.warn('Web Share de fotos falhou:', shareError);
+      }
+    }
+
+    // Depois enviar o extrato via wa.me
     const mensagemCodificada = encodeURIComponent(mensagem);
     const telefone = clienteSelecionado?.telefone?.replace(/\D/g, '') || '';
     
