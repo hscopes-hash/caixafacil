@@ -1767,6 +1767,7 @@ interface MaquinaLeitura extends Maquina {
   diferencaEntrada: number;
   diferencaSaida: number;
   saldoMaquina: number;
+  fotoProcessada: string | null;
 }
 
 function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { empresaId: string; isSupervisor: boolean; usuarioId: string; usuarioNome: string }) {
@@ -1792,8 +1793,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
   // Estado para o modal de resumo
   const [resumoModalOpen, setResumoModalOpen] = useState(false);
   const [maquinasSalvas, setMaquinasSalvas] = useState<MaquinaLeitura[]>([]);
-  // Estado para rastrear máquinas com valores aplicados da foto (e miniatura da foto com tarja)
-  const [maquinasComFotoAplicada, setMaquinasComFotoAplicada] = useState<Map<string, string>>(new Map());
   // Estado para rastrear origem da foto (CÂMERA ou GALERIA)
   const [fotoOrigem, setFotoOrigem] = useState<'CÂMERA' | 'GALERIA' | 'LOTE' | null>(null);
   // Estados para despesa extra
@@ -1901,6 +1900,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
         diferencaEntrada: 0,
         diferencaSaida: 0,
         saldoMaquina: 0,
+        fotoProcessada: null,
       }));
       
       setMaquinas(maquinasComLeitura);
@@ -1917,8 +1917,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     setExtratoVisivel(false);
     setRecebido('');
     setSaldoAnterior(0);
-    // Limpar estado de máquinas com foto aplicada ao trocar de cliente
-    setMaquinasComFotoAplicada(new Map());
     // Limpar campos de despesa ao trocar de cliente
     setDespesa('');
     setValorDespesa('');
@@ -2317,10 +2315,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
 
     setMaquinas(novasMaquinas);
     
-    // Marcar máquina como tendo valores aplicados da foto e armazenar miniatura
-    if (fotoCapturada) {
-      setMaquinasComFotoAplicada(prev => new Map(prev).set(maquinaFoto.id, fotoCapturada));
-    }
+    // Guardar foto processada (com tarja) diretamente no objeto da máquina
+    novasMaquinas[index].fotoProcessada = fotoCapturada || null;
+    setMaquinas([...novasMaquinas]);
     
     toast.success('Valores aplicados com sucesso!');
     
@@ -2840,7 +2837,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
               );
               maquinasSnapshot = novasMaquinas;
               setMaquinas(novasMaquinas);
-              setMaquinasComFotoAplicada(prev => new Set(prev).add(maquinasSnapshot[indexMaquina].id));
             }
           }
         } else {
@@ -3246,10 +3242,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     // Coletar fotos processadas (com tarja) das máquinas salvas
     const fotosProcessadas: File[] = [];
     for (const m of maquinasSalvas) {
-      const foto = maquinasComFotoAplicada.get(m.id);
-      if (foto) {
+      if (m.fotoProcessada) {
         try {
-          const response = await fetch(foto);
+          const response = await fetch(m.fotoProcessada);
           const blob = await response.blob();
           const fileName = `leitura_${m.codigo}_${Date.now()}.jpg`;
           fotosProcessadas.push(new File([blob], fileName, { type: 'image/jpeg' }));
@@ -3377,17 +3372,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                     <Button
                       variant="ghost"
                       size="icon"
-                      className={`h-9 w-9 overflow-hidden rounded-md ${maquinasComFotoAplicada.has(maquina.id) && maquinasComFotoAplicada.get(maquina.id) ? 'p-0 hover:opacity-80' : maquinasComFotoAplicada.has(maquina.id) ? 'text-success hover:text-success/80 hover:bg-success-bg' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+                      className={`h-9 w-9 overflow-hidden rounded-md ${maquina.fotoProcessada ? 'p-0 hover:opacity-80' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
                       onClick={() => abrirModalFoto(maquina)}
                     >
-                      {maquinasComFotoAplicada.has(maquina.id) && maquinasComFotoAplicada.get(maquina.id) ? (
+                      {maquina.fotoProcessada ? (
                         <img
-                          src={maquinasComFotoAplicada.get(maquina.id)!}
+                          src={maquina.fotoProcessada}
                           alt="Foto com tarja"
                           className="w-full h-full object-cover"
                         />
-                      ) : maquinasComFotoAplicada.has(maquina.id) ? (
-                        <CheckCircle className="w-5 h-5" />
                       ) : (
                         <Camera className="w-5 h-5" />
                       )}
