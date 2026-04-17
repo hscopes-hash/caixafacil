@@ -3238,9 +3238,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     return mensagem;
   };
 
-  // Enviar pelo WhatsApp - fotos com tarja + separador + extrato
+  // Enviar pelo WhatsApp - fotos com tarja (sem legenda) + separador + extrato para o grupo
   const enviarWhatsApp = async () => {
-    const mensagem = gerarMensagemWhatsApp();
+    // Pegar o WhatsApp do cliente (deve ser link de grupo)
+    const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
 
     // Coletar fotos processadas (com tarja) das máquinas salvas
     const fotosProcessadas: File[] = [];
@@ -3278,16 +3279,37 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
       }
     }
 
-    // Depois enviar o extrato via wa.me
-    const mensagemCodificada = encodeURIComponent(mensagem);
-    const telefone = clienteSelecionado?.telefone?.replace(/\D/g, '') || '';
-    
-    // Se tiver telefone, envia direto, senão abre sem número
-    const url = telefone 
-      ? `https://wa.me/55${telefone}?text=${mensagemCodificada}`
-      : `https://wa.me/?text=${mensagemCodificada}`;
-    
-    window.open(url, '_blank');
+    // Depois enviar o extrato para o grupo
+    const mensagem = gerarMensagemWhatsApp();
+
+    // Se tiver grupo WhatsApp cadastrado, abrir o grupo com o texto
+    if (whatsappOriginal) {
+      // Montar URL do grupo
+      const grupoUrl = whatsappOriginal.includes('chat.whatsapp.com')
+        ? whatsappOriginal
+        : `https://chat.whatsapp.com/${whatsappOriginal}`;
+
+      // Copiar mensagem para a área de transferência e abrir o grupo
+      try {
+        await navigator.clipboard.writeText(mensagem);
+        toast.success('Extrato copiado! O grupo abrirá. Cole a mensagem.');
+      } catch {
+        toast.info('O grupo abrirá. Envie o extrato manualmente.');
+      }
+
+      // Abrir o grupo do WhatsApp com delay
+      setTimeout(() => {
+        window.open(grupoUrl, '_blank');
+      }, fotosProcessadas.length > 0 ? 1500 : 500);
+    } else {
+      // Fallback: se não tiver grupo, envia por wa.me (telefone individual)
+      const mensagemCodificada = encodeURIComponent(mensagem);
+      const telefone = clienteSelecionado?.telefone?.replace(/\D/g, '') || '';
+      const url = telefone 
+        ? `https://wa.me/55${telefone}?text=${mensagemCodificada}`
+        : `https://wa.me/?text=${mensagemCodificada}`;
+      window.open(url, '_blank');
+    }
   };
 
   // Imprimir resumo
