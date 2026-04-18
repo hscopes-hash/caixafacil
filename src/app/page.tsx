@@ -3026,7 +3026,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
 
           // === DESENHO POR COLUNAS (alinhamento perfeito) ===
           ctx.fillStyle = '#ffffff'; // branco
-          ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`;
+          const tamanhoFonteCabecalho = Math.round(tamanhoFonte * 1.15); // cabeçalhos 15% maiores
+          ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
 
           // Formatar valores
           const usuarioLimitado = operador.substring(0, 8);
@@ -3035,16 +3036,18 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
           const origemStr = origem || '-';
 
           // Medir largura de cada texto para posicionar colunas
-          const cabecalhos = ['Data Hora', 'User', 'ENTR', 'SAÍDA', 'Origem'];
+          const cabecalhos = ['Data Hora          ', 'User', 'ENTR', 'SAÍDA', 'Origem'];
           const valores = [data, usuarioLimitado, entradaStr, saidaStr, origemStr];
 
-          // Medir a largura de cada cabeçalho e valor
+          // Medir a largura de cada cabeçalho (com fonte maior) e valor (com fonte normal)
           const largurasCab = cabecalhos.map(t => ctx.measureText(t).width);
+          ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`; // fonte normal para valores
           const largurasVal = valores.map(t => ctx.measureText(t).width);
 
-          // Largura da barra separadora " | " (medida uma vez)
+          // Largura da barra separadora " | " (medida com fonte de cabeçalho)
+          ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
           const sepLargura = ctx.measureText(' | ').width;
-          const espacoEntreColunas = tamanhoFonte * 0.8; // espaço extra após o separador
+          const espacoEntreColunas = tamanhoFonteCabecalho * 0.5; // espaço extra após o separador
 
           // Calcular largura total ocupada
           let larguraTotal = 0;
@@ -3057,12 +3060,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
 
           // Se couber na imagem, desenhar com colunas alinhadas
           if (larguraTotal <= larguraOriginal - padding) {
-            // Linha 1: Cabeçalhos
+            // Linha 1: Cabeçalhos (fonte maior)
+            ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
             colunas.forEach(col => {
               ctx.fillText(col.cabecalho, col.x, linha1Y);
             });
 
-            // Linha 2: Valores (mesma posição X dos cabeçalhos)
+            // Linha 2: Valores (fonte normal, mesma posição X dos cabeçalhos)
+            ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`;
             colunas.forEach(col => {
               ctx.fillText(col.valor, col.x, linha2Y);
             });
