@@ -114,9 +114,32 @@ async function callAI(prompt: string, imagem: string, apiKey: string, model: str
   const responseText = await response.text();
 
   if (!response.ok) {
-    const error = new Error(responseText);
-    (error as any).status = response.status;
-    throw error;
+    // Tentar extrair mensagem amigável de erros conhecidos
+    try {
+      const errData = JSON.parse(responseText);
+      const errCode = errData?.error?.code;
+      const errMsg = errData?.error?.message || '';
+
+      if (provider === 'glm') {
+        if (errCode === '1305') {
+          throw new Error('Modelo GLM gratuito com excesso de tráfego no momento. Tente novamente em alguns segundos ou use outro modelo de IA.');
+        }
+        if (errCode === '1301' || errCode === '1302') {
+          throw new Error('Chave API do GLM inválida ou expirada. Verifique a configuração de IA.');
+        }
+        if (errCode === '1004' || errCode === '1006') {
+          throw new Error('Limite de uso da API GLM atingido. Tente novamente mais tarde ou use outro modelo.');
+        }
+      }
+      throw new Error(`Erro da IA (código ${response.status}): ${errMsg || 'Erro desconhecido'}`);
+    } catch (e) {
+      if (e instanceof Error && (e.message.includes('Modelo GLM') || e.message.includes('Chave API') || e.message.includes('Limite') || e.message.includes('Erro da IA'))) {
+        throw e;
+      }
+      const error = new Error(responseText);
+      (error as any).status = response.status;
+      throw error;
+    }
   }
 
   const data = JSON.parse(responseText);
