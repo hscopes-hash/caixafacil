@@ -3234,7 +3234,54 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     return mensagem;
   };
 
-  // Enviar pelo WhatsApp - fotos + extrato em duas etapas automáticas
+  // Converter extrato em imagem (canvas) para enviar junto com as fotos
+  const gerarExtratoImagem = (): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Canvas não disponível')); return; }
+
+      const mensagem = gerarMensagemWhatsApp();
+      const linhas = mensagem.split('\n');
+
+      // Configuração de fonte
+      const fontSize = 28;
+      const lineHeight = 38;
+      const padding = 32;
+      const larguraCanvas = 720;
+
+      // Calcular altura necessária
+      const alturaTexto = linhas.length * lineHeight + padding * 2;
+      const alturaTotal = Math.max(alturaTexto, 200);
+
+      canvas.width = larguraCanvas;
+      canvas.height = alturaTotal;
+
+      // Fundo branco
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, larguraCanvas, alturaTotal);
+
+      // Texto
+      ctx.fillStyle = '#000000';
+      ctx.font = `${fontSize}px "Courier New", Courier, monospace`;
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
+
+      linhas.forEach((linha, i) => {
+        // Negrito para linhas que começam com letras maiúsculas (títulos)
+        if (linha.trim() && !linha.startsWith('_') && !linha.startsWith(' ') && linha.trim().charAt(0) === linha.trim().charAt(0).toUpperCase() && linha.trim().charAt(0) !== linha.trim().charAt(0).toLowerCase()) {
+          ctx.font = `bold ${fontSize}px "Courier New", Courier, monospace`;
+        } else {
+          ctx.font = `${fontSize}px "Courier New", Courier, monospace`;
+        }
+        ctx.fillText(linha, padding, padding + i * lineHeight);
+      });
+
+      resolve(canvas.toDataURL('image/jpeg', 0.9));
+    });
+  };
+
+  // Enviar pelo WhatsApp - fotos com tarja + extrato como imagem (tudo em um share)
   const enviarWhatsApp = async () => {
     // Pegar o WhatsApp do cliente (deve ser link de grupo)
     const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
@@ -3254,46 +3301,39 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
       }
     }
 
-    // Montar texto do extrato
-    const mensagem = gerarMensagemWhatsApp();
+    // Gerar extrato como imagem e adicionar ao array
+    try {
+      const extratoBase64 = await gerarExtratoImagem();
+      const response = await fetch(extratoBase64);
+      const blob = await response.blob();
+      fotosProcessadas.push(new File([blob], `extrato_${Date.now()}.jpg`, { type: 'image/jpeg' }));
+    } catch (err) {
+      console.error('Erro ao gerar imagem do extrato:', err);
+    }
 
-    // Se houver fotos, enviar em duas etapas: fotos depois texto
+    // Enviar tudo junto via Web Share
     if (fotosProcessadas.length > 0 && navigator.share) {
       const canShareFiles = navigator.canShare && navigator.canShare({ files: fotosProcessadas });
       if (canShareFiles) {
-        // ETAPA 1: Enviar fotos
         try {
           const shareData: ShareData = {
-            title: 'Fotos da Leitura',
+            title: 'Leitura - Extrato',
           };
           (shareData as ShareData & { files: File[] }).files = fotosProcessadas;
           await navigator.share(shareData);
+          toast.success('Enviado com sucesso!');
+          return;
         } catch (shareError: unknown) {
           if (shareError instanceof Error && shareError.name === 'AbortError') {
             return;
           }
-          console.warn('Share de fotos falhou:', shareError);
-        }
-
-        // ETAPA 2: Enviar texto do extrato
-        try {
-          await navigator.share({
-            title: 'Extrato',
-            text: mensagem,
-          });
-          toast.success('Enviado com sucesso!');
-          return;
-        } catch (shareError2: unknown) {
-          if (shareError2 instanceof Error && shareError2.name === 'AbortError') {
-            return;
-          }
-          // Se segundo share falhar, cai no clipboard
-          console.warn('Share de texto falhou, copiando:', shareError2);
+          console.warn('Web Share falhou:', shareError);
         }
       }
     }
 
-    // Fallback: sem fotos ou sem suporte a share de arquivos
+    // Fallback: sem suporte a share de arquivos
+    const mensagem = gerarMensagemWhatsApp();
     if (whatsappOriginal) {
       try {
         await navigator.clipboard.writeText(mensagem);
