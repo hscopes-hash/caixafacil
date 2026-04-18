@@ -3234,7 +3234,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     return mensagem;
   };
 
-  // Enviar pelo WhatsApp - fotos com tarja + texto do extrato juntos
+  // Enviar pelo WhatsApp - fotos + extrato (WhatsApp ignora text ao receber files)
   const enviarWhatsApp = async () => {
     // Pegar o WhatsApp do cliente (deve ser link de grupo)
     const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
@@ -3257,26 +3257,40 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     // Montar texto do extrato
     const mensagem = gerarMensagemWhatsApp();
 
-    // Se houver fotos E suportar Web Share com arquivos, enviar fotos + extrato juntos
+    // Se houver fotos, enviar via Web Share e depois abrir grupo para colar extrato
     if (fotosProcessadas.length > 0 && navigator.share) {
       const canShareFiles = navigator.canShare && navigator.canShare({ files: fotosProcessadas });
       if (canShareFiles) {
-        const shareData: ShareData = {
-          title: 'Leitura - Extrato',
-          text: mensagem,
-        };
-        (shareData as ShareData & { files: File[] }).files = fotosProcessadas;
-
+        // 1) Copiar extrato ANTES do share (garante que estará na área de transferência)
         try {
+          await navigator.clipboard.writeText(mensagem);
+        } catch {
+          // Se não conseguir copiar, continua sem clipboard
+        }
+
+        // 2) Enviar fotos (sem texto - WhatsApp ignora text quando recebe files)
+        try {
+          const shareData: ShareData = {
+            title: 'Fotos da Leitura',
+          };
+          (shareData as ShareData & { files: File[] }).files = fotosProcessadas;
           await navigator.share(shareData);
-          toast.success('Enviado com sucesso!');
-          return;
         } catch (shareError: unknown) {
           if (shareError instanceof Error && shareError.name === 'AbortError') {
             return;
           }
           console.warn('Web Share falhou:', shareError);
         }
+
+        // 3) Após voltar do share, abrir grupo para colar extrato
+        if (whatsappOriginal) {
+          const grupoUrl = whatsappOriginal.includes('chat.whatsapp.com')
+            ? whatsappOriginal
+            : `https://chat.whatsapp.com/${whatsappOriginal}`;
+          window.open(grupoUrl, '_blank');
+          toast.success('Extrato copiado! Cole a mensagem no grupo.');
+        }
+        return;
       }
     }
 
