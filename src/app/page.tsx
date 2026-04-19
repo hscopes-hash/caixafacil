@@ -25,7 +25,7 @@ import {
   Plus, Pencil, Trash2, Eye, Ban, CheckCircle, AlertTriangle, Building2,
   ClipboardList, Printer, Camera, X, Image as ImageIcon, Layers, MessageCircle, LogIn,
   CalendarDays, ShieldAlert, FileText, Sun, Moon, DatabaseBackup, Download, Upload, HardDrive, SlidersHorizontal,
-  Key, Wifi, EyeOff
+  Key, Wifi, EyeOff, CreditCard, Crown, Check, Sparkles, Zap, Shield
 } from 'lucide-react';
 import { VERSION_DISPLAY, VERSION_WITH_DATE } from '@/lib/version';
 
@@ -5479,6 +5479,612 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
 }
 
 // ============================================
+// ASSINATURA TAB COMPONENT
+// ============================================
+interface PlanoSaaS {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  valorMensal: number;
+  valorAnual: number | null;
+  moeda: string;
+  limiteClientes: number;
+  limiteUsuarios: number;
+  limiteMaquinas: number;
+  recIA: boolean;
+  recRelatorios: boolean;
+  recBackup: boolean;
+  recAPI: boolean;
+  recSuporte: string;
+  ordem: number;
+  ativo: boolean;
+  popular: boolean;
+}
+
+interface AssinaturaSaaS {
+  id: string;
+  empresaId: string;
+  planoSaaSId: string;
+  status: string;
+  dataInicio: string;
+  dataFim: string | null;
+  dataCancelamento: string | null;
+  valorPago: number | null;
+  formaPagamento: string | null;
+  planoSaaS?: PlanoSaaS;
+}
+
+interface AssinaturaStatusData {
+  assinatura: AssinaturaSaaS | null;
+  empresa: { id: string; nome: string; plano: string | null; dataVencimento: string | null; isDemo: boolean; bloqueada: boolean } | null;
+  planosDisponiveis: PlanoSaaS[];
+}
+
+function AssinaturaTab() {
+  const token = useAuthStore.getState().token;
+  const [statusData, setStatusData] = useState<AssinaturaStatusData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [tipoDialogOpen, setTipoDialogOpen] = useState(false);
+  const [planoSelecionado, setPlanoSelecionado] = useState<PlanoSaaS | null>(null);
+  const [planoTipo, setPlanoTipo] = useState<'mensal' | 'anual'>('mensal');
+
+  useEffect(() => {
+    loadStatus();
+    checkPaymentReturn();
+  }, []);
+
+  const checkPaymentReturn = () => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentStatus = params.get('payment');
+
+    if (paymentStatus === 'success') {
+      toast.success('Pagamento confirmado! Sua assinatura está ativa.');
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (paymentStatus === 'failure') {
+      toast.error('Pagamento não aprovado. Tente novamente ou entre em contato com o suporte.');
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (paymentStatus === 'pending') {
+      toast.info('Pagamento pendente. Aguarde a confirmação.');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  };
+
+  const loadStatus = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/assinatura-saas/status', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) throw new Error('Erro ao carregar status');
+      const data = await res.json();
+      setStatusData(data);
+    } catch (error) {
+      console.error('Erro ao carregar status da assinatura:', error);
+      toast.error('Erro ao carregar informações da assinatura');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatCurrency = (value: number) => {
+    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  };
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'ATIVA':
+        return <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Ativa</Badge>;
+      case 'TRIAL':
+        return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">Trial</Badge>;
+      case 'VENCIDA':
+        return <Badge className="bg-red-500/20 text-red-400 border-red-500/30">Vencida</Badge>;
+      case 'CANCELADA':
+        return <Badge className="bg-zinc-500/20 text-zinc-400 border-zinc-500/30">Cancelada</Badge>;
+      case 'SUSPENSA':
+        return <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">Suspensa</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
+
+  const handleAssinarClick = (plano: PlanoSaaS) => {
+    setPlanoSelecionado(plano);
+    setTipoDialogOpen(true);
+  };
+
+  const handleCheckout = async () => {
+    if (!planoSelecionado) return;
+
+    setCheckoutLoading(planoSelecionado.id);
+    try {
+      const res = await fetch('/api/assinatura-saas/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          planoSaaSId: planoSelecionado.id,
+          planoTipo: planoTipo,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Erro ao criar checkout');
+      }
+
+      const data = await res.json();
+      if (data.init_point) {
+        window.location.href = data.init_point;
+      } else {
+        throw new Error('URL de checkout não disponível');
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Erro ao iniciar checkout';
+      toast.error(message);
+    } finally {
+      setCheckoutLoading(null);
+      setTipoDialogOpen(false);
+    }
+  };
+
+  const getSuporteLabel = (tipo: string) => {
+    switch (tipo) {
+      case '24h': return 'Suporte 24h';
+      case 'prioritario': return 'Suporte Prioritário';
+      default: return 'Suporte por Email';
+    }
+  };
+
+  const isCurrentPlan = (planoId: string) => {
+    return statusData?.assinatura?.planoSaaSId === planoId && 
+           statusData?.assinatura?.status !== 'CANCELADA' &&
+           statusData?.assinatura?.status !== 'VENCIDA';
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold text-foreground">Minha Assinatura</h2>
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center text-muted-foreground">
+            <CreditCard className="w-8 h-8 mx-auto mb-2 animate-pulse opacity-50" />
+            <p>Carregando informações...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const assinatura = statusData?.assinatura;
+  const planos = statusData?.planosDisponiveis || [];
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-xl font-bold text-foreground">Minha Assinatura</h2>
+
+      {/* Current Subscription Card */}
+      <Card className="border-0 shadow-lg bg-card">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
+                {assinatura ? (
+                  <Crown className="w-6 h-6 text-white" />
+                ) : (
+                  <Sparkles className="w-6 h-6 text-white" />
+                )}
+              </div>
+              <div>
+                <CardTitle className="text-lg text-foreground">
+                  {assinatura ? assinatura.planoSaaS?.nome || 'Plano Atual' : 'Período de Testes'}
+                </CardTitle>
+                <CardDescription className="text-muted-foreground">
+                  {assinatura ? `Assinante desde ${formatDate(assinatura.dataInicio)}` : 'Explore todas as funcionalidades gratuitamente'}
+                </CardDescription>
+              </div>
+            </div>
+            {assinatura && getStatusBadge(assinatura.status)}
+          </div>
+        </CardHeader>
+        {assinatura && (
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              {assinatura.dataInicio && (
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground">Início</p>
+                  <p className="text-sm font-medium text-foreground">{formatDate(assinatura.dataInicio)}</p>
+                </div>
+              )}
+              {assinatura.dataFim && (
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground">Vencimento</p>
+                  <p className="text-sm font-medium text-foreground">{formatDate(assinatura.dataFim)}</p>
+                </div>
+              )}
+              {assinatura.valorPago && (
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground">Último Pagamento</p>
+                  <p className="text-sm font-medium text-foreground">{formatCurrency(assinatura.valorPago)}</p>
+                </div>
+              )}
+              {assinatura.formaPagamento && (
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground">Forma de Pagamento</p>
+                  <p className="text-sm font-medium text-foreground">{assinatura.formaPagamento}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Warning for expired/cancelled */}
+            {(assinatura.status === 'VENCIDA' || assinatura.status === 'CANCELADA') && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mt-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className="w-5 h-5 text-red-400" />
+                  <p className="font-semibold text-red-400">Sua assinatura expirou</p>
+                </div>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Renove sua assinatura para continuar usando todas as funcionalidades do sistema.
+                </p>
+                <Button
+                  size="sm"
+                  className="bg-gradient-to-r from-amber-500 to-orange-600"
+                  onClick={() => {
+                    const currentPlano = planos.find(p => p.id === assinatura.planoSaaSId);
+                    if (currentPlano) {
+                      handleAssinarClick(currentPlano);
+                    } else if (planos.length > 0) {
+                      handleAssinarClick(planos[planos.length - 1]);
+                    }
+                  }}
+                >
+                  <CreditCard className="w-4 h-4 mr-2" />
+                  Renovar Agora
+                </Button>
+              </div>
+            )}
+
+            {/* Trial info */}
+            {(assinatura.status === 'TRIAL' || !assinatura) && (
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mt-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles className="w-5 h-5 text-blue-400" />
+                  <p className="font-semibold text-blue-400">Período de Testes</p>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Você está no período de testes. Escolha um plano abaixo para continuar usando o sistema após o trial.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        )}
+        {!assinatura && (
+          <CardContent>
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles className="w-5 h-5 text-blue-400" />
+                <p className="font-semibold text-blue-400">Período de Testes</p>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Você está no período de testes. Escolha um plano abaixo para continuar usando o sistema após o trial.
+              </p>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Available Plans */}
+      <div>
+        <h3 className="text-lg font-bold text-foreground mb-4">Planos Disponíveis</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {planos.map((plano) => {
+            const current = isCurrentPlan(plano.id);
+            const descontoAnual = plano.valorAnual && plano.valorMensal
+              ? Math.round((1 - plano.valorAnual / (plano.valorMensal * 12)) * 100)
+              : 0;
+
+            return (
+              <Card
+                key={plano.id}
+                className={`border-0 shadow-lg relative overflow-hidden transition-all ${
+                  plano.popular
+                    ? 'bg-gradient-to-b from-amber-500/10 to-card ring-2 ring-amber-500/50'
+                    : current
+                    ? 'bg-card ring-2 ring-emerald-500/50'
+                    : 'bg-card'
+                }`}
+              >
+                {/* Popular badge */}
+                {plano.popular && (
+                  <div className="absolute top-0 right-0">
+                    <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
+                      MAIS POPULAR
+                    </div>
+                  </div>
+                )}
+
+                {/* Current plan badge */}
+                {current && (
+                  <div className="absolute top-0 right-0">
+                    <div className="bg-emerald-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg flex items-center gap-1">
+                      <Check className="w-3 h-3" />
+                      PLANO ATUAL
+                    </div>
+                  </div>
+                )}
+
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base text-foreground flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-amber-400" />
+                    {plano.nome}
+                  </CardTitle>
+                  {plano.descricao && (
+                    <CardDescription className="text-muted-foreground text-sm">{plano.descricao}</CardDescription>
+                  )}
+                </CardHeader>
+
+                <CardContent className="space-y-4">
+                  {/* Pricing */}
+                  <div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-2xl font-bold text-foreground">{formatCurrency(plano.valorMensal)}</span>
+                      <span className="text-sm text-muted-foreground">/mês</span>
+                    </div>
+                    {plano.valorAnual && (
+                      <div className="mt-1">
+                        <span className="text-sm text-muted-foreground line-through">{formatCurrency(plano.valorMensal * 12)}/ano</span>
+                        <span className="ml-2 text-sm font-semibold text-emerald-400">
+                          {formatCurrency(plano.valorAnual)}/ano
+                          {descontoAnual > 0 && (
+                            <Badge className="ml-1 bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">
+                              -{descontoAnual}%
+                            </Badge>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <Separator className="bg-border" />
+
+                  {/* Limits */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Limites</p>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground flex items-center gap-2">
+                          <Users className="w-4 h-4" /> Clientes
+                        </span>
+                        <span className="font-medium text-foreground">{plano.limiteClientes === -1 ? 'Ilimitado' : plano.limiteClientes}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground flex items-center gap-2">
+                          <Shield className="w-4 h-4" /> Usuários
+                        </span>
+                        <span className="font-medium text-foreground">{plano.limiteUsuarios === -1 ? 'Ilimitado' : plano.limiteUsuarios}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground flex items-center gap-2">
+                          <Cog className="w-4 h-4" /> Máquinas
+                        </span>
+                        <span className="font-medium text-foreground">{plano.limiteMaquinas === -1 ? 'Ilimitado' : plano.limiteMaquinas}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator className="bg-border" />
+
+                  {/* Resources */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recursos</p>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">IA Vision (OCR)</span>
+                        {plano.recIA ? (
+                          <Check className="w-4 h-4 text-emerald-400" />
+                        ) : (
+                          <X className="w-4 h-4 text-zinc-500" />
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Relatórios Avançados</span>
+                        {plano.recRelatorios ? (
+                          <Check className="w-4 h-4 text-emerald-400" />
+                        ) : (
+                          <X className="w-4 h-4 text-zinc-500" />
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Backup Automático</span>
+                        {plano.recBackup ? (
+                          <Check className="w-4 h-4 text-emerald-400" />
+                        ) : (
+                          <X className="w-4 h-4 text-zinc-500" />
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">API Dedicada</span>
+                        {plano.recAPI ? (
+                          <Check className="w-4 h-4 text-emerald-400" />
+                        ) : (
+                          <X className="w-4 h-4 text-zinc-500" />
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Suporte</span>
+                        <span className="font-medium text-foreground text-xs">{getSuporteLabel(plano.recSuporte)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action button */}
+                  {current ? (
+                    <div className="pt-2">
+                      <Button
+                        className="w-full bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+                        disabled
+                      >
+                        <Check className="w-4 h-4 mr-2" />
+                        Plano Atual
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="pt-2">
+                      <Button
+                        className={`w-full ${
+                          plano.popular
+                            ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700'
+                            : 'bg-muted hover:bg-muted/80 text-foreground'
+                        }`}
+                        onClick={() => handleAssinarClick(plano)}
+                        disabled={checkoutLoading === plano.id}
+                      >
+                        {checkoutLoading === plano.id ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                            Processando...
+                          </>
+                        ) : (
+                          <>
+                            <CreditCard className="w-4 h-4 mr-2" />
+                            Assinar
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        {planos.length === 0 && (
+          <Card className="border-0 shadow-lg bg-card">
+            <CardContent className="py-8 text-center text-muted-foreground">
+              <CreditCard className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>Nenhum plano disponível no momento.</p>
+              <p className="text-sm mt-1">Entre em contato com o suporte.</p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Billing Type Dialog */}
+      <Dialog open={tipoDialogOpen} onOpenChange={(open) => { setTipoDialogOpen(open); if (!open) setPlanoSelecionado(null); }}>
+        <DialogContent className="bg-card border-border text-foreground">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-amber-400" />
+              Escolha o Ciclo de Pagamento
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Selecione como deseja pagar pelo plano <strong className="text-foreground">{planoSelecionado?.nome}</strong>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-4">
+            {/* Mensal */}
+            <button
+              onClick={() => setPlanoTipo('mensal')}
+              className={`w-full flex items-center justify-between p-4 rounded-lg border transition-all ${
+                planoTipo === 'mensal'
+                  ? 'border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/30'
+                  : 'border-border bg-muted/50 hover:bg-muted'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                  planoTipo === 'mensal' ? 'bg-amber-500 text-white' : 'bg-muted text-muted-foreground'
+                }`}>
+                  <CalendarDays className="w-5 h-5" />
+                </div>
+                <div className="text-left">
+                  <p className="font-medium text-foreground">Mensal</p>
+                  <p className="text-xs text-muted-foreground">Cobrado todo mês</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-bold text-foreground">{planoSelecionado ? formatCurrency(planoSelecionado.valorMensal) : ''}</p>
+                <p className="text-xs text-muted-foreground">/mês</p>
+              </div>
+            </button>
+
+            {/* Anual */}
+            {planoSelecionado?.valorAnual && (
+              <button
+                onClick={() => setPlanoTipo('anual')}
+                className={`w-full flex items-center justify-between p-4 rounded-lg border transition-all relative ${
+                  planoTipo === 'anual'
+                    ? 'border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/30'
+                    : 'border-border bg-muted/50 hover:bg-muted'
+                }`}
+              >
+                <div className="absolute -top-2 right-4">
+                  <Badge className="bg-emerald-500 text-white text-xs">
+                    Economia de {Math.round((1 - planoSelecionado.valorAnual! / (planoSelecionado.valorMensal * 12)) * 100)}%
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                    planoTipo === 'anual' ? 'bg-amber-500 text-white' : 'bg-muted text-muted-foreground'
+                  }`}>
+                    <CalendarDays className="w-5 h-5" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-foreground">Anual</p>
+                    <p className="text-xs text-muted-foreground">Cobrado uma vez ao ano</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold text-foreground">{formatCurrency(planoSelecionado.valorAnual!)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatCurrency(planoSelecionado.valorAnual! / 12)}/mês
+                  </p>
+                </div>
+              </button>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTipoDialogOpen(false)} disabled={checkoutLoading !== null}>
+              Cancelar
+            </Button>
+            <Button
+              className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700"
+              onClick={handleCheckout}
+              disabled={checkoutLoading !== null}
+            >
+              {checkoutLoading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                  Processando...
+                </>
+              ) : (
+                <>
+                  <CreditCard className="w-4 h-4 mr-2" />
+                  Ir para Pagamento
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ============================================
 // MAIN APP COMPONENT
 // ============================================
 export default function App() {
@@ -5594,6 +6200,13 @@ export default function App() {
                     <FileText className="w-5 h-5" />
                     <span>Relatórios</span>
                   </button>
+                  <button
+                    onClick={() => { setActiveTab('assinatura'); setMenuOpen(false); }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'assinatura' ? 'bg-amber-500/20 text-amber-400' : 'text-muted-foreground hover:bg-card'}`}
+                  >
+                    <CreditCard className="w-5 h-5" />
+                    <span>Minha Assinatura</span>
+                  </button>
                   {isAdmin && (
                     <>
                       <Separator className="my-2 bg-border" />
@@ -5703,6 +6316,9 @@ export default function App() {
         {activeTab === 'gestao-empresas' && usuario?.email === 'hscopes@gmail.com' && (
           <GestaoEmpresasPage adminEmail={usuario.email} />
         )}
+        {activeTab === 'assinatura' && (
+          <AssinaturaTab />
+        )}
       </main>
 
       {/* Botão de Gestão de Empresas - Apenas para Super Admin */}
@@ -5728,6 +6344,7 @@ export default function App() {
             { id: 'clientes', icon: Users, label: 'Clientes' },
             { id: 'leituras', icon: ClipboardList, label: 'Cobrança' },
             { id: 'pagamentos', icon: DollarSign, label: 'Financeiro' },
+            { id: 'assinatura', icon: CreditCard, label: 'Assinatura' },
           ].map((item) => (
             <button
               key={item.id}

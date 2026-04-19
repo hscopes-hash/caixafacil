@@ -45,6 +45,8 @@ model Empresa {
   usuarios        Usuario[]
   clientes        Cliente[]
   tiposMaquina    TipoMaquina[]
+  assinaturasSaaS AssinaturaSaaS[]
+  pagamentosSaaS  PagamentoSaaS[]
 
   @@map("empresas")
 }
@@ -321,4 +323,122 @@ enum TipoMoeda {
   M005  // R$ 0,05
   M010  // R$ 0,10
   M025  // R$ 0,25
+}
+
+// ============================================
+// PLANO SAAS - Planos de assinatura do SaaS
+// ============================================
+model PlanoSaaS {
+  id            String   @id @default(cuid())
+  nome          String   @unique
+  descricao     String?
+  valorMensal   Float
+  valorAnual    Float?   // opcional com desconto anual
+  moeda         String   @default("BRL")
+  // Limites do plano
+  limiteClientes  Int
+  limiteUsuarios  Int
+  limiteMaquinas  Int     // -1 = ilimitado
+  // Recursos habilitados
+  recIA          Boolean @default(false)  // IA Vision (OCR de leitura)
+  recRelatorios  Boolean @default(false)  // Relatórios avançados
+  recBackup      Boolean @default(false)  // Backup automático
+  recAPI         Boolean @default(false)  // API dedicada
+  recSuporte     String  @default("email") // email | prioritario | 24h
+  // Ordem de exibição (menor primeiro)
+  ordem         Int      @default(0)
+  ativo         Boolean  @default(true)
+  popular       Boolean  @default(false)  // destaque "mais popular"
+  // Dados do MercadoPago
+  mercadoPagoPreferenceId String?  // ID da preferência recorrente
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  assinaturas    AssinaturaSaaS[]
+
+  @@map("planos_saas")
+}
+
+// ============================================
+// ASSINATURA SAAS - Assinatura da empresa no SaaS
+// ============================================
+model AssinaturaSaaS {
+  id                String              @id @default(cuid())
+  empresaId         String
+  planoSaaSId       String
+  status            StatusAssinaturaSaaS @default(ATIVA)
+  dataInicio        DateTime            @default(now())
+  dataFim           DateTime?
+  dataCancelamento  DateTime?
+  // Integração MercadoPago
+  mercadoPagoPreferenciaId  String?
+  mercadoPagoPagamentoId    String?
+  mercadoPagoStatus         String?
+  // Renovação
+  valorPago         Float?
+  formaPagamento    FormaPagamentoSaaS?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  empresa           Empresa             @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  planoSaaS         PlanoSaaS           @relation(fields: [planoSaaSId], references: [id])
+  pagamentos        PagamentoSaaS[]
+
+  @@map("assinaturas_saas")
+}
+
+// ============================================
+// PAGAMENTO SAAS - Registro de pagamentos do SaaS
+// ============================================
+model PagamentoSaaS {
+  id                  String              @id @default(cuid())
+  assinaturaSaaSId    String
+  empresaId           String
+  valor               Float
+  status              StatusPagamentoSaaS @default(PENDENTE)
+  formaPagamento      FormaPagamentoSaaS?
+  dataVencimento      DateTime
+  dataPagamento       DateTime?
+  // Dados MercadoPago
+  mercadoPagoPaymentId    String?
+  mercadoPagoStatus       String?
+  mercadoPagoApprovedAt   DateTime?
+  mercadoPagoFee          Float?
+  // Metadados
+  descricao           String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  assinaturaSaaS      AssinaturaSaaS      @relation(fields: [assinaturaSaaSId], references: [id], onDelete: Cascade)
+  empresa             Empresa             @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@map("pagamentos_saas")
+}
+
+// ============================================
+// ENUMS SAAS
+// ============================================
+
+enum StatusAssinaturaSaaS {
+  ATIVA
+  TRIAL
+  VENCIDA
+  CANCELADA
+  SUSPENSA
+}
+
+enum StatusPagamentoSaaS {
+  PENDENTE
+  PAGO
+  ATRASADO
+  CANCELADO
+  ESTORNADO
+}
+
+enum FormaPagamentoSaaS {
+  PIX
+  BOLETO
+  CARTAO_CREDITO
+  CARTAO_DEBITO
+  TRANSFERENCIA
 }
