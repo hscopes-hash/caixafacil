@@ -39,6 +39,8 @@ model Empresa {
   // API Keys salvas por provedor (para preenchimento automático ao trocar modelo)
   llmApiKeyGlm       String?   // API Key do Zhipu AI (GLM)
   llmApiKeyOpenrouter String?   // API Key do OpenRouter
+  // Configurações de pagamento
+  mercadoPagoAccessToken String?   // Access Token do MercadoPago (super admin)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

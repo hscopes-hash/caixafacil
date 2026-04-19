@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
         llmModel: true,
         llmApiKeyGlm: true,
         llmApiKeyOpenrouter: true,
+        mercadoPagoAccessToken: true,
       },
     });
 
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest) {
       llmModel: empresa.llmModel,
       llmApiKeyGlm: empresa.llmApiKeyGlm || '',
       llmApiKeyOpenrouter: empresa.llmApiKeyOpenrouter || '',
+      mercadoPagoAccessToken: empresa.mercadoPagoAccessToken || '',
       llmApiKeyMasked: maskApiKey(empresa.llmApiKey),
       modeloPadrao: 'gemini-2.5-flash-lite',
     });
@@ -53,7 +55,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { empresaId, llmApiKey, llmModel, llmApiKeyGlm, llmApiKeyOpenrouter } = body;
+    const { empresaId, llmApiKey, llmModel, llmApiKeyGlm, llmApiKeyOpenrouter, mercadoPagoAccessToken } = body;
 
     if (!empresaId) {
       return NextResponse.json({ error: 'empresaId é obrigatório' }, { status: 400 });
@@ -86,6 +88,10 @@ export async function PUT(request: NextRequest) {
       const trimmed = llmApiKeyOpenrouter.trim();
       dadosAtualizacao.llmApiKeyOpenrouter = trimmed === '' ? null : trimmed;
     }
+    if (mercadoPagoAccessToken !== undefined && mercadoPagoAccessToken !== null) {
+      const trimmed = mercadoPagoAccessToken.trim();
+      dadosAtualizacao.mercadoPagoAccessToken = trimmed === '' ? null : trimmed;
+    }
 
     const empresaAtualizada = await prisma.empresa.update({
       where: { id: empresaId },
@@ -96,6 +102,7 @@ export async function PUT(request: NextRequest) {
         llmModel: true,
         llmApiKeyGlm: true,
         llmApiKeyOpenrouter: true,
+        mercadoPagoAccessToken: true,
       },
     });
 
@@ -105,6 +112,7 @@ export async function PUT(request: NextRequest) {
       llmModel: empresaAtualizada.llmModel,
       llmApiKeyGlm: empresaAtualizada.llmApiKeyGlm || '',
       llmApiKeyOpenrouter: empresaAtualizada.llmApiKeyOpenrouter || '',
+      mercadoPagoAccessToken: empresaAtualizada.mercadoPagoAccessToken || '',
       llmApiKeyMasked: maskApiKey(empresaAtualizada.llmApiKey),
       mensagem: 'Configurações salvas com sucesso',
     });

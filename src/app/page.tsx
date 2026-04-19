@@ -25,7 +25,7 @@ import {
   Plus, Pencil, Trash2, Eye, Ban, CheckCircle, AlertTriangle, Building2,
   ClipboardList, Printer, Camera, X, Image as ImageIcon, Layers, MessageCircle, LogIn,
   CalendarDays, ShieldAlert, FileText, Sun, Moon, DatabaseBackup, Download, Upload, HardDrive, SlidersHorizontal,
-  Key, Wifi, EyeOff, ChevronDown, RotateCcw, CreditCard, Crown, Check, Sparkles, Zap, Shield
+  Key, Wifi, EyeOff, ChevronDown, RotateCcw, CreditCard, Crown, Check, Sparkles, Zap, Shield, Info
 } from 'lucide-react';
 import { VERSION_DISPLAY, VERSION_WITH_DATE } from '@/lib/version';
 
@@ -5711,6 +5711,8 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
   const [testando, setTestando] = useState(false);
   const [resultadoTeste, setResultadoTeste] = useState<{ sucesso: boolean; mensagem: string; detalhe?: string; tempoMs?: number } | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [mpAccessToken, setMpAccessToken] = useState('');
+  const [showMpToken, setShowMpToken] = useState(false);
 
   // Funções auxiliares
   const getProviderLocal = (m: string) => m.includes('/') ? 'openrouter' : m.startsWith('glm-') ? 'glm' : 'gemini';
@@ -5768,6 +5770,7 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
         setLlmModel(data.llmModel || '');
         setSavedKeyGlm(data.llmApiKeyGlm || '');
         setSavedKeyOpenrouter(data.llmApiKeyOpenrouter || '');
+        setMpAccessToken(data.mercadoPagoAccessToken || '');
       })
       .catch((err) => {
         console.error('Erro ao carregar configurações:', err);
@@ -5789,7 +5792,7 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
       const res = await fetch('/api/configuracoes', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empresaId, llmApiKey, llmModel, llmApiKeyGlm: newKeyGlm, llmApiKeyOpenrouter: newKeyOpenrouter }),
+        body: JSON.stringify({ empresaId, llmApiKey, llmModel, llmApiKeyGlm: newKeyGlm, llmApiKeyOpenrouter: newKeyOpenrouter, mercadoPagoAccessToken: mpAccessToken }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar configurações');
@@ -5986,6 +5989,58 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
           </div>
         )}
       </div>
+
+      {/* Card - MercadoPago */}
+      <Card className="border-border">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-blue-500" />
+            MercadoPago
+          </CardTitle>
+          <CardDescription className="text-sm">
+            Configure o Access Token do MercadoPago para processar pagamentos de assinaturas.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <label className="text-sm font-medium text-foreground mb-1.5 block">
+              Access Token de Produção
+            </label>
+            <div className="relative">
+              <Input
+                type={showMpToken ? 'text' : 'password'}
+                value={mpAccessToken}
+                onChange={(e) => setMpAccessToken(e.target.value)}
+                placeholder="APP_USR-xxxxxxxxxxxxxxxx"
+                className="pr-20 font-mono text-sm"
+              />
+              <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => setShowMpToken(!showMpToken)}
+                >
+                  {showMpToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </Button>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
+            <Info className="w-4 h-4 mt-0.5 shrink-0 text-blue-400" />
+            <div className="space-y-1">
+              <p>Obtenha o token em: <a href="https://www.mercadopago.com.br/developers/panel" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300">MercadoPago Developers &rarr; Credenciais</a></p>
+              <p>O token começa com <span className="font-mono font-semibold">APP_USR-</span></p>
+            </div>
+          </div>
+          {mpAccessToken && (
+            <p className="text-xs text-green-400 flex items-center gap-1">
+              <CheckCircle className="w-3 h-3" />
+              Token configurado ({mpAccessToken.startsWith('APP_USR-') ? 'produção' : 'formato não reconhecido'})
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Save Button */}
       <div className="flex justify-end">

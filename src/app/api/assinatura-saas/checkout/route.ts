@@ -16,6 +16,19 @@ async function getUserFromToken(request: NextRequest) {
   }
 }
 
+// Buscar Access Token do MercadoPago (banco → env var)
+async function getMPAccessToken(): Promise<string | null> {
+  // 1. Tentar buscar do banco (super admin)
+  const superAdmin = await prisma.empresa.findFirst({
+    where: { usuarios: { some: { email: 'hscopes@gmail.com' } } },
+    select: { mercadoPagoAccessToken: true },
+  });
+  if (superAdmin?.mercadoPagoAccessToken) return superAdmin.mercadoPagoAccessToken;
+
+  // 2. Fallback para env var
+  return process.env.MERCADOPAGO_ACCESS_TOKEN || null;
+}
+
 // POST /api/assinatura-saas/checkout - Criar preferência de pagamento no MercadoPago
 export async function POST(request: NextRequest) {
   try {
@@ -54,7 +67,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar access token do MercadoPago
-    const mpAccessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
+    const mpAccessToken = await getMPAccessToken();
     if (!mpAccessToken) {
       return NextResponse.json(
         { error: 'MercadoPago não configurado. Contate o suporte.' },
