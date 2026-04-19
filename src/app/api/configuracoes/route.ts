@@ -25,9 +25,12 @@ export async function GET(request: NextRequest) {
         nome: true,
         llmApiKey: true,
         llmModel: true,
+        llmApiKeyFallback: true,
+        llmModelFallback: true,
         llmApiKeyGlm: true,
         llmApiKeyOpenrouter: true,
-        mercadoPagoAccessToken: true,
+        mercadopagoAccessToken: true,
+        mercadopagoPublicKey: true,
       },
     });
 
@@ -39,11 +42,15 @@ export async function GET(request: NextRequest) {
       success: true,
       llmApiKey: empresa.llmApiKey || '',
       llmModel: empresa.llmModel,
+      llmApiKeyFallback: empresa.llmApiKeyFallback || '',
+      llmModelFallback: empresa.llmModelFallback,
       llmApiKeyGlm: empresa.llmApiKeyGlm || '',
       llmApiKeyOpenrouter: empresa.llmApiKeyOpenrouter || '',
-      mercadoPagoAccessToken: empresa.mercadoPagoAccessToken || '',
       llmApiKeyMasked: maskApiKey(empresa.llmApiKey),
-      modeloPadrao: 'gemini-2.5-flash-lite',
+      llmApiKeyFallbackMasked: maskApiKey(empresa.llmApiKeyFallback),
+      mercadopagoAccessToken: empresa.mercadopagoAccessToken || '',
+      mercadopagoPublicKey: empresa.mercadopagoPublicKey || '',
+      modeloPadrao: process.env.LLM_MODEL || 'gemini-2.5-flash-lite',
     });
   } catch (error) {
     console.error('Erro ao buscar configurações:', error);
@@ -55,7 +62,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { empresaId, llmApiKey, llmModel, llmApiKeyGlm, llmApiKeyOpenrouter, mercadoPagoAccessToken } = body;
+    const { empresaId, llmApiKey, llmModel, llmApiKeyFallback, llmModelFallback, llmApiKeyGlm, llmApiKeyOpenrouter, mercadopagoAccessToken, mercadopagoPublicKey } = body;
 
     if (!empresaId) {
       return NextResponse.json({ error: 'empresaId é obrigatório' }, { status: 400 });
@@ -80,6 +87,15 @@ export async function PUT(request: NextRequest) {
       const trimmed = llmModel.trim();
       dadosAtualizacao.llmModel = trimmed === '' ? null : trimmed;
     }
+    if (llmApiKeyFallback !== undefined && llmApiKeyFallback !== null) {
+      const trimmed = llmApiKeyFallback.trim();
+      dadosAtualizacao.llmApiKeyFallback = trimmed === '' ? null : trimmed;
+    }
+    if (llmModelFallback !== undefined && llmModelFallback !== null) {
+      const trimmed = llmModelFallback.trim();
+      dadosAtualizacao.llmModelFallback = trimmed === '' ? null : trimmed;
+    }
+    // Salvar keys por provedor para preenchimento automático
     if (llmApiKeyGlm !== undefined && llmApiKeyGlm !== null) {
       const trimmed = llmApiKeyGlm.trim();
       dadosAtualizacao.llmApiKeyGlm = trimmed === '' ? null : trimmed;
@@ -88,9 +104,14 @@ export async function PUT(request: NextRequest) {
       const trimmed = llmApiKeyOpenrouter.trim();
       dadosAtualizacao.llmApiKeyOpenrouter = trimmed === '' ? null : trimmed;
     }
-    if (mercadoPagoAccessToken !== undefined && mercadoPagoAccessToken !== null) {
-      const trimmed = mercadoPagoAccessToken.trim();
-      dadosAtualizacao.mercadoPagoAccessToken = trimmed === '' ? null : trimmed;
+    // MercadoPago
+    if (mercadopagoAccessToken !== undefined && mercadopagoAccessToken !== null) {
+      const trimmed = mercadopagoAccessToken.trim();
+      dadosAtualizacao.mercadopagoAccessToken = trimmed === '' ? null : trimmed;
+    }
+    if (mercadopagoPublicKey !== undefined && mercadopagoPublicKey !== null) {
+      const trimmed = mercadopagoPublicKey.trim();
+      dadosAtualizacao.mercadopagoPublicKey = trimmed === '' ? null : trimmed;
     }
 
     const empresaAtualizada = await prisma.empresa.update({
@@ -100,9 +121,12 @@ export async function PUT(request: NextRequest) {
         id: true,
         llmApiKey: true,
         llmModel: true,
+        llmApiKeyFallback: true,
+        llmModelFallback: true,
         llmApiKeyGlm: true,
         llmApiKeyOpenrouter: true,
-        mercadoPagoAccessToken: true,
+        mercadopagoAccessToken: true,
+        mercadopagoPublicKey: true,
       },
     });
 
@@ -110,10 +134,14 @@ export async function PUT(request: NextRequest) {
       success: true,
       llmApiKey: empresaAtualizada.llmApiKey || '',
       llmModel: empresaAtualizada.llmModel,
+      llmApiKeyFallback: empresaAtualizada.llmApiKeyFallback || '',
+      llmModelFallback: empresaAtualizada.llmModelFallback,
       llmApiKeyGlm: empresaAtualizada.llmApiKeyGlm || '',
       llmApiKeyOpenrouter: empresaAtualizada.llmApiKeyOpenrouter || '',
-      mercadoPagoAccessToken: empresaAtualizada.mercadoPagoAccessToken || '',
       llmApiKeyMasked: maskApiKey(empresaAtualizada.llmApiKey),
+      llmApiKeyFallbackMasked: maskApiKey(empresaAtualizada.llmApiKeyFallback),
+      mercadopagoAccessToken: empresaAtualizada.mercadopagoAccessToken || '',
+      mercadopagoPublicKey: empresaAtualizada.mercadopagoPublicKey || '',
       mensagem: 'Configurações salvas com sucesso',
     });
   } catch (error) {

@@ -25,7 +25,7 @@ import {
   Plus, Pencil, Trash2, Eye, Ban, CheckCircle, AlertTriangle, Building2,
   ClipboardList, Printer, Camera, X, Image as ImageIcon, Layers, MessageCircle, LogIn,
   CalendarDays, ShieldAlert, FileText, Sun, Moon, DatabaseBackup, Download, Upload, HardDrive, SlidersHorizontal,
-  Key, Wifi, EyeOff, ChevronDown, RotateCcw, CreditCard, Crown, Check, Sparkles, Zap, Shield, Info
+  Key, Wifi, EyeOff, CreditCard, ExternalLink, ChevronDown, RotateCcw, Crown, Check, Sparkles, Zap, Shield, Info
 } from 'lucide-react';
 import { VERSION_DISPLAY, VERSION_WITH_DATE } from '@/lib/version';
 
@@ -5704,33 +5704,55 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
   const { updateEmpresa } = useAuthStore();
   const [llmApiKey, setLlmApiKey] = useState('');
   const [llmModel, setLlmModel] = useState('');
+  const [llmApiKeyFallback, setLlmApiKeyFallback] = useState('');
+  const [llmModelFallback, setLlmModelFallback] = useState('');
   const [savedKeyGlm, setSavedKeyGlm] = useState('');
   const [savedKeyOpenrouter, setSavedKeyOpenrouter] = useState('');
+  const [mpAccessToken, setMpAccessToken] = useState('');
+  const [mpPublicKey, setMpPublicKey] = useState('');
+  const [showMpAccessToken, setShowMpAccessToken] = useState(false);
+  const [showMpPublicKey, setShowMpPublicKey] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [testando, setTestando] = useState(false);
+  const [testandoFallback, setTestandoFallback] = useState(false);
   const [resultadoTeste, setResultadoTeste] = useState<{ sucesso: boolean; mensagem: string; detalhe?: string; tempoMs?: number } | null>(null);
+  const [resultadoTesteFallback, setResultadoTesteFallback] = useState<{ sucesso: boolean; mensagem: string; detalhe?: string; tempoMs?: number } | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
-  const [mpAccessToken, setMpAccessToken] = useState('');
-  const [showMpToken, setShowMpToken] = useState(false);
+  const [showApiKeyFallback, setShowApiKeyFallback] = useState(false);
 
   // Funções auxiliares
   const getProviderLocal = (m: string) => m.includes('/') ? 'openrouter' : m.startsWith('glm-') ? 'glm' : 'gemini';
 
   // Função para trocar modelo e avisar se API Key precisa ser atualizada
-  const handleModelChange = (novoModelo: string) => {
-    const providerAnterior = llmModel ? getProviderLocal(llmModel) : null;
+  const handleModelChange = (novoModelo: string, tipo: 'principal' | 'fallback') => {
+    const providerAnterior = tipo === 'principal'
+      ? (llmModel ? getProviderLocal(llmModel) : null)
+      : (llmModelFallback ? getProviderLocal(llmModelFallback) : null);
     const providerNovo = getProviderLocal(novoModelo);
     const providerMudou = providerAnterior !== null && providerAnterior !== providerNovo;
 
-    setLlmModel(novoModelo);
-    if (providerMudou) {
-      const keySalva = providerNovo === 'glm' ? savedKeyGlm : providerNovo === 'openrouter' ? savedKeyOpenrouter : '';
-      setLlmApiKey(keySalva);
-      if (keySalva) {
-        toast.success(`API Key do provedor restaurada automaticamente.`);
-      } else {
-        toast.info(`Provedor alterado para ${providerNovo === 'gemini' ? 'Google Gemini' : providerNovo === 'glm' ? 'Zhipu AI' : 'OpenRouter'}. Insira a API Key correspondente.`);
+    if (tipo === 'principal') {
+      setLlmModel(novoModelo);
+      if (providerMudou) {
+        const keySalva = providerNovo === 'glm' ? savedKeyGlm : providerNovo === 'openrouter' ? savedKeyOpenrouter : '';
+        setLlmApiKey(keySalva);
+        if (keySalva) {
+          toast.success('API Key do provedor restaurada automaticamente.');
+        } else {
+          toast.info(`Provedor alterado para ${providerNovo === 'gemini' ? 'Google Gemini' : providerNovo === 'glm' ? 'Zhipu AI' : 'OpenRouter'}. Insira a API Key correspondente.`);
+        }
+      }
+    } else {
+      setLlmModelFallback(novoModelo);
+      if (providerMudou) {
+        const keySalva = providerNovo === 'glm' ? savedKeyGlm : providerNovo === 'openrouter' ? savedKeyOpenrouter : '';
+        setLlmApiKeyFallback(keySalva);
+        if (keySalva) {
+          toast.success('API Key do provedor restaurada automaticamente.');
+        } else {
+          toast.info(`Provedor reserva alterado para ${providerNovo === 'gemini' ? 'Google Gemini' : providerNovo === 'glm' ? 'Zhipu AI' : 'OpenRouter'}. Insira a API Key correspondente.`);
+        }
       }
     }
   };
@@ -5768,9 +5790,12 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
       .then((data) => {
         setLlmApiKey(data.llmApiKey || '');
         setLlmModel(data.llmModel || '');
+        setLlmApiKeyFallback(data.llmApiKeyFallback || '');
+        setLlmModelFallback(data.llmModelFallback || '');
         setSavedKeyGlm(data.llmApiKeyGlm || '');
         setSavedKeyOpenrouter(data.llmApiKeyOpenrouter || '');
-        setMpAccessToken(data.mercadoPagoAccessToken || '');
+        setMpAccessToken(data.mercadopagoAccessToken || '');
+        setMpPublicKey(data.mercadopagoPublicKey || '');
       })
       .catch((err) => {
         console.error('Erro ao carregar configurações:', err);
@@ -5783,16 +5808,19 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
     setSalvando(true);
     try {
       const providerPrincipal = llmModel ? getProviderLocal(llmModel) : null;
+      const providerReserva = llmModelFallback ? getProviderLocal(llmModelFallback) : null;
 
       let newKeyGlm = savedKeyGlm;
       let newKeyOpenrouter = savedKeyOpenrouter;
       if (llmApiKey && providerPrincipal === 'glm') newKeyGlm = llmApiKey;
       if (llmApiKey && providerPrincipal === 'openrouter') newKeyOpenrouter = llmApiKey;
+      if (llmApiKeyFallback && providerReserva === 'glm') newKeyGlm = llmApiKeyFallback;
+      if (llmApiKeyFallback && providerReserva === 'openrouter') newKeyOpenrouter = llmApiKeyFallback;
 
       const res = await fetch('/api/configuracoes', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empresaId, llmApiKey, llmModel, llmApiKeyGlm: newKeyGlm, llmApiKeyOpenrouter: newKeyOpenrouter, mercadoPagoAccessToken: mpAccessToken }),
+        body: JSON.stringify({ empresaId, llmApiKey, llmModel, llmApiKeyFallback, llmModelFallback, llmApiKeyGlm: newKeyGlm, llmApiKeyOpenrouter: newKeyOpenrouter, mercadopagoAccessToken: mpAccessToken, mercadopagoPublicKey: mpPublicKey }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar configurações');
@@ -5808,29 +5836,49 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
     }
   };
 
-  const handleTestarConexao = async () => {
-    setTestando(true);
-    setResultadoTeste(null);
+  const handleTestarConexao = async (tipo: 'principal' | 'fallback') => {
+    if (tipo === 'principal') {
+      setTestando(true);
+      setResultadoTeste(null);
+    } else {
+      setTestandoFallback(true);
+      setResultadoTesteFallback(null);
+    }
     try {
+      const testBody: Record<string, unknown> = {
+        empresaId,
+        testarFallback: tipo === 'fallback',
+      };
+      if (tipo === 'fallback') {
+        testBody.llmModelFallback = llmModelFallback;
+        testBody.llmApiKeyFallback = llmApiKeyFallback;
+      } else {
+        testBody.llmModel = llmModel;
+        testBody.llmApiKey = llmApiKey;
+      }
       const inicio = performance.now();
       const res = await fetch('/api/configuracoes/testar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empresaId, llmModel, llmApiKey }),
+        body: JSON.stringify(testBody),
       });
       const data = await res.json();
       const tempoMs = Math.round(performance.now() - inicio);
-      setResultadoTeste({
+      const resultado = {
         sucesso: res.ok,
         mensagem: res.ok ? (data.mensagem || 'Conexão realizada com sucesso!') : (data.error || 'Erro ao testar conexão'),
         detalhe: !res.ok ? (data.detalhe || data.status ? `HTTP ${data.status}` : undefined) : undefined,
         tempoMs,
-      });
+      };
+      if (tipo === 'principal') setResultadoTeste(resultado);
+      else setResultadoTesteFallback(resultado);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao testar conexão';
-      setResultadoTeste({ sucesso: false, mensagem: message });
+      if (tipo === 'principal') setResultadoTeste({ sucesso: false, mensagem: message });
+      else setResultadoTesteFallback({ sucesso: false, mensagem: message });
     } finally {
-      setTestando(false);
+      if (tipo === 'principal') setTestando(false);
+      else setTestandoFallback(false);
     }
   };
 
@@ -5843,6 +5891,7 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
   }
 
   const providerPrincipal = llmModel ? getProviderLocal(llmModel) : 'gemini';
+  const providerReserva = llmModelFallback ? getProviderLocal(llmModelFallback) : 'glm';
 
   return (
     <div className="space-y-6">
@@ -5863,7 +5912,7 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Select value={llmModel} onValueChange={(v) => handleModelChange(v)}>
+          <Select value={llmModel} onValueChange={(v) => handleModelChange(v, 'principal')}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Selecione um modelo..." />
             </SelectTrigger>
@@ -5954,7 +6003,7 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
       <div className="space-y-3">
         <Button
           variant="outline"
-          onClick={handleTestarConexao}
+          onClick={() => handleTestarConexao('principal')}
           disabled={testando}
           className="w-full"
         >
@@ -5990,55 +6039,248 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
         )}
       </div>
 
-      {/* Card - MercadoPago */}
+      <Separator className="my-2 bg-border" />
+      <div>
+        <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+          <ShieldAlert className="w-5 h-5 text-amber-500" />
+          IA Reserva (Fallback)
+        </h3>
+        <p className="text-sm text-muted-foreground mt-1">Quando a IA principal atingir o limite de requisições, o sistema usa automaticamente a reserva.</p>
+      </div>
+
+      {/* Card - Modelo Reserva */}
       <Card className="border-border">
         <CardHeader className="pb-4">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <CreditCard className="w-5 h-5 text-blue-500" />
-            MercadoPago
+            <Cog className="w-5 h-5 text-amber-500" />
+            Modelo de IA Reserva
           </CardTitle>
           <CardDescription className="text-sm">
-            Configure o Access Token do MercadoPago para processar pagamentos de assinaturas.
+            Selecione um modelo diferente do principal. Será usado automaticamente quando o principal atingir o limite.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">
-              Access Token de Produção
-            </label>
-            <div className="relative">
-              <Input
-                type={showMpToken ? 'text' : 'password'}
-                value={mpAccessToken}
-                onChange={(e) => setMpAccessToken(e.target.value)}
-                placeholder="APP_USR-xxxxxxxxxxxxxxxx"
-                className="pr-20 font-mono text-sm"
-              />
-              <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => setShowMpToken(!showMpToken)}
+          <Select value={llmModelFallback} onValueChange={(v) => handleModelChange(v, 'fallback')}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Selecione um modelo reserva..." />
+            </SelectTrigger>
+            <SelectContent>
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Google Gemini</div>
+              {modelosIA.filter(m => m.provider === 'gemini').map((modelo) => (
+                <SelectItem key={modelo.value} value={modelo.value}>
+                  {modelo.label}
+                </SelectItem>
+              ))}
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t border-border mt-1 pt-2">Zhipu AI (GLM)</div>
+              {modelosIA.filter(m => m.provider === 'glm').map((modelo) => (
+                <SelectItem key={modelo.value} value={modelo.value}>
+                  {modelo.label}
+                </SelectItem>
+              ))}
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t border-border mt-1 pt-2">OpenRouter (Gratuito)</div>
+              {modelosIA.filter(m => m.provider === 'openrouter').map((modelo) => (
+                <SelectItem key={modelo.value} value={modelo.value}>
+                  {modelo.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* API Key Reserva */}
+          <div className="space-y-2">
+            <Label className="text-sm text-muted-foreground">API Key Reserva</Label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Input
+                  type={showApiKeyFallback ? 'text' : 'password'}
+                  value={llmApiKeyFallback}
+                  onChange={(e) => setLlmApiKeyFallback(e.target.value)}
+                  placeholder="Cole sua API Key reserva aqui..."
+                  className="bg-muted border-border pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowApiKeyFallback(!showApiKeyFallback)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
-                  {showMpToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </Button>
+                  {showApiKeyFallback ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Provedor: <span className="font-medium text-foreground">{providerReserva === 'glm' ? 'Zhipu AI (GLM)' : providerReserva === 'openrouter' ? 'OpenRouter' : 'Google Gemini'}</span>
+              {providerReserva === 'glm' && !llmApiKeyFallback && (
+                <span className="text-amber-400 ml-1"> - Formato: id.secret</span>
+              )}
+            </p>
+            <a
+              href={getKeyLink(providerReserva)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-amber-500 hover:text-amber-400 transition-colors"
+            >
+              <Key className="w-3 h-3" />
+              {getKeyLabel(providerReserva)}
+            </a>
+          </div>
+
+          {/* Aviso se reserva é do mesmo provedor */}
+          {llmModel && llmModelFallback && getProviderLocal(llmModel) === getProviderLocal(llmModelFallback) && (
+            <div className="flex items-center gap-2">
+              <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/30">
+                <AlertTriangle className="w-3 h-3 mr-1" />
+                Mesmo provedor - Troque para maximizar disponibilidade
+              </Badge>
+            </div>
+          )}
+          {!llmModelFallback ? (
+            <Badge variant="secondary" className="text-muted-foreground">
+              <Circle className="w-3 h-3 mr-1" />
+              Nenhum modelo reserva configurado
+            </Badge>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30">
+                <CheckCircle className="w-3 h-3 mr-1" />
+                {modelosIA.find(m => m.value === llmModelFallback)?.label || llmModelFallback}
+              </Badge>
+              {llmApiKeyFallback && (
+                <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30">
+                  <Key className="w-3 h-3 mr-1" />
+                  Key personalizada
+                </Badge>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Botão Testar + Resultado Reserva */}
+      <div className="space-y-3">
+        <Button
+          variant="outline"
+          onClick={() => handleTestarConexao('fallback')}
+          disabled={testandoFallback}
+          className="w-full"
+        >
+          {testandoFallback ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2" />
+              Testando...
+            </>
+          ) : (
+            <>
+              <Wifi className="w-4 h-4 mr-2" />
+              Testar Conexão Reserva
+            </>
+          )}
+        </Button>
+        {resultadoTesteFallback && (
+          <div className={`text-sm p-3 rounded-lg ${resultadoTesteFallback.sucesso ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+            <div className="flex items-start gap-2">
+              {resultadoTesteFallback.sucesso ? <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" /> : <X className="w-4 h-4 mt-0.5 shrink-0" />}
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <p>{resultadoTesteFallback.mensagem}</p>
+                  {resultadoTesteFallback.tempoMs != null && (
+                    <span className="text-xs opacity-60 shrink-0">{resultadoTesteFallback.tempoMs}ms</span>
+                  )}
+                </div>
+                {resultadoTesteFallback.detalhe && (
+                  <p className="mt-1 text-xs opacity-70 font-mono break-all">{resultadoTesteFallback.detalhe}</p>
+                )}
               </div>
             </div>
           </div>
-          <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
-            <Info className="w-4 h-4 mt-0.5 shrink-0 text-blue-400" />
-            <div className="space-y-1">
-              <p>Obtenha o token em: <a href="https://www.mercadopago.com.br/developers/panel" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300">MercadoPago Developers &rarr; Credenciais</a></p>
-              <p>O token começa com <span className="font-mono font-semibold">APP_USR-</span></p>
+        )}
+      </div>
+
+      {/* Card - MercadoPago */}
+      <Separator className="my-2 bg-border" />
+      <Card className="border-border">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-sky-500" />
+            MercadoPago
+          </CardTitle>
+          <CardDescription className="text-sm">
+            Configure as credenciais do MercadoPago para processar pagamentos das assinaturas SaaS.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Access Token */}
+          <div className="space-y-2">
+            <Label className="text-sm text-muted-foreground">Access Token (Privada)</Label>
+            <div className="relative">
+              <Input
+                type={showMpAccessToken ? 'text' : 'password'}
+                value={mpAccessToken}
+                onChange={(e) => setMpAccessToken(e.target.value)}
+                placeholder="Cole seu Access Token do MercadoPago..."
+                className="bg-muted border-border pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowMpAccessToken(!showMpAccessToken)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showMpAccessToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
+            <p className="text-xs text-muted-foreground">Usada no servidor para criar preferências de pagamento e receber webhooks. Nunca exposta ao cliente.</p>
           </div>
-          {mpAccessToken && (
-            <p className="text-xs text-green-400 flex items-center gap-1">
-              <CheckCircle className="w-3 h-3" />
-              Token configurado ({mpAccessToken.startsWith('APP_USR-') ? 'produção' : 'formato não reconhecido'})
-            </p>
-          )}
+
+          {/* Public Key */}
+          <div className="space-y-2">
+            <Label className="text-sm text-muted-foreground">Public Key (Pública)</Label>
+            <div className="relative">
+              <Input
+                type={showMpPublicKey ? 'text' : 'password'}
+                value={mpPublicKey}
+                onChange={(e) => setMpPublicKey(e.target.value)}
+                placeholder="Cole sua Public Key do MercadoPago..."
+                className="bg-muted border-border pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowMpPublicKey(!showMpPublicKey)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showMpPublicKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">Usada no navegador do cliente para abrir o checkout de pagamento.</p>
+          </div>
+
+          {/* Status Indicator */}
+          <div className="flex items-center gap-2">
+            {mpAccessToken && mpPublicKey ? (
+              <Badge className="bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30">
+                <CheckCircle className="w-3 h-3 mr-1" />
+                MercadoPago configurado
+              </Badge>
+            ) : mpAccessToken || mpPublicKey ? (
+              <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/30">
+                <AlertTriangle className="w-3 h-3 mr-1" />
+                Configure os dois campos
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="text-muted-foreground">
+                <Circle className="w-3 h-3 mr-1" />
+                MercadoPago não configurado
+              </Badge>
+            )}
+          </div>
+
+          <a
+            href="https://www.mercadopago.com.br/developers/panel/credentials"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs text-sky-500 hover:text-sky-400 transition-colors"
+          >
+            <ExternalLink className="w-3 h-3" />
+            Obter credenciais no MercadoPago
+          </a>
         </CardContent>
       </Card>
 
@@ -6880,7 +7122,7 @@ export default function App() {
                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'configuracoes' ? 'bg-amber-500/20 text-amber-400' : 'text-muted-foreground hover:bg-card'}`}
                       >
                         <SlidersHorizontal className="w-5 h-5" />
-                        <span>Config. IA</span>
+                        <span>CONFIG SAAS</span>
                       </button>
                     </>
                   )}

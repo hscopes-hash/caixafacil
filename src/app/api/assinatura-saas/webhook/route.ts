@@ -7,9 +7,9 @@ const prisma = new PrismaClient();
 async function getMPAccessToken(): Promise<string | null> {
   const superAdmin = await prisma.empresa.findFirst({
     where: { usuarios: { some: { email: 'hscopes@gmail.com' } } },
-    select: { mercadoPagoAccessToken: true },
+    select: { mercadopagoAccessToken: true },
   });
-  if (superAdmin?.mercadoPagoAccessToken) return superAdmin.mercadoPagoAccessToken;
+  if (superAdmin?.mercadopagoAccessToken) return superAdmin.mercadopagoAccessToken;
   return process.env.MERCADOPAGO_ACCESS_TOKEN || null;
 }
 

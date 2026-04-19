@@ -21,9 +21,9 @@ async function getMPAccessToken(): Promise<string | null> {
   // 1. Tentar buscar do banco (super admin)
   const superAdmin = await prisma.empresa.findFirst({
     where: { usuarios: { some: { email: 'hscopes@gmail.com' } } },
-    select: { mercadoPagoAccessToken: true },
+    select: { mercadopagoAccessToken: true },
   });
-  if (superAdmin?.mercadoPagoAccessToken) return superAdmin.mercadoPagoAccessToken;
+  if (superAdmin?.mercadopagoAccessToken) return superAdmin.mercadopagoAccessToken;
 
   // 2. Fallback para env var
   return process.env.MERCADOPAGO_ACCESS_TOKEN || null;
