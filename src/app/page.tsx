@@ -28,6 +28,7 @@ import {
   Key, Wifi, EyeOff, CreditCard, ExternalLink, ChevronDown, RotateCcw, Crown, Check, Sparkles, Zap, Shield, Info
 } from 'lucide-react';
 import { VERSION_DISPLAY, VERSION_WITH_DATE } from '@/lib/version';
+import GestaoPlanosSaaS from '@/components/GestaoPlanosSaaS';
 
 // ============================================
 // TYPES
@@ -6111,6 +6112,12 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
             </>
           )}
         </Button>
+      </div>
+
+      {/* Gestao de Planos SaaS */}
+      <div className="pt-4">
+        <Separator className="bg-border mb-6" />
+        <GestaoPlanosSaaS />
       </div>
     </div>
   );
