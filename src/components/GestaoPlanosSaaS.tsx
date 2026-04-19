@@ -39,6 +39,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import {
   Plus, Pencil, Trash2, AlertTriangle, Star, Save, Settings, Database,
+  Lightbulb, Sparkles, Briefcase, Rocket, Building2, Crown, ChevronDown, ChevronUp, Zap, Shield, BarChart3,
 } from 'lucide-react';
 
 // ============================================
@@ -81,6 +82,137 @@ interface AssinaturaSaaSItem {
   empresa: { id: string; nome: string; email?: string };
 }
 
+// ============================================
+// PLANOS SUGERIDOS - Micro SaaS BR Gestao Financeira
+// ============================================
+interface PlanoSugestao {
+  id: string;
+  nome: string;
+  descricao: string;
+  valorMensal: number;
+  valorAnual: number | null;
+  limiteClientes: number;
+  limiteUsuarios: number;
+  limiteMaquinas: number;
+  recIA: boolean;
+  recRelatorios: boolean;
+  recBackup: boolean;
+  recAPI: boolean;
+  recSuporte: string;
+  popular: boolean;
+  icon: 'Zap' | 'Briefcase' | 'Rocket' | 'Building2' | 'Crown';
+  cor: string;
+  destaque: string;
+  features: string[];
+}
+
+const PLANOS_SUGESTOES: PlanoSugestao[] = [
+  {
+    id: 'gratuito',
+    nome: 'Gratuito',
+    descricao: 'Ideal para conhecer a plataforma e testar com operacoes basicas antes de investir.',
+    valorMensal: 0,
+    valorAnual: null,
+    limiteClientes: 5,
+    limiteUsuarios: 1,
+    limiteMaquinas: 2,
+    recIA: false,
+    recRelatorios: false,
+    recBackup: false,
+    recAPI: false,
+    recSuporte: 'email',
+    popular: false,
+    icon: 'Zap',
+    cor: 'from-slate-500 to-slate-700',
+    destaque: 'Experimente gratis',
+    features: ['Ate 5 clientes', '1 usuario', '2 maquinas', 'Suporte por email', 'Cadastro basico de maquinas e leituras'],
+  },
+  {
+    id: 'starter',
+    nome: 'Starter',
+    descricao: 'Para pequenos operadores que estao comecando a digitalizar a gestao financeira de suas maquinas.',
+    valorMensal: 49.9,
+    valorAnual: 499.0,
+    limiteClientes: 25,
+    limiteUsuarios: 2,
+    limiteMaquinas: 5,
+    recIA: false,
+    recRelatorios: true,
+    recBackup: false,
+    recAPI: false,
+    recSuporte: 'email',
+    popular: false,
+    icon: 'Briefcase',
+    cor: 'from-emerald-500 to-teal-600',
+    destaque: 'Melhor custo-beneficio para iniciar',
+    features: ['Ate 25 clientes', '2 usuarios', '5 maquinas', 'Relatorios basicos', 'Suporte por email', '2 meses gratis no plano anual'],
+  },
+  {
+    id: 'profissional',
+    nome: 'Profissional',
+    descricao: 'Para operadores em crescimento que precisam de controle financeiro detalhado e automacao com IA.',
+    valorMensal: 99.9,
+    valorAnual: 999.0,
+    limiteClientes: 100,
+    limiteUsuarios: 5,
+    limiteMaquinas: 15,
+    recIA: true,
+    recRelatorios: true,
+    recBackup: true,
+    recAPI: false,
+    recSuporte: 'prioritario',
+    popular: true,
+    icon: 'Rocket',
+    cor: 'from-amber-500 to-orange-600',
+    destaque: 'O mais escolhido',
+    features: ['Ate 100 clientes', '5 usuarios', '15 maquinas', 'IA Vision (OCR)', 'Relatorios avancados', 'Backup automatico', 'Suporte prioritario', '2 meses gratis no plano anual'],
+  },
+  {
+    id: 'empresarial',
+    nome: 'Empresarial',
+    descricao: 'Para operacoes de medio e grande porte com multiplas unidades e necessidade de API integrada.',
+    valorMensal: 199.9,
+    valorAnual: 1999.0,
+    limiteClientes: 500,
+    limiteUsuarios: 15,
+    limiteMaquinas: 50,
+    recIA: true,
+    recRelatorios: true,
+    recBackup: true,
+    recAPI: true,
+    recSuporte: 'prioritario',
+    popular: false,
+    icon: 'Building2',
+    cor: 'from-blue-500 to-indigo-600',
+    destaque: 'Para quem escala',
+    features: ['Ate 500 clientes', '15 usuarios', '50 maquinas', 'IA Vision (OCR)', 'Relatorios avancados', 'Backup automatico', 'API dedicada', 'Suporte prioritario', '2 meses gratis no plano anual'],
+  },
+  {
+    id: 'enterprise',
+    nome: 'Enterprise',
+    descricao: 'Solucao completa e ilimitada para grandes operadores com suporte dedicado 24 horas.',
+    valorMensal: 349.9,
+    valorAnual: 3499.0,
+    limiteClientes: -1,
+    limiteUsuarios: -1,
+    limiteMaquinas: -1,
+    recIA: true,
+    recRelatorios: true,
+    recBackup: true,
+    recAPI: true,
+    recSuporte: '24h',
+    popular: false,
+    icon: 'Crown',
+    cor: 'from-purple-500 to-violet-600',
+    destaque: 'Sem limites',
+    features: ['Clientes ilimitados', 'Usuarios ilimitados', 'Maquinas ilimitadas', 'IA Vision (OCR)', 'Relatorios avancados', 'Backup automatico', 'API dedicada', 'Suporte 24 horas', 'Onboarding dedicado', '2 meses gratis no plano anual'],
+  },
+];
+
+const PLANO_ICONS: Record<string, React.FC<{ className?: string }>> = {
+  Zap, Briefcase, Rocket, Building2, Crown,
+};
+
 const emptyPlanoForm = {
   nome: '',
   descricao: '',
@@ -121,6 +253,7 @@ export default function GestaoPlanosSaaS() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [sugestoesOpen, setSugestoesOpen] = useState(true);
 
   // Dialog states
   const [planoDialogOpen, setPlanoDialogOpen] = useState(false);
@@ -175,6 +308,31 @@ export default function GestaoPlanosSaaS() {
     resetForm();
     const maxOrdem = planos.length > 0 ? Math.max(...planos.map((p) => p.ordem)) + 1 : 0;
     setForm({ ...emptyPlanoForm, ordem: String(maxOrdem) });
+    setPlanoEditando(null);
+    setPlanoDialogOpen(true);
+  };
+
+  const usarSugestao = (sugestao: PlanoSugestao) => {
+    const maxOrdem = planos.length > 0 ? Math.max(...planos.map((p) => p.ordem)) + 1 : 0;
+    const ordemMap: Record<string, number> = { gratuito: 0, starter: 1, profissional: 2, empresarial: 3, enterprise: 4 };
+    setForm({
+      nome: sugestao.nome,
+      descricao: sugestao.descricao,
+      valorMensal: String(sugestao.valorMensal),
+      valorAnual: sugestao.valorAnual ? String(sugestao.valorAnual) : '',
+      limiteClientes: String(sugestao.limiteClientes),
+      limiteUsuarios: String(sugestao.limiteUsuarios),
+      limiteMaquinas: String(sugestao.limiteMaquinas),
+      recIA: sugestao.recIA,
+      recRelatorios: sugestao.recRelatorios,
+      recBackup: sugestao.recBackup,
+      recAPI: sugestao.recAPI,
+      recSuporte: sugestao.recSuporte,
+      ordem: String(ordemMap[sugestao.id] ?? maxOrdem),
+      ativo: true,
+      popular: sugestao.popular,
+    });
+    setPlanoEditando(null);
     setPlanoDialogOpen(true);
   };
 
@@ -327,6 +485,11 @@ export default function GestaoPlanosSaaS() {
     );
   }
 
+  const alreadyExists = (sugestaoId: string) => {
+    const nome = PLANOS_SUGESTOES.find(s => s.id === sugestaoId)?.nome;
+    return nome ? planos.some(p => p.nome.toLowerCase() === nome.toLowerCase()) : false;
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -343,6 +506,138 @@ export default function GestaoPlanosSaaS() {
           <Plus className="w-4 h-4 mr-1" /> Novo Plano
         </Button>
       </div>
+
+      {/* Sugestoes de Planos BR */}
+      <Card className="border-0 shadow-lg bg-card overflow-hidden">
+        <button
+          onClick={() => setSugestoesOpen(!sugestoesOpen)}
+          className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-600/20 flex items-center justify-center">
+              <Lightbulb className="w-5 h-5 text-amber-400" />
+            </div>
+            <div className="text-left">
+              <p className="font-semibold text-foreground flex items-center gap-2">
+                Sugestoes de Planos
+                <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">Micro SaaS BR</Badge>
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Planos recomendados para apps de gestao financeira no Brasil
+              </p>
+            </div>
+          </div>
+          {sugestoesOpen ? (
+            <ChevronUp className="w-5 h-5 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-muted-foreground" />
+          )}
+        </button>
+
+        {sugestoesOpen && (
+          <div className="px-4 pb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+              {PLANOS_SUGESTOES.map((sugestao) => {
+                const exists = alreadyExists(sugestao.id);
+                const IconComp = PLANO_ICONS[sugestao.icon];
+                return (
+                  <div
+                    key={sugestao.id}
+                    className={`relative rounded-xl border transition-all duration-200 overflow-hidden ${
+                      exists
+                        ? 'border-border bg-muted/30 opacity-50'
+                        : 'border-border hover:border-amber-500/50 hover:shadow-lg hover:shadow-amber-500/5 cursor-pointer'
+                    } ${sugestao.popular ? 'ring-2 ring-amber-500/40' : ''}`}
+                    onClick={() => !exists && usarSugestao(sugestao)}
+                >
+                    {/* Popular badge */}
+                    {sugestao.popular && (
+                      <div className="absolute top-2 right-2">
+                        <Badge className="bg-amber-500 text-white text-xs px-2 py-0.5 flex items-center gap-1">
+                          <Sparkles className="w-3 h-3" /> Popular
+                        </Badge>
+                      </div>
+                    )}
+
+                    <div className={`h-2 bg-gradient-to-r ${sugestao.cor}`} />
+
+                    <div className="p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${sugestao.cor} flex items-center justify-center text-white shrink-0`}>
+                          <IconComp className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-foreground text-sm">{sugestao.nome}</p>
+                          <p className="text-xs text-muted-foreground">{sugestao.destaque}</p>
+                        </div>
+                      </div>
+
+                      <div className="mb-3">
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-2xl font-bold text-foreground">
+                            {sugestao.valorMensal === 0 ? 'Gratis' : formatCurrency(sugestao.valorMensal)}
+                          </span>
+                          {sugestao.valorMensal > 0 && <span className="text-xs text-muted-foreground">/mes</span>}
+                        </div>
+                        {sugestao.valorAnual && (
+                          <p className="text-xs text-emerald-400 mt-0.5">
+                            {formatCurrency(sugestao.valorAnual)}/ano
+                            <span className="ml-1 text-muted-foreground">
+                              (-{Math.round((1 - sugestao.valorAnual / (sugestao.valorMensal * 12)) * 100)}% off)
+                            </span>
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-1 mb-3">
+                        {sugestao.features.slice(0, 4).map((feature, i) => (
+                          <div key={i} className="flex items-start gap-2 text-xs">
+                            <span className="text-emerald-400 mt-0.5 shrink-0">
+                              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            </span>
+                            <span className="text-muted-foreground">{feature}</span>
+                          </div>
+                        ))}
+                        {sugestao.features.length > 4 && (
+                          <p className="text-xs text-muted-foreground pl-4">+{sugestao.features.length - 4} mais...</p>
+                        )}
+                      </div>
+
+                      <Button
+                        className={`w-full text-xs h-8 ${
+                          exists
+                            ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                            : `bg-gradient-to-r ${sugestao.cor} text-white hover:opacity-90`
+                        }`}
+                        disabled={exists}
+                      >
+                        {exists ? (
+                          <><Shield className="w-3 h-3 mr-1" /> Ja cadastrado</>
+                        ) : (
+                          <><Plus className="w-3 h-3 mr-1" /> Usar este plano</>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 p-3 rounded-lg bg-muted/30 border border-border">
+              <div className="flex items-start gap-2">
+                <BarChart3 className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                <div className="text-xs text-muted-foreground">
+                  <p className="font-medium text-foreground mb-0.5">Referencia de mercado</p>
+                  <p>
+                    Valores baseados na media de precos praticados por micro SaaS brasileiros na area de gestao financeira.
+                    Voce pode editar todos os campos apos clicar em &quot;Usar este plano&quot;. Planos anuais oferecem desconto de ~17%.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </Card>
 
       {/* Plans Table - Desktop */}
       <Card className="border-0 shadow-lg bg-card">
