@@ -87,8 +87,7 @@ type Step =
   | 'connecting'      // Fetching checkout API
   | 'creating_pref'   // MercadoPago API creating preference
   | 'loading_sdk'     // Loading MP SDK
-  | 'rendering'       // Rendering Brick
-  | 'payment'         // Brick ready
+  | 'payment'         // Brick container rendered (may still be loading)
   | 'processing'      // Payment submitted
   | 'done'
   | 'error'
@@ -104,22 +103,22 @@ interface StatusLog {
 // ============================================
 // Progress steps definition
 // ============================================
-const PROGRESS_STEPS: { key: Step; label: string; icon: typeof Server }[] = [
+const PROGRESS_STEPS: { key: string; label: string; icon: typeof Server }[] = [
   { key: 'connecting', label: 'Conectando', icon: Wifi },
   { key: 'creating_pref', label: 'Preferencia', icon: Server },
   { key: 'loading_sdk', label: 'SDK', icon: Globe },
-  { key: 'rendering', label: 'Formulario', icon: CreditCard },
+  { key: 'payment', label: 'Formulario', icon: CreditCard },
 ];
 
-const LOADING_STEPS = new Set(['connecting', 'creating_pref', 'loading_sdk', 'rendering']);
+const LOADING_STEPS = new Set(['connecting', 'creating_pref', 'loading_sdk']);
 
 function getStepIndex(step: Step): number {
   if (step === 'idle') return -1;
   if (step === 'connecting') return 0;
   if (step === 'creating_pref') return 1;
-  if (step === 'loading_sdk' || step === 'sdk_loading') return 2;
-  if (step === 'rendering' || step === 'payment') return 3;
-  return 4; // done/error/processing
+  if (step === 'loading_sdk') return 2;
+  if (step === 'payment') return 3;
+  return 4; // done/error/processing/sdk_failed
 }
 
 // ============================================
@@ -134,6 +133,7 @@ export default function MercadoPagoCheckout({
   onSuccess,
 }: CheckoutParams) {
   const [step, setStep] = useState<Step>('idle');
+  const [brickReady, setBrickReady] = useState(false);
   const [statusLog, setStatusLog] = useState<StatusLog[]>([]);
   const [preferenceId, setPreferenceId] = useState<string | null>(null);
   const [mpPublicKey, setMpPublicKey] = useState<string | null>(null);
@@ -196,11 +196,9 @@ export default function MercadoPagoCheckout({
     }, 15000);
 
     try {
-      // Etapa 1: Conectando
       setStep('connecting');
       log('Conectando ao servidor...');
 
-      // Etapa 2: Criando preferencia
       setStep('creating_pref');
       log('Criando preferencia de pagamento no MercadoPago...');
 
@@ -234,7 +232,7 @@ export default function MercadoPagoCheckout({
       setPreferenceId(data.id);
       setMpPublicKey(data.publicKey);
 
-      // Etapa 3: Carregando SDK
+      // Move to SDK loading
       setStep('loading_sdk');
       log('Baixando SDK do MercadoPago...');
     } catch (error: unknown) {
@@ -271,8 +269,6 @@ export default function MercadoPagoCheckout({
   useEffect(() => {
     if (step !== 'loading_sdk' || !preferenceId || !mpPublicKey) return;
 
-    const container = brickContainerRef.current;
-
     const init = async () => {
       try {
         log('Aguardando resposta do SDK do MercadoPago...');
@@ -290,12 +286,26 @@ export default function MercadoPagoCheckout({
         const valorNumerico = parseFloat(valor.replace(/[^\d,]/g, '').replace(',', '.'));
 
         if (!mountedRef.current) return;
-        setStep('rendering');
-        log('Renderizando formulario...', true);
 
-        // Small delay for DOM
-        await new Promise((r) => setTimeout(r, 200));
-        if (!mountedRef.current || !container) return;
+        // CRITICAL: set step to 'payment' FIRST so the container div renders in the DOM
+        log('Renderizando formulario...');
+        setStep('payment');
+
+        // Wait for React to render the container div
+        await new Promise((r) => setTimeout(r, 300));
+        if (!mountedRef.current) return;
+
+        // NOW get the container ref — it should exist because step is 'payment'
+        const container = brickContainerRef.current;
+        if (!container) {
+          log('Erro: container do formulario nao encontrado no DOM');
+          setErrorMessage('Erro interno: container nao encontrado. Tente novamente.');
+          setStep('sdk_failed');
+          stopElapsed();
+          return;
+        }
+
+        log('Container encontrado, criando Brick do MercadoPago...');
 
         brickInstanceRef.current = bricksBuilder.create(
           'payment',
@@ -335,7 +345,7 @@ export default function MercadoPagoCheckout({
                 if (!mountedRef.current) return;
                 log('Formulario pronto para uso!', true);
                 stopElapsed();
-                setStep('payment');
+                setBrickReady(true);
               },
               onSubmit: async (formData: any) => {
                 if (!mountedRef.current) return;
@@ -402,14 +412,13 @@ export default function MercadoPagoCheckout({
           },
         );
 
-        // Timeout: if onReady doesn't fire in 20 seconds, offer fallback
+        // Safety timeout: if onReady doesn't fire in 30 seconds
         timerRef.current = setTimeout(() => {
           if (!mountedRef.current) return;
-          if (step === 'rendering') {
-            // Brick was created but didn't become ready - might still be working
-            log('Aguardando formulario responder...');
+          if (!brickReady) {
+            log('O formulario esta demorando mais que o esperado...');
           }
-        }, 20000);
+        }, 30000);
       } catch (error: unknown) {
         console.error('[MP Brick Init Error]', error);
         if (!mountedRef.current) return;
@@ -433,6 +442,7 @@ export default function MercadoPagoCheckout({
 
     return () => {
       unmountBrick();
+      setBrickReady(false);
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [step, preferenceId, mpPublicKey, valor, planoNome, planoTipo, token, planoSaaSId, log, startElapsed, stopElapsed]);
@@ -447,6 +457,7 @@ export default function MercadoPagoCheckout({
     unmountBrick();
     stopElapsed();
     setStep('idle');
+    setBrickReady(false);
     setErrorMessage('');
     setPaymentResult(null);
     setPreferenceId(null);
@@ -493,8 +504,8 @@ export default function MercadoPagoCheckout({
     return (
       <div className="flex items-center gap-1 px-2 py-3">
         {PROGRESS_STEPS.map((s, idx) => {
-          const isCompleted = idx < currentIdx;
-          const isCurrent = idx === currentIdx && !isFailed;
+          const isCompleted = idx < currentIdx || (idx === currentIdx && step === 'payment' && brickReady);
+          const isCurrent = idx === currentIdx && !isFailed && !isCompleted;
           const StepIcon = s.icon;
 
           return (
@@ -526,7 +537,7 @@ export default function MercadoPagoCheckout({
               {idx < PROGRESS_STEPS.length - 1 && (
                 <div className={`
                   h-[2px] flex-1 mt-[-12px] transition-colors duration-300
-                  ${idx < currentIdx ? 'bg-emerald-500/40' : 'bg-muted/30'}
+                  ${idx < currentIdx || (idx + 1 <= currentIdx && step === 'payment' && brickReady) ? 'bg-emerald-500/40' : 'bg-muted/30'}
                 `} />
               )}
             </div>
@@ -555,7 +566,7 @@ export default function MercadoPagoCheckout({
     );
   };
 
-  // Status log component (always visible during loading)
+  // Status log component
   const StatusLogView = ({ compact = false }: { compact?: boolean }) => (
     <div className={`bg-muted/30 rounded-lg border border-border p-3 space-y-2 ${compact ? 'max-h-[120px]' : 'max-h-[160px]'} overflow-y-auto`}>
       <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Log do processo</p>
@@ -592,23 +603,18 @@ export default function MercadoPagoCheckout({
           </DialogTitle>
         </DialogHeader>
 
-        {/* ===== LOADING PHASES ===== */}
+        {/* ===== LOADING PHASES (before payment container) ===== */}
         {LOADING_STEPS.has(step) && (
           <div className="space-y-4">
-            {/* Progress Steps */}
             <ProgressBar />
-
-            {/* Separator */}
             <Separator className="bg-border" />
 
-            {/* Current status - big and clear */}
             <div className="text-center py-2 space-y-2">
               <div className="relative w-12 h-12 mx-auto">
                 <Loader2 className="w-12 h-12 animate-spin text-amber-400" />
                 <CreditCard className="w-4 h-4 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-amber-400" />
               </div>
 
-              {/* Dynamic message based on step */}
               {step === 'connecting' && (
                 <>
                   <p className="text-base font-semibold text-foreground">Conectando ao servidor</p>
@@ -627,17 +633,10 @@ export default function MercadoPagoCheckout({
                   <p className="text-sm text-muted-foreground">Carregando o SDK do MercadoPago (pode levar alguns segundos)...</p>
                 </>
               )}
-              {step === 'rendering' && (
-                <>
-                  <p className="text-base font-semibold text-foreground">Renderizando formulario</p>
-                  <p className="text-sm text-muted-foreground">O formulario de pagamento esta sendo desenhado na tela...</p>
-                </>
-              )}
 
               <ElapsedTimer />
             </div>
 
-            {/* Status Log - always visible during loading */}
             {statusLog.length > 0 && <StatusLogView />}
           </div>
         )}
@@ -668,10 +667,28 @@ export default function MercadoPagoCheckout({
               </div>
             </div>
 
+            {/* Loading overlay while Brick is not ready yet */}
+            {!brickReady && (
+              <div className="space-y-3">
+                <ProgressBar />
+                <div className="text-center py-4 space-y-2">
+                  <div className="relative w-10 h-10 mx-auto">
+                    <Loader2 className="w-10 h-10 animate-spin text-amber-400" />
+                    <CreditCard className="w-4 h-4 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-amber-400" />
+                  </div>
+                  <p className="text-sm font-semibold text-foreground">Renderizando formulario de pagamento...</p>
+                  <p className="text-xs text-muted-foreground">O MercadoPago esta preparando o formulario</p>
+                  <ElapsedTimer />
+                </div>
+                {statusLog.length > 0 && <StatusLogView compact />}
+              </div>
+            )}
+
+            {/* The actual Brick container — always rendered when step is payment */}
             <div id="paymentBrick_container" ref={brickContainerRef} className="min-h-[300px]" />
 
-            {/* Collapsible status log */}
-            {statusLog.length > 0 && (
+            {/* Collapsible status log — only when brick is ready */}
+            {brickReady && statusLog.length > 0 && (
               <details className="mt-3">
                 <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
                   Detalhes do carregamento ({statusLog.length} etapas)
@@ -680,12 +697,14 @@ export default function MercadoPagoCheckout({
               </details>
             )}
 
-            <p className="text-xs text-muted-foreground text-center mt-3 flex items-center justify-center gap-1">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <path d="M6 1L7.5 4.5L11 5L8.5 7.5L9 11L6 9.5L3 11L3.5 7.5L1 5L4.5 4.5L6 1Z" fill="#f59e0b"/>
-              </svg>
-              Pagamento seguro processado pelo MercadoPago
-            </p>
+            {brickReady && (
+              <p className="text-xs text-muted-foreground text-center mt-3 flex items-center justify-center gap-1">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M6 1L7.5 4.5L11 5L8.5 7.5L9 11L6 9.5L3 11L3.5 7.5L1 5L4.5 4.5L6 1Z" fill="#f59e0b"/>
+                </svg>
+                Pagamento seguro processado pelo MercadoPago
+              </p>
+            )}
           </div>
         )}
 
