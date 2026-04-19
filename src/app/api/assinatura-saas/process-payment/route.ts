@@ -1,18 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
-import { getUserFromRequest } from '@/lib/auth';
+import { getUserFromRequest, getMPAccessToken } from '@/lib/auth';
 
 const prisma = new PrismaClient();
-
-// Buscar Access Token do MercadoPago (banco → env var)
-async function getMPAccessToken(): Promise<string | null> {
-  const superAdmin = await prisma.empresa.findFirst({
-    where: { usuarios: { some: { email: 'hscopes@gmail.com' } } },
-    select: { mercadopagoAccessToken: true },
-  });
-  if (superAdmin?.mercadopagoAccessToken) return superAdmin.mercadopagoAccessToken;
-  return process.env.MERCADOPAGO_ACCESS_TOKEN || null;
-}
 
 // Mapear payment_method_id do MP para enum do sistema
 function mapFormaPagamento(paymentMethodId: string): string {
@@ -53,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     const mpAccessToken = await getMPAccessToken();
     if (!mpAccessToken) {
-      return NextResponse.json({ error: 'MercadoPago nao configurado' }, { status: 503 });
+      return NextResponse.json({ error: 'MercadoPago nao configurado. Va em CONFIG SAAS e preencha o Access Token.', code: 'MP_NOT_CONFIGURED' }, { status: 503 });
     }
 
     // Buscar dados da empresa

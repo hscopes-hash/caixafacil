@@ -1,21 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
-import { getUserFromRequest } from '@/lib/auth';
+import { getUserFromRequest, getMPAccessToken, getMPPublicKey } from '@/lib/auth';
 
 const prisma = new PrismaClient();
-
-// Buscar Access Token do MercadoPago (banco → env var)
-async function getMPAccessToken(): Promise<string | null> {
-  // 1. Tentar buscar do banco (super admin)
-  const superAdmin = await prisma.empresa.findFirst({
-    where: { usuarios: { some: { email: 'hscopes@gmail.com' } } },
-    select: { mercadopagoAccessToken: true },
-  });
-  if (superAdmin?.mercadopagoAccessToken) return superAdmin.mercadopagoAccessToken;
-
-  // 2. Fallback para env var
-  return process.env.MERCADOPAGO_ACCESS_TOKEN || null;
-}
 
 // POST /api/assinatura-saas/checkout - Criar preferência de pagamento no MercadoPago
 export async function POST(request: NextRequest) {
@@ -58,7 +45,7 @@ export async function POST(request: NextRequest) {
     const mpAccessToken = await getMPAccessToken();
     if (!mpAccessToken) {
       return NextResponse.json(
-        { error: 'MercadoPago não configurado. Contate o suporte.' },
+        { error: 'MercadoPago nao configurado. Va em CONFIG SAAS e preencha o Access Token e Public Key do MercadoPago.', code: 'MP_NOT_CONFIGURED' },
         { status: 503 }
       );
     }
@@ -143,14 +130,8 @@ export async function POST(request: NextRequest) {
 
     console.log('[CHECKOUT] Preferência criada:', mpData.id, '→ URL:', mpData.init_point);
 
-    // Buscar public key do MP (do banco ou env var)
-    const mpPublicKey = process.env.NEXT_PUBLIC_MP_PUBLIC_KEY || null;
-    let dbPublicKey: string | null = null;
-    const superAdminEmpresa = await prisma.empresa.findFirst({
-      where: { usuarios: { some: { email: 'hscopes@gmail.com' } } },
-      select: { mercadopagoPublicKey: true },
-    });
-    if (superAdminEmpresa?.mercadopagoPublicKey) dbPublicKey = superAdminEmpresa.mercadopagoPublicKey;
+    // Buscar public key do MP
+    const mpPublicKey = await getMPPublicKey();
 
     // Verificar se chamada é embedded (Brick) ou redirect
     const isEmbed = embed === true;
@@ -159,7 +140,7 @@ export async function POST(request: NextRequest) {
       // Retornar apenas o que o Brick precisa
       return NextResponse.json({
         id: mpData.id,
-        publicKey: dbPublicKey || mpPublicKey || '',
+        publicKey: mpPublicKey || '',
       });
     }
 
@@ -167,7 +148,7 @@ export async function POST(request: NextRequest) {
       id: mpData.id,
       init_point: mpData.init_point,
       sandbox_init_point: mpData.sandbox_init_point,
-      publicKey: dbPublicKey || mpPublicKey || '',
+      publicKey: mpPublicKey || '',
     });
   } catch (error) {
     console.error('[CHECKOUT] Erro:', error);

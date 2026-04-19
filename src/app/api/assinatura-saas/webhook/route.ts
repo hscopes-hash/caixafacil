@@ -1,17 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { getMPAccessToken } from '@/lib/auth';
 
 const prisma = new PrismaClient();
-
-// Buscar Access Token do MercadoPago (banco → env var)
-async function getMPAccessToken(): Promise<string | null> {
-  const superAdmin = await prisma.empresa.findFirst({
-    where: { usuarios: { some: { email: 'hscopes@gmail.com' } } },
-    select: { mercadopagoAccessToken: true },
-  });
-  if (superAdmin?.mercadopagoAccessToken) return superAdmin.mercadopagoAccessToken;
-  return process.env.MERCADOPAGO_ACCESS_TOKEN || null;
-}
 
 // POST /api/assinatura-saas/webhook - Webhook do MercadoPago
 export async function POST(request: NextRequest) {

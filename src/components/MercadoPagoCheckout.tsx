@@ -39,7 +39,7 @@ export default function MercadoPagoCheckout({
   onClose,
   onSuccess,
 }: CheckoutParams) {
-  const [step, setStep] = useState<'loading' | 'payment' | 'processing' | 'done' | 'error'>('loading');
+  const [step, setStep] = useState<'loading' | 'payment' | 'processing' | 'done' | 'error' | 'mp_not_configured'>('loading');
   const [preferenceId, setPreferenceId] = useState<string | null>(null);
   const [mpPublicKey, setMpPublicKey] = useState<string | null>(null);
   const [paymentResult, setPaymentResult] = useState<{ status: string; paymentId?: string } | null>(null);
@@ -66,6 +66,11 @@ export default function MercadoPagoCheckout({
 
       if (!res.ok) {
         const errorData = await res.json();
+        const isMPNotConfigured = errorData.code === 'MP_NOT_CONFIGURED';
+        if (isMPNotConfigured) {
+          setStep('mp_not_configured');
+          return;
+        }
         throw new Error(errorData.error || 'Erro ao criar pagamento');
       }
 
@@ -396,6 +401,41 @@ export default function MercadoPagoCheckout({
                 </Button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* MP Not Configured */}
+        {step === 'mp_not_configured' && (
+          <div className="py-6">
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center mx-auto mb-4">
+                <CreditCard className="w-10 h-10 text-amber-400" />
+              </div>
+              <p className="text-lg font-bold text-foreground mb-2">MercadoPago nao configurado</p>
+              <p className="text-sm text-muted-foreground mb-4">
+                Para processar pagamentos, o administrador precisa configurar as credenciais do MercadoPago.
+              </p>
+              <div className="p-4 rounded-lg bg-muted/50 border border-border mb-4 text-left">
+                <p className="text-sm font-medium text-foreground mb-2">Como configurar:</p>
+                <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
+                  <li>Acesse a aba <strong className="text-foreground">CONFIG SAAS</strong> no menu lateral</li>
+                  <li>Role ate a secao <strong className="text-foreground">Mercado Pago</strong></li>
+                  <li>Preencha o <strong className="text-foreground">Access Token</strong> (producao ou sandbox)</li>
+                  <li>Preencha a <strong className="text-foreground">Public Key</strong></li>
+                  <li>Clique em <strong className="text-foreground">Salvar Configuracoes</strong></li>
+                </ol>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Obtenha as credenciais em:{' '}
+                  <span className="text-amber-400 break-all">
+                    mercadopago.com.br/developers/panel/credentials
+                  </span>
+                </p>
+              </div>
+              <Button variant="outline" onClick={onClose}>
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Voltar
+              </Button>
+            </div>
           </div>
         )}
 

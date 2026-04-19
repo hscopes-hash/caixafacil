@@ -81,6 +81,53 @@ export async function isAuthenticated(request: NextRequest): Promise<boolean> {
   return user !== null;
 }
 
+// ============================================
+// MercadoPago - Credenciais centralizadas
+// ============================================
+
+export async function getMPAccessToken(): Promise<string | null> {
+  try {
+    // 1. Buscar do banco (qualquer empresa que tenha o token configurado)
+    const empresaComMP = await db.empresa.findFirst({
+      where: {
+        mercadopagoAccessToken: { not: null, not: '' },
+      },
+      select: { mercadopagoAccessToken: true },
+    });
+    if (empresaComMP?.mercadopagoAccessToken) return empresaComMP.mercadopagoAccessToken;
+
+    // 2. Fallback para env var
+    return process.env.MERCADOPAGO_ACCESS_TOKEN || null;
+  } catch (error) {
+    console.error('[MP] Erro ao buscar access token:', error);
+    return null;
+  }
+}
+
+export async function getMPPublicKey(): Promise<string | null> {
+  try {
+    // 1. Buscar do banco
+    const empresaComMP = await db.empresa.findFirst({
+      where: {
+        mercadopagoPublicKey: { not: null, not: '' },
+      },
+      select: { mercadopagoPublicKey: true },
+    });
+    if (empresaComMP?.mercadopagoPublicKey) return empresaComMP.mercadopagoPublicKey;
+
+    // 2. Fallback para env var
+    return process.env.NEXT_PUBLIC_MP_PUBLIC_KEY || null;
+  } catch (error) {
+    console.error('[MP] Erro ao buscar public key:', error);
+    return null;
+  }
+}
+
+export async function getMPCredentials(): Promise<{ accessToken: string | null; publicKey: string | null; configured: boolean }> {
+  const [accessToken, publicKey] = await Promise.all([getMPAccessToken(), getMPPublicKey()]);
+  return { accessToken, publicKey, configured: !!accessToken && !!publicKey };
+}
+
 // Criptografia simples para senha (em produção usar bcrypt)
 export async function hashSenha(senha: string): Promise<string> {
   // Para produção, usar bcrypt ou similar
