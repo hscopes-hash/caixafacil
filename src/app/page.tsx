@@ -25,7 +25,7 @@ import {
   Plus, Pencil, Trash2, Eye, Ban, CheckCircle, AlertTriangle, Building2,
   ClipboardList, Printer, Camera, X, Image as ImageIcon, Layers, MessageCircle, LogIn,
   CalendarDays, ShieldAlert, FileText, Sun, Moon, DatabaseBackup, Download, Upload, HardDrive, SlidersHorizontal,
-  Key, Wifi, EyeOff, CreditCard, Crown, Check, Sparkles, Zap, Shield
+  Key, Wifi, EyeOff, ChevronDown, RotateCcw, CreditCard, Crown, Check, Sparkles, Zap, Shield
 } from 'lucide-react';
 import { VERSION_DISPLAY, VERSION_WITH_DATE } from '@/lib/version';
 
@@ -149,6 +149,10 @@ function LoginPage() {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [loading, setLoading] = useState(false);
+  const [canInstall, setCanInstall] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [showIOSModal, setShowIOSModal] = useState(false);
   const login = useAuthStore((state) => state.login);
 
   // Email do super admin
@@ -159,10 +163,45 @@ function LoginPage() {
       .then((res) => res.json())
       .then(setEmpresas)
       .catch(console.error);
+
+    // Detectar se já está instalado como app
+    const standalone = window.matchMedia('(display-mode: standalone)').matches;
+    setIsStandalone(standalone);
+
+    // Detectar capacidade de instalação PWA
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+      if (!standalone) setCanInstall(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
   // Verificar se é super admin
   const isSuperAdminLogin = email === SUPER_ADMIN_EMAIL;
+
+  // Instalar PWA
+  const handleInstallApp = async () => {
+    if (installPrompt) {
+      installPrompt.prompt();
+      const { outcome } = await installPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setCanInstall(false);
+        setInstallPrompt(null);
+        toast.success('App instalado com sucesso!');
+      }
+    } else {
+      // Fallback para iOS/Safari: mostrar modal com instruções
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      if (isIOS || isSafari) {
+        setShowIOSModal(true);
+      } else {
+        toast.info('Use o menu do navegador e selecione "Instalar app" ou "Adicionar à tela inicial"', { duration: 5000 });
+      }
+    }
+  };
 
   // Quando o email do super admin é digitado, pular para credenciais automaticamente
   useEffect(() => {
@@ -372,6 +411,96 @@ function LoginPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Botão Instalar App - sempre visível se não for standalone */}
+        {!isStandalone && (
+          <button
+            onClick={handleInstallApp}
+            className={`w-full mt-4 flex items-center justify-center gap-2 p-3 rounded-xl transition-all group ${
+              canInstall
+                ? 'bg-gradient-to-r from-[#00d4aa] to-[#00b894] hover:from-[#00c49a] hover:to-[#00a888] shadow-lg shadow-[#00d4aa]/20'
+                : 'bg-gradient-to-r from-[#1e3a5f] to-[#0f172a] border border-[#00d4aa]/30 hover:border-[#00d4aa]/60'
+            }`}
+          >
+            <Download className={`w-5 h-5 group-hover:scale-110 transition-transform ${canInstall ? 'text-[#0f172a]' : 'text-[#00d4aa]'}`} />
+            <span className={`text-sm ${canInstall ? 'font-bold text-[#0f172a]' : 'font-medium text-[#00d4aa]'}`}>
+              Instalar como App
+            </span>
+          </button>
+        )}
+
+        {/* Modal de instruções iOS */}
+        {showIOSModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" onClick={() => setShowIOSModal(false)}>
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+            
+            {/* Modal */}
+            <div className="relative bg-[#1c1c1e] rounded-2xl max-w-sm w-full overflow-hidden shadow-2xl border border-[#00d4aa]/20" onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className="bg-gradient-to-r from-[#1e3a5f] to-[#0f172a] px-5 py-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#00d4aa]/20 flex items-center justify-center">
+                  <Download className="w-5 h-5 text-[#00d4aa]" />
+                </div>
+                <div>
+                  <p className="text-base font-bold text-white">Instalar no iPhone/iPad</p>
+                  <p className="text-xs text-gray-400">Siga os 2 passos abaixo</p>
+                </div>
+                <button onClick={() => setShowIOSModal(false)} className="ml-auto text-gray-400 hover:text-white p-1">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="px-5 py-5 space-y-5">
+                {/* Step 1 */}
+                <div className="flex flex-col items-center text-center">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-7 h-7 rounded-full bg-[#00d4aa] text-[#0f172a] flex items-center justify-center text-sm font-bold">1</span>
+                    <span className="text-sm font-semibold text-white">Toque no botão Compartilhar</span>
+                  </div>
+                  <img 
+                    src="/ios-step1.png" 
+                    alt="Passo 1: Botão compartilhar" 
+                    className="w-56 h-56 rounded-xl"
+                  />
+                  <p className="text-xs text-gray-400 mt-2">Ícone quadrado com seta para cima</p>
+                </div>
+
+                {/* Separator */}
+                <div className="flex items-center gap-2 px-4">
+                  <div className="flex-1 h-px bg-gray-700" />
+                  <ChevronDown className="w-4 h-4 text-[#00d4aa]" />
+                  <div className="flex-1 h-px bg-gray-700" />
+                </div>
+
+                {/* Step 2 */}
+                <div className="flex flex-col items-center text-center">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-7 h-7 rounded-full bg-[#00d4aa] text-[#0f172a] flex items-center justify-center text-sm font-bold">2</span>
+                    <span className="text-sm font-semibold text-white">Adicionar à Tela Início</span>
+                  </div>
+                  <img 
+                    src="/ios-step2.png" 
+                    alt="Passo 2: Adicionar à tela inicial" 
+                    className="w-56 h-56 rounded-xl"
+                  />
+                  <p className="text-xs text-gray-400 mt-2">Deslize e toque nesta opção</p>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-5 pb-5">
+                <button
+                  onClick={() => setShowIOSModal(false)}
+                  className="w-full py-3 rounded-xl bg-[#00d4aa] hover:bg-[#00b894] text-[#0f172a] font-bold text-sm transition-colors"
+                >
+                  Entendi
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1638,6 +1767,7 @@ interface MaquinaLeitura extends Maquina {
   diferencaEntrada: number;
   diferencaSaida: number;
   saldoMaquina: number;
+  fotoProcessada: string | null;
 }
 
 function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { empresaId: string; isSupervisor: boolean; usuarioId: string; usuarioNome: string }) {
@@ -1663,8 +1793,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
   // Estado para o modal de resumo
   const [resumoModalOpen, setResumoModalOpen] = useState(false);
   const [maquinasSalvas, setMaquinasSalvas] = useState<MaquinaLeitura[]>([]);
-  // Estado para rastrear máquinas com valores aplicados da foto
-  const [maquinasComFotoAplicada, setMaquinasComFotoAplicada] = useState<Set<string>>(new Set());
+  // Estado para rastrear origem da foto (CÂMERA ou GALERIA)
+  const [fotoOrigem, setFotoOrigem] = useState<'CÂMERA' | 'GALERIA' | 'LOTE' | null>(null);
   // Estados para despesa extra
   const [despesa, setDespesa] = useState('');
   const [valorDespesa, setValorDespesa] = useState('');
@@ -1672,10 +1802,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
   const [valorDespesaSalva, setValorDespesaSalva] = useState<number>(0);
   // Estados para Lançamento de Lote
   const [loteModalOpen, setLoteModalOpen] = useState(false);
-  const [fotosLote, setFotosLote] = useState<{ id: string; imagem: string; status: 'pendente' | 'processando' | 'concluido' | 'erro'; resultado?: { codigoMaquina: string; codigoReconhecido: boolean; entrada?: number | null; saida?: number | null; confianca: number; observacoes: string; confiancaOCR?: number }; erro?: string }[]>([]);
+  const [fotosLote, setFotosLote] = useState<{ id: string; imagem: string; status: 'pendente' | 'processando' | 'concluido' | 'erro'; origem?: 'CÂMERA' | 'GALERIA' | 'LOTE'; resultado?: { codigoMaquina: string; codigoReconhecido: boolean; entrada?: number | null; saida?: number | null; confianca: number; observacoes: string; confiancaOCR?: number }; erro?: string }[]>([]);
   const [processandoLote, setProcessandoLote] = useState(false);
   const [loteProgresso, setLoteProgresso] = useState(0);
   const loteIdCounter = useRef(0);
+  const processandoEmBackground = useRef(false);
+  const fotosLoteRef = useRef(fotosLote);
+  fotosLoteRef.current = fotosLote;
+  const maquinasRef = useRef(maquinas);
+  maquinasRef.current = maquinas;
+  const empresaRef = useRef(empresa);
+  empresaRef.current = empresa;
   
   // Refs para os inputs de entrada e saída
   const entradaRefs = useRef<{ [key: number]: HTMLInputElement | null }>({});
@@ -1763,6 +1900,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
         diferencaEntrada: 0,
         diferencaSaida: 0,
         saldoMaquina: 0,
+        fotoProcessada: null,
       }));
       
       setMaquinas(maquinasComLeitura);
@@ -1779,8 +1917,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     setExtratoVisivel(false);
     setRecebido('');
     setSaldoAnterior(0);
-    // Limpar estado de máquinas com foto aplicada ao trocar de cliente
-    setMaquinasComFotoAplicada(new Set());
     // Limpar campos de despesa ao trocar de cliente
     setDespesa('');
     setValorDespesa('');
@@ -1890,12 +2026,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
   const abrirModalFoto = (maquina: MaquinaLeitura) => {
     setMaquinaFoto(maquina);
     setFotoCapturada(null);
+    setFotoOrigem(null);
     setFotoModalOpen(true);
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, origem: 'CÂMERA' | 'GALERIA') => {
     const file = event.target.files?.[0];
     if (file) {
+      setFotoOrigem(origem);
       const reader = new FileReader();
       reader.onloadend = () => {
         // Redimensionar imagem para evitar problemas de memória
@@ -2077,9 +2215,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
           nomeEntrada: maquinaFoto.tipo?.nomeEntrada || 'E',
           nomeSaida: maquinaFoto.tipo?.nomeSaida || 'S',
           model: empresa?.llmModel || undefined,
-          modelFallback: empresa?.llmModelFallback || undefined,
           llmApiKey: empresa?.llmApiKey || undefined,
-          llmApiKeyFallback: empresa?.llmApiKeyFallback || undefined,
           llmApiKeyGlm: empresa?.llmApiKeyGlm || undefined,
           llmApiKeyOpenrouter: empresa?.llmApiKeyOpenrouter || undefined,
         }),
@@ -2105,7 +2241,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
           dataFormatada,
           usuarioNome,
           data.entrada,
-          data.saida
+          data.saida,
+          fotoOrigem
         );
         setFotoCapturada(fotoComTarja);
         console.log('Tarja adicionada com sucesso');
@@ -2178,8 +2315,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
 
     setMaquinas(novasMaquinas);
     
-    // Marcar máquina como tendo valores aplicados da foto
-    setMaquinasComFotoAplicada(prev => new Set(prev).add(maquinaFoto.id));
+    // Guardar foto processada (com tarja) diretamente no objeto da máquina
+    novasMaquinas[index].fotoProcessada = fotoCapturada || null;
+    setMaquinas([...novasMaquinas]);
     
     toast.success('Valores aplicados com sucesso!');
     
@@ -2188,6 +2326,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     setFotoCapturada(null);
     setMaquinaFoto(null);
     setLeituraExtraida(null);
+    setFotoOrigem(null);
   };
 
   // ============================================
@@ -2230,9 +2369,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
               imagem: foto.imagem,
               codigosMaquinas,
               model: empresa?.llmModel || undefined,
-              modelFallback: empresa?.llmModelFallback || undefined,
               llmApiKey: empresa?.llmApiKey || undefined,
-              llmApiKeyFallback: empresa?.llmApiKeyFallback || undefined,
               llmApiKeyGlm: empresa?.llmApiKeyGlm || undefined,
               llmApiKeyOpenrouter: empresa?.llmApiKeyOpenrouter || undefined,
             }),
@@ -2261,23 +2398,34 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
             // =============================================
             // PASSO 2: Extrair valores com nomeEntrada/nomeSaida corretos
             // =============================================
-            const resExtrair = await fetch('/api/leituras/extrair', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                imagem: foto.imagem,
-                nomeEntrada,
-                nomeSaida,
-                model: empresa?.llmModel || undefined,
-                modelFallback: empresa?.llmModelFallback || undefined,
-                llmApiKey: empresa?.llmApiKey || undefined,
-                llmApiKeyFallback: empresa?.llmApiKeyFallback || undefined,
-                llmApiKeyGlm: empresa?.llmApiKeyGlm || undefined,
-                llmApiKeyOpenrouter: empresa?.llmApiKeyOpenrouter || undefined,
-              }),
-            });
+            const controllerExtrairManual = new AbortController();
+            const timeoutExtrairManual = setTimeout(() => controllerExtrairManual.abort(), 60000);
+            let resExtrair: Response;
+            try {
+              resExtrair = await fetch('/api/leituras/extrair', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: controllerExtrairManual.signal,
+                body: JSON.stringify({
+                  imagem: foto.imagem,
+                  nomeEntrada,
+                  nomeSaida,
+                  model: empresa?.llmModel || undefined,
+                  llmApiKey: empresa?.llmApiKey || undefined,
+                  llmApiKeyGlm: empresa?.llmApiKeyGlm || undefined,
+                  llmApiKeyOpenrouter: empresa?.llmApiKeyOpenrouter || undefined,
+                }),
+              });
+            } finally {
+              clearTimeout(timeoutExtrairManual);
+            }
 
-            const dataExtrair = await resExtrair.json();
+            let dataExtrair: any;
+            try {
+              dataExtrair = await resExtrair.json();
+            } catch (jsonErr) {
+              throw new Error(`Resposta invalida do servidor: ${jsonErr instanceof Error ? jsonErr.message : 'JSON invalido'}`);
+            }
 
             if (!resExtrair.ok) {
               throw new Error(dataExtrair.error || 'Erro ao extrair valores');
@@ -2326,8 +2474,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                 maquinasSnapshot = novasMaquinas;
                 setMaquinas(novasMaquinas);
 
-                // Marcar como foto aplicada
-                setMaquinasComFotoAplicada(prev => new Set(prev).add(maquinasSnapshot[indexMaquina].id));
+                // Marcar como foto aplicada (sem miniatura no lote - ícone padrão)
+                setMaquinasComFotoAplicada(prev => new Map(prev).set(maquinasSnapshot[indexMaquina].id, ''));
               }
             }
           } else {
@@ -2392,6 +2540,390 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     }
   };
 
+  // =============================================
+  // ENVIAR LOTE DE FOTOS COM TARJA PARA WHATSAPP
+  // Fotos processadas em memoria, sem salvar no banco
+  // =============================================
+  const enviarLoteWhatsApp = async () => {
+    // Verificar pré-requisitos
+    const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
+    if (!whatsappOriginal) {
+      toast.error('Cliente nao possui grupo WhatsApp cadastrado.');
+      return;
+    }
+
+    const fotosConcluidas = fotosLote.filter(f => f.status === 'concluido' && f.resultado?.codigoReconhecido);
+    if (fotosConcluidas.length === 0) {
+      toast.error('Nenhuma foto processada com sucesso para enviar.');
+      return;
+    }
+
+    toast.loading('Preparando fotos com tarja...', { id: 'enviando-lote' });
+
+    try {
+      const now = new Date();
+      const dataStr = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+
+      // Montar mensagem de resumo
+      let mensagem = `LEITURAS EM LOTE\n`;
+      mensagem += `${'━'.repeat(20)}\n`;
+      mensagem += `Cliente: ${clienteSelecionado?.nome || 'N/A'}\n`;
+      mensagem += `Data: ${dataStr}\n`;
+      mensagem += `Operador: ${usuarioNome}\n`;
+      mensagem += `Fotos: ${fotosConcluidas.length} processada(s)\n`;
+      mensagem += `${'━'.repeat(20)}\n`;
+
+      // Adicionar detalhes de cada foto
+      fotosConcluidas.forEach((foto, idx) => {
+        const r = foto.resultado!;
+        const entradaStr = r.entrada !== null && r.entrada !== undefined ? String(r.entrada) : '-';
+        const saidaStr = r.saida !== null && r.saida !== undefined ? String(r.saida) : '-';
+        mensagem += `${idx + 1}. ${r.codigoMaquina} | E: ${entradaStr} | S: ${saidaStr}\n`;
+      });
+
+      // Gerar tarjas nas fotos (em memoria)
+      const files: File[] = [];
+      for (const foto of fotosConcluidas) {
+        const r = foto.resultado!;
+        try {
+          const fotoComTarja = await adicionarTarjaNaFoto(
+            foto.imagem,
+            dataStr,
+            usuarioNome,
+            r.entrada ?? null,
+            r.saida ?? null,
+            foto.origem || 'LOTE'
+          );
+          // Converter para File
+          const response = await fetch(fotoComTarja);
+          const blob = await response.blob();
+          const fileName = `leitura_${r.codigoMaquina}_${now.getTime()}.jpg`;
+          files.push(new File([blob], fileName, { type: 'image/jpeg' }));
+        } catch (err) {
+          console.error(`Erro ao adicionar tarja na foto ${r.codigoMaquina}:`, err);
+        }
+      }
+
+      toast.dismiss('enviando-lote');
+
+      // Montar URL do grupo
+      const grupoUrl = whatsappOriginal.includes('chat.whatsapp.com')
+        ? whatsappOriginal
+        : `https://chat.whatsapp.com/${whatsappOriginal}`;
+
+      // =============================================
+      // 1) Web Share API - enviar multiplas fotos
+      // =============================================
+      if (navigator.share && files.length > 0) {
+        const shareData: ShareData = {
+          title: `Leituras - ${clienteSelecionado?.nome || 'Lote'}`,
+          text: mensagem,
+        };
+
+        // Tentar compartilhar com arquivos
+        const canShareFiles = navigator.canShare && navigator.canShare({ files });
+        if (canShareFiles) {
+          (shareData as ShareData & { files: File[] }).files = files;
+        }
+
+        try {
+          await navigator.share(shareData);
+          toast.success(`${files.length} foto(s) enviada(s)!`);
+          return;
+        } catch (shareError: unknown) {
+          if (shareError instanceof Error && shareError.name === 'AbortError') return;
+          console.warn('Web Share falhou, usando fallback:', shareError);
+        }
+      }
+
+      // =============================================
+      // 2) Fallback: baixar fotos + copiar mensagem + abrir grupo
+      // =============================================
+      if (files.length === 1) {
+        // 1 foto: baixar direto
+        const url = URL.createObjectURL(files[0]);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = files[0].name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      } else {
+        // Multiplas fotos: baixar uma a uma com delay
+        for (let i = 0; i < files.length; i++) {
+          const url = URL.createObjectURL(files[i]);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = files[i].name;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+          if (i < files.length - 1) await new Promise(r => setTimeout(r, 800));
+        }
+      }
+
+      try {
+        await navigator.clipboard.writeText(mensagem);
+        toast.success(`${files.length} foto(s) salva(s) e mensagem copiada! O grupo abrira...`);
+      } catch {
+        toast.info(`${files.length} foto(s) salva(s)! O grupo abrira. Envie as fotos e a mensagem.`);
+      }
+
+      setTimeout(() => window.open(grupoUrl, '_blank'), 800);
+    } catch (error) {
+      toast.dismiss('enviando-lote');
+      console.error('Erro ao enviar lote:', error);
+      toast.error('Erro ao enviar fotos. Tente novamente.');
+    }
+  };
+
+  // =============================================
+  // PROCESSAMENTO EM BACKGROUND DO LOTE
+  // Processa fotos automaticamente conforme sao adicionadas
+  // =============================================
+  const processarFotoEmBackground = async (fotoId: string, imagemBase64: string) => {
+    // Timeout global de seguranca: se toda a funcao demorar mais de 120s, abortar
+    const globalController = new AbortController();
+    const globalTimeout = setTimeout(() => globalController.abort(), 120000);
+
+    // Marcar como processando
+    setFotosLote(prev => prev.map(f =>
+      f.id === fotoId ? { ...f, status: 'processando' as const } : f
+    ));
+
+    const currentMaquinas = maquinasRef.current;
+    const currentEmpresa = empresaRef.current;
+
+    if (!currentMaquinas || currentMaquinas.length === 0) {
+      setFotosLote(prev => prev.map(f =>
+        f.id === fotoId ? { ...f, status: 'pendente' as const } : f
+      ));
+      clearTimeout(globalTimeout);
+      return;
+    }
+
+    const codigosMaquinas = currentMaquinas.map(m => m.codigo);
+    let maquinasSnapshot = [...currentMaquinas];
+
+    console.log(`[Lote] Processando foto ${fotoId}...`);
+
+    try {
+      // Verificar se o timeout global foi atingido antes de cada passo
+      const checkGlobalTimeout = () => {
+        if (globalController.signal.aborted) {
+          throw new DOMException('Timeout global de processamento atingido (120s)', 'AbortError');
+        }
+      };
+
+      // PASSO 1: Identificar a máquina
+      checkGlobalTimeout();
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60000);
+      // Se o timeout global disparar, abortar tambem esta requisicao
+      globalController.signal.addEventListener(() => controller.abort(), { once: true });
+      let resIdentificar: Response;
+      try {
+        resIdentificar = await fetch('/api/leituras/identificar-lote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            imagem: imagemBase64,
+            codigosMaquinas,
+            model: currentEmpresa?.llmModel || undefined,
+            llmApiKey: currentEmpresa?.llmApiKey || undefined,
+            llmApiKeyGlm: currentEmpresa?.llmApiKeyGlm || undefined,
+            llmApiKeyOpenrouter: currentEmpresa?.llmApiKeyOpenrouter || undefined,
+          }),
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      let dataIdentificar: any;
+      try {
+        dataIdentificar = await resIdentificar.json();
+      } catch (jsonErr) {
+        throw new Error(`Resposta invalida do servidor de identificacao: ${jsonErr instanceof Error ? jsonErr.message : 'JSON invalido'}`);
+      }
+      if (!resIdentificar.ok) {
+        throw new Error(dataIdentificar.error || 'Erro ao identificar máquina');
+      }
+
+      console.log(`[Lote] Foto ${fotoId} identificada: ${dataIdentificar.codigoMaquina}`);
+
+      if (dataIdentificar.codigoReconhecido) {
+        const maquinaIdentificada = maquinasSnapshot.find(
+          m => m.codigo.toUpperCase() === dataIdentificar.codigoMaquina.toUpperCase()
+        );
+
+        if (maquinaIdentificada) {
+          const nomeEntrada = maquinaIdentificada.tipo?.nomeEntrada || 'E';
+          const nomeSaida = maquinaIdentificada.tipo?.nomeSaida || 'S';
+
+          // PASSO 2: Extrair valores (com timeout!)
+          checkGlobalTimeout();
+          console.log(`[Lote] Extraindo valores para ${dataIdentificar.codigoMaquina}...`);
+          const controllerExtrair = new AbortController();
+          const timeoutExtrair = setTimeout(() => controllerExtrair.abort(), 60000);
+          globalController.signal.addEventListener(() => controllerExtrair.abort(), { once: true });
+          let resExtrair: Response;
+          try {
+            resExtrair = await fetch('/api/leituras/extrair', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              signal: controllerExtrair.signal,
+              body: JSON.stringify({
+                imagem: imagemBase64,
+                nomeEntrada,
+                nomeSaida,
+                model: currentEmpresa?.llmModel || undefined,
+                llmApiKey: currentEmpresa?.llmApiKey || undefined,
+                llmApiKeyGlm: currentEmpresa?.llmApiKeyGlm || undefined,
+                llmApiKeyOpenrouter: currentEmpresa?.llmApiKeyOpenrouter || undefined,
+              }),
+            });
+          } finally {
+            clearTimeout(timeoutExtrair);
+          }
+
+          let dataExtrair: any;
+          try {
+            dataExtrair = await resExtrair.json();
+          } catch (jsonErr) {
+            throw new Error(`Resposta invalida do servidor de extracao: ${jsonErr instanceof Error ? jsonErr.message : 'JSON invalido'}`);
+          }
+          if (!resExtrair.ok) {
+            throw new Error(dataExtrair.error || 'Erro ao extrair valores');
+          }
+
+          // Atualizar foto como concluída
+          setFotosLote(prev => prev.map(f =>
+            f.id === fotoId ? {
+              ...f,
+              status: 'concluido' as const,
+              resultado: {
+                codigoMaquina: dataIdentificar.codigoMaquina,
+                codigoReconhecido: true,
+                entrada: dataExtrair.entrada,
+                saida: dataExtrair.saida,
+                confianca: dataIdentificar.confianca,
+                confiancaOCR: dataExtrair.confianca,
+                observacoes: dataIdentificar.observacoes || dataExtrair.observacoes || '',
+              },
+            } : f
+          ));
+
+          // Aplicar valores nos campos da máquina
+          if (dataExtrair.entrada !== null || dataExtrair.saida !== null) {
+            const indexMaquina = maquinasSnapshot.findIndex(
+              m => m.codigo.toUpperCase() === dataIdentificar.codigoMaquina.toUpperCase()
+            );
+            if (indexMaquina !== -1) {
+              const novasMaquinas = [...maquinasSnapshot];
+              if (dataExtrair.entrada !== null) {
+                novasMaquinas[indexMaquina].novaEntrada = String(dataExtrair.entrada);
+                novasMaquinas[indexMaquina].diferencaEntrada = dataExtrair.entrada - (novasMaquinas[indexMaquina].entradaAtual || 0);
+              }
+              if (dataExtrair.saida !== null) {
+                novasMaquinas[indexMaquina].novaSaida = String(dataExtrair.saida);
+                novasMaquinas[indexMaquina].diferencaSaida = dataExtrair.saida - (novasMaquinas[indexMaquina].saidaAtual || 0);
+              }
+              novasMaquinas[indexMaquina].saldoMaquina = calcularValor(
+                novasMaquinas[indexMaquina].moeda,
+                novasMaquinas[indexMaquina].diferencaEntrada - novasMaquinas[indexMaquina].diferencaSaida
+              );
+              maquinasSnapshot = novasMaquinas;
+              setMaquinas(novasMaquinas);
+            }
+          }
+        } else {
+          // Máquina identificada mas não encontrada
+          setFotosLote(prev => prev.map(f =>
+            f.id === fotoId ? {
+              ...f,
+              status: 'concluido' as const,
+              resultado: {
+                codigoMaquina: dataIdentificar.codigoMaquina,
+                codigoReconhecido: true,
+                confianca: dataIdentificar.confianca,
+                observacoes: dataIdentificar.observacoes || '',
+              },
+            } : f
+          ));
+        }
+      } else {
+        // Máquina não reconhecida
+        setFotosLote(prev => prev.map(f =>
+          f.id === fotoId ? {
+            ...f,
+            status: 'concluido' as const,
+            resultado: {
+              codigoMaquina: dataIdentificar.codigoMaquina,
+              codigoReconhecido: false,
+              confianca: dataIdentificar.confianca,
+              observacoes: dataIdentificar.observacoes || 'Máquina não encontrada na lista do cliente',
+            },
+          } : f
+        ));
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+      console.error(`[Lote] Erro foto ${fotoId}:`, errorMsg);
+
+      setFotosLote(prev => prev.map(f =>
+        f.id === fotoId ? { ...f, status: 'erro' as const, erro: errorMsg } : f
+      ));
+    } finally {
+      clearTimeout(globalTimeout);
+    }
+
+    console.log(`[Lote] Foto ${fotoId} finalizada`);
+  };
+
+  // Efeito: processar automaticamente fotos pendentes em background
+  // Delay de 3s entre fotos (plano pago não precisa de delay longo)
+  const ultimaFotoProcessadaRef = useRef<number>(0);
+  const DELAY_ENTRE_FOTOS = 3000; // 3 segundos entre cada processamento
+
+  useEffect(() => {
+    const pendentes = fotosLote.filter(f => f.status === 'pendente');
+    const processando = fotosLote.some(f => f.status === 'processando');
+
+    if (pendentes.length > 0 && !processando && !processandoEmBackground.current && maquinas.length > 0) {
+      const tempoDesdeUltima = Date.now() - ultimaFotoProcessadaRef.current;
+      const delayNecessario = Math.max(0, DELAY_ENTRE_FOTOS - tempoDesdeUltima);
+
+      if (delayNecessario > 0) {
+        // Aguardar o delay antes de processar a proxima foto
+        console.log(`[Lote] Aguardando ${Math.round(delayNecessario / 1000)}s antes de processar proxima foto...`);
+        const timer = setTimeout(() => {
+          processandoEmBackground.current = true;
+          const fotoParaProcessar = pendentes[0];
+          processarFotoEmBackground(fotoParaProcessar.id, fotoParaProcessar.imagem)
+            .catch(err => console.error('[Lote] Erro inesperado:', err))
+            .finally(() => {
+              processandoEmBackground.current = false;
+              ultimaFotoProcessadaRef.current = Date.now();
+            });
+        }, delayNecessario);
+
+        return () => clearTimeout(timer);
+      } else {
+        processandoEmBackground.current = true;
+        const fotoParaProcessar = pendentes[0];
+        processarFotoEmBackground(fotoParaProcessar.id, fotoParaProcessar.imagem)
+          .catch(err => console.error('[Lote] Erro inesperado:', err))
+          .finally(() => {
+            processandoEmBackground.current = false;
+            ultimaFotoProcessadaRef.current = Date.now();
+          });
+      }
+    }
+  }, [fotosLote, maquinas]);
+
   // Funções para tela cheia e zoom
   const handleDuploCliqueFoto = () => {
     if (fotoCapturada) {
@@ -2423,7 +2955,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     data: string,
     operador: string,
     entrada: number | null,
-    saida: number | null
+    saida: number | null,
+    origem: 'CÂMERA' | 'GALERIA' | 'LOTE' | null = null
   ): Promise<string> => {
     return new Promise((resolve, reject) => {
       // Timeout de segurança (10 segundos)
@@ -2457,10 +2990,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
             alturaOriginal = Math.round(alturaOriginal * ratio);
           }
           
-          // Fonte grande e legível: mínimo 26px, máximo 52px
-          // Para 720px → 29px | Para 1200px → 48px | Para 1920px → 52px(cap)
-          const tamanhoFonteBase = Math.max(26, Math.min(52, Math.round(larguraOriginal / 25)));
-          const alturaTarja = Math.round(tamanhoFonteBase * 3.2);
+          // Fonte adaptativa: mínimo 20px, máximo 44px
+          // Para 720px → 22px | Para 1200px → 37px | Para 1920px → 44px(cap)
+          const tamanhoFonteBase = Math.max(20, Math.min(44, Math.round(larguraOriginal / 30)));
+          const alturaTarja = Math.round(tamanhoFonteBase * 3.0);
           
           // Nova altura total = imagem + tarja
           canvas.width = larguraOriginal;
@@ -2491,25 +3024,80 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
           const linha1Y = inicioTarja - espacamentoEntreLinhas / 2;
           const linha2Y = inicioTarja + espacamentoEntreLinhas / 2;
 
-          // === LINHA 1: CABEÇALHOS ===
+          // === DESENHO POR COLUNAS (alinhamento perfeito) ===
           ctx.fillStyle = '#ffffff'; // branco
-          ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`;
-          
-          // Cabeçalhos com separadores |
-          const cabecalho = `Data Hora    | User   | ENTR | SAÍDA`;
-          ctx.fillText(cabecalho, padding, linha1Y);
+          const tamanhoFonteCabecalho = Math.round(tamanhoFonte * 1.15); // cabeçalhos 15% maiores
+          ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
 
-          // === LINHA 2: VALORES ===
-          ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`;
-          
           // Formatar valores
-          const usuarioLimitado = operador.substring(0, 6).padEnd(6);
-          const entradaStr = String(entrada ?? '-').padStart(5);
-          const saidaStr = String(saida ?? '-').padStart(5);
-          
-          // Construir linha de valores com separadores |
-          const valores = `${data} | ${usuarioLimitado} | ${entradaStr} | ${saidaStr}`;
-          ctx.fillText(valores, padding, linha2Y);
+          const usuarioLimitado = operador.substring(0, 8);
+          const entradaStr = String(entrada ?? '-');
+          const saidaStr = String(saida ?? '-');
+          const origemStr = origem || '-';
+
+          // Medir largura de cada texto para posicionar colunas
+          const cabecalhos = ['Data Hora          ', 'User', 'ENTR', 'SAÍDA', 'Origem'];
+          const valores = [data, usuarioLimitado, entradaStr, saidaStr, origemStr];
+
+          // Medir a largura de cada cabeçalho (com fonte maior) e valor (com fonte normal)
+          const largurasCab = cabecalhos.map(t => ctx.measureText(t).width);
+          ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`; // fonte normal para valores
+          const largurasVal = valores.map(t => ctx.measureText(t).width);
+
+          // Largura da barra separadora " | " (medida com fonte de cabeçalho)
+          ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
+          const sepLargura = ctx.measureText(' | ').width;
+          const espacoEntreColunas = tamanhoFonteCabecalho * 0.5; // espaço extra após o separador
+
+          // Calcular largura total ocupada
+          let larguraTotal = 0;
+          const colunas = cabecalhos.map((cab, i) => {
+            const larguraColuna = Math.max(largurasCab[i], largurasVal[i]) + sepLargura;
+            const x = padding + larguraTotal;
+            larguraTotal += larguraColuna + espacoEntreColunas;
+            return { cabecalho: cab, valor: valores[i], x };
+          });
+
+          // Se couber na imagem, desenhar com colunas alinhadas
+          if (larguraTotal <= larguraOriginal - padding) {
+            // Linha 1: Cabeçalhos (fonte maior)
+            ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
+            colunas.forEach(col => {
+              ctx.fillText(col.cabecalho, col.x, linha1Y);
+            });
+
+            // Linha 2: Valores (fonte normal, mesma posição X dos cabeçalhos)
+            ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`;
+            colunas.forEach(col => {
+              ctx.fillText(col.valor, col.x, linha2Y);
+            });
+          } else {
+            // Fallback: se não couber, escala a fonte para caber
+            const fatorReducao = (larguraOriginal - 2 * padding) / larguraTotal;
+            const tamanhoReduzido = Math.max(12, Math.round(tamanhoFonte * fatorReducao));
+            ctx.font = `bold ${tamanhoReduzido}px Arial, sans-serif`;
+
+            // Recalcular com fonte menor
+            const largurasCabR = cabecalhos.map(t => ctx.measureText(t).width);
+            const largurasValR = valores.map(t => ctx.measureText(t).width);
+            const sepLarguraR = ctx.measureText(' | ').width;
+            const espacoR = tamanhoReduzido * 0.6;
+
+            let larguraTotalR = 0;
+            const colunasR = cabecalhos.map((cab, i) => {
+              const larguraColuna = Math.max(largurasCabR[i], largurasValR[i]) + sepLarguraR;
+              const x = padding + larguraTotalR;
+              larguraTotalR += larguraColuna + espacoR;
+              return { cabecalho: cab, valor: valores[i], x };
+            });
+
+            colunasR.forEach(col => {
+              ctx.fillText(col.cabecalho, col.x, linha1Y);
+            });
+            colunasR.forEach(col => {
+              ctx.fillText(col.valor, col.x, linha2Y);
+            });
+          }
 
           // Converter para base64 com qualidade reduzida
           resolve(canvas.toDataURL('image/jpeg', 0.8));
@@ -2674,7 +3262,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     const now = new Date();
     const dataStr = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear().toString().slice(-2)} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
     
-    let mensagem = `${clienteSelecionado?.nome?.toUpperCase() || 'CLIENTE'}\n`;
+    let mensagem = `__________________\n`;
+    mensagem += `${clienteSelecionado?.nome?.toUpperCase() || 'CLIENTE'}\n`;
     mensagem += `Data: ${dataStr}\n`;
     mensagem += `Lançado por: ${usuarioNome}\n`;
     mensagem += `_____________\n`;
@@ -2699,18 +3288,126 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     return mensagem;
   };
 
-  // Enviar pelo WhatsApp
-  const enviarWhatsApp = () => {
+  // Converter extrato em imagem (canvas) para enviar junto com as fotos
+  const gerarExtratoImagem = (): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Canvas não disponível')); return; }
+
+      const mensagem = gerarMensagemWhatsApp();
+      const linhas = mensagem.split('\n');
+
+      // Configuração de fonte
+      const fontSize = 28;
+      const lineHeight = 38;
+      const padding = 32;
+      const larguraCanvas = 720;
+
+      // Calcular altura necessária
+      const alturaTexto = linhas.length * lineHeight + padding * 2;
+      const alturaTotal = Math.max(alturaTexto, 200);
+
+      canvas.width = larguraCanvas;
+      canvas.height = alturaTotal;
+
+      // Fundo branco
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, larguraCanvas, alturaTotal);
+
+      // Texto
+      ctx.fillStyle = '#000000';
+      ctx.font = `${fontSize}px "Courier New", Courier, monospace`;
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
+
+      linhas.forEach((linha, i) => {
+        // Negrito para linhas que começam com letras maiúsculas (títulos)
+        if (linha.trim() && !linha.startsWith('_') && !linha.startsWith(' ') && linha.trim().charAt(0) === linha.trim().charAt(0).toUpperCase() && linha.trim().charAt(0) !== linha.trim().charAt(0).toLowerCase()) {
+          ctx.font = `bold ${fontSize}px "Courier New", Courier, monospace`;
+        } else {
+          ctx.font = `${fontSize}px "Courier New", Courier, monospace`;
+        }
+        ctx.fillText(linha, padding, padding + i * lineHeight);
+      });
+
+      resolve(canvas.toDataURL('image/jpeg', 0.9));
+    });
+  };
+
+  // Enviar pelo WhatsApp - fotos com tarja + extrato como imagem (tudo em um share)
+  const enviarWhatsApp = async () => {
+    // Pegar o WhatsApp do cliente (deve ser link de grupo)
+    const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
+
+    // Coletar fotos processadas (com tarja) das máquinas salvas
+    const fotosProcessadas: File[] = [];
+    for (const m of maquinasSalvas) {
+      if (m.fotoProcessada) {
+        try {
+          const response = await fetch(m.fotoProcessada);
+          const blob = await response.blob();
+          const fileName = `leitura_${m.codigo}_${Date.now()}.jpg`;
+          fotosProcessadas.push(new File([blob], fileName, { type: 'image/jpeg' }));
+        } catch (err) {
+          console.error(`Erro ao processar foto da máquina ${m.codigo}:`, err);
+        }
+      }
+    }
+
+    // Gerar extrato como imagem e adicionar ao array
+    try {
+      const extratoBase64 = await gerarExtratoImagem();
+      const response = await fetch(extratoBase64);
+      const blob = await response.blob();
+      fotosProcessadas.push(new File([blob], `extrato_${Date.now()}.jpg`, { type: 'image/jpeg' }));
+    } catch (err) {
+      console.error('Erro ao gerar imagem do extrato:', err);
+    }
+
+    // Enviar tudo junto via Web Share
+    if (fotosProcessadas.length > 0 && navigator.share) {
+      const canShareFiles = navigator.canShare && navigator.canShare({ files: fotosProcessadas });
+      if (canShareFiles) {
+        try {
+          const shareData: ShareData = {
+            title: 'Leitura - Extrato',
+          };
+          (shareData as ShareData & { files: File[] }).files = fotosProcessadas;
+          await navigator.share(shareData);
+          toast.success('Enviado com sucesso!');
+          return;
+        } catch (shareError: unknown) {
+          if (shareError instanceof Error && shareError.name === 'AbortError') {
+            return;
+          }
+          console.warn('Web Share falhou:', shareError);
+        }
+      }
+    }
+
+    // Fallback: sem suporte a share de arquivos
     const mensagem = gerarMensagemWhatsApp();
-    const mensagemCodificada = encodeURIComponent(mensagem);
-    const telefone = clienteSelecionado?.telefone?.replace(/\D/g, '') || '';
-    
-    // Se tiver telefone, envia direto, senão abre sem número
-    const url = telefone 
-      ? `https://wa.me/55${telefone}?text=${mensagemCodificada}`
-      : `https://wa.me/?text=${mensagemCodificada}`;
-    
-    window.open(url, '_blank');
+    if (whatsappOriginal) {
+      try {
+        await navigator.clipboard.writeText(mensagem);
+        toast.success('Extrato copiado! O grupo abrirá. Cole a mensagem.');
+      } catch {
+        toast.info('O grupo abrirá. Envie o extrato manualmente.');
+      }
+
+      const grupoUrl = whatsappOriginal.includes('chat.whatsapp.com')
+        ? whatsappOriginal
+        : `https://chat.whatsapp.com/${whatsappOriginal}`;
+      setTimeout(() => window.open(grupoUrl, '_blank'), 500);
+    } else {
+      const mensagemCodificada = encodeURIComponent(mensagem);
+      const telefone = clienteSelecionado?.telefone?.replace(/\D/g, '') || '';
+      const url = telefone 
+        ? `https://wa.me/55${telefone}?text=${mensagemCodificada}`
+        : `https://wa.me/?text=${mensagemCodificada}`;
+      window.open(url, '_blank');
+    }
   };
 
   // Imprimir resumo
@@ -2778,11 +3475,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                     <Button
                       variant="ghost"
                       size="icon"
-                      className={`h-9 w-9 ${maquinasComFotoAplicada.has(maquina.id) ? 'text-success hover:text-success/80 hover:bg-success-bg' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+                      className={`h-9 w-9 overflow-hidden rounded-md ${maquina.fotoProcessada ? 'p-0 hover:opacity-80' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
                       onClick={() => abrirModalFoto(maquina)}
                     >
-                      {maquinasComFotoAplicada.has(maquina.id) ? (
-                        <CheckCircle className="w-5 h-5" />
+                      {maquina.fotoProcessada ? (
+                        <img
+                          src={maquina.fotoProcessada}
+                          alt="Foto com tarja"
+                          className="w-full h-full object-cover"
+                        />
                       ) : (
                         <Camera className="w-5 h-5" />
                       )}
@@ -2999,6 +3700,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                                 id: `lote_${++loteIdCounter.current}_${Date.now()}`,
                                 imagem: base64,
                                 status: 'pendente',
+                                origem: 'LOTE',
                               }]);
                             }
                           };
@@ -3070,7 +3772,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                               </div>
                             )}
                             {foto.status === 'erro' && (
-                              <p className="text-xs text-danger break-words max-w-full">{foto.erro || 'Erro'}</p>
+                              <>
+                                <p className="text-xs text-danger break-words max-w-full">{foto.erro || 'Erro'}</p>
+                                <button
+                                  className="text-xs text-amber-400 hover:text-amber-300 underline mt-0.5"
+                                  onClick={() => setFotosLote(prev => prev.map(f =>
+                                    f.id === foto.id ? { ...f, status: 'pendente' as const, erro: undefined } : f
+                                  ))}
+                                >
+                                  Tentar novamente
+                                </button>
+                              </>
                             )}
                           </div>
                           {foto.status === 'pendente' && !processandoLote && (
@@ -3087,7 +3799,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                             <CheckCircle className="w-4 h-4 text-success flex-shrink-0" />
                           )}
                           {foto.status === 'erro' && (
-                            <AlertTriangle className="w-4 h-4 text-danger flex-shrink-0" />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-amber-400 hover:text-amber-300 flex-shrink-0"
+                              onClick={() => setFotosLote(prev => prev.map(f =>
+                                f.id === foto.id ? { ...f, status: 'pendente' as const, erro: undefined } : f
+                              ))}
+                              title="Tentar novamente"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                            </Button>
                           )}
                         </div>
                       ))}
@@ -3103,19 +3825,26 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                   </div>
                 )}
 
-                {/* Barra de Progresso durante processamento */}
-                {processandoLote && (
+                {/* Barra de Progresso durante processamento (automatico ou manual) */}
+                {(processandoLote || fotosLote.some(f => f.status === 'processando')) && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Processando lote...</span>
-                      <span className="font-medium text-foreground">{loteProgresso}/{fotosLote.length}</span>
+                      <span className="text-muted-foreground">
+                        {processandoLote ? 'Processando lote...' : 'Processando em background...'}
+                      </span>
+                      <span className="font-medium text-foreground">
+                        {fotosLote.filter(f => f.status === 'concluido' || f.status === 'erro').length}/{fotosLote.length}
+                      </span>
                     </div>
                     <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${fotosLote.length > 0 ? (loteProgresso / fotosLote.length) * 100 : 0}%` }}
+                        className={`h-full rounded-full transition-all duration-500 ease-out ${processandoLote ? 'bg-gradient-to-r from-amber-500 to-orange-600' : 'bg-gradient-to-r from-indigo-500 to-purple-600'}`}
+                        style={{ width: `${fotosLote.length > 0 ? (fotosLote.filter(f => f.status === 'concluido' || f.status === 'erro').length / fotosLote.length) * 100 : 0}%` }}
                       />
                     </div>
+                    {!processandoLote && (
+                      <p className="text-xs text-center text-muted-foreground">Voce pode continuar tirando fotos. Proxima foto em ate 30s.</p>
+                    )}
                   </div>
                 )}
 
@@ -3129,6 +3858,18 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">Valores aplicados as maquinas correspondentes</p>
                     </div>
+
+                    {/* Botao Enviar Lote WhatsApp */}
+                    {clienteSelecionado?.whatsapp && fotosLote.some(f => f.status === 'concluido' && f.resultado?.codigoReconhecido) && (
+                      <Button
+                        onClick={enviarLoteWhatsApp}
+                        className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+                      >
+                        <MessageCircle className="w-4 h-4 mr-2" />
+                        ENVIAR {fotosLote.filter(f => f.status === 'concluido' && f.resultado?.codigoReconhecido).length} FOTO(S) PARA O GRUPO
+                      </Button>
+                    )}
+
                     <Button
                       onClick={() => {
                         setLoteModalOpen(false);
@@ -3143,8 +3884,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                   </div>
                 )}
 
-                {/* Botao Processar Lote */}
-                {!processandoLote && fotosLote.some(f => f.status === 'pendente') && (
+                {/* Botao Processar Lote - so aparece se ainda ha pendentes e nada esta processando */}
+                {!processandoLote && fotosLote.some(f => f.status === 'pendente') && !fotosLote.some(f => f.status === 'processando') && (
                   <Button
                     onClick={processarLote}
                     className="w-full bg-gradient-to-r from-amber-500 to-orange-600"
@@ -3210,7 +3951,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                         type="file"
                         accept="image/*"
                         capture="environment"
-                        onChange={handleFileChange}
+                        onChange={(e) => handleFileChange(e, 'CÂMERA')}
                         className="hidden"
                       />
                       <div className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 hover:from-amber-500/30 hover:to-orange-500/30 transition-colors">
@@ -3224,7 +3965,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                       <input
                         type="file"
                         accept="image/*"
-                        onChange={handleFileChange}
+                        onChange={(e) => handleFileChange(e, 'GALERIA')}
                         className="hidden"
                       />
                       <div className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-muted border-border hover:bg-accent transition-colors">
@@ -4963,54 +5704,31 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
   const { updateEmpresa } = useAuthStore();
   const [llmApiKey, setLlmApiKey] = useState('');
   const [llmModel, setLlmModel] = useState('');
-  const [llmApiKeyFallback, setLlmApiKeyFallback] = useState('');
-  const [llmModelFallback, setLlmModelFallback] = useState('');
   const [savedKeyGlm, setSavedKeyGlm] = useState('');
   const [savedKeyOpenrouter, setSavedKeyOpenrouter] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [testando, setTestando] = useState(false);
-  const [testandoFallback, setTestandoFallback] = useState(false);
   const [resultadoTeste, setResultadoTeste] = useState<{ sucesso: boolean; mensagem: string; detalhe?: string; tempoMs?: number } | null>(null);
-  const [resultadoTesteFallback, setResultadoTesteFallback] = useState<{ sucesso: boolean; mensagem: string; detalhe?: string; tempoMs?: number } | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
-  const [showApiKeyFallback, setShowApiKeyFallback] = useState(false);
 
   // Funções auxiliares
   const getProviderLocal = (m: string) => m.includes('/') ? 'openrouter' : m.startsWith('glm-') ? 'glm' : 'gemini';
 
   // Função para trocar modelo e avisar se API Key precisa ser atualizada
-  const handleModelChange = (novoModelo: string, tipo: 'principal' | 'fallback') => {
-    const providerAnterior = tipo === 'principal'
-      ? (llmModel ? getProviderLocal(llmModel) : null)
-      : (llmModelFallback ? getProviderLocal(llmModelFallback) : null);
+  const handleModelChange = (novoModelo: string) => {
+    const providerAnterior = llmModel ? getProviderLocal(llmModel) : null;
     const providerNovo = getProviderLocal(novoModelo);
-
-    // Sempre que o provedor mudar, preencher com a key salva do provedor
     const providerMudou = providerAnterior !== null && providerAnterior !== providerNovo;
 
-    if (tipo === 'principal') {
-      setLlmModel(novoModelo);
-      if (providerMudou) {
-        // Restaurar key salva do provedor, se existir
-        const keySalva = providerNovo === 'glm' ? savedKeyGlm : providerNovo === 'openrouter' ? savedKeyOpenrouter : '';
-        setLlmApiKey(keySalva);
-        if (keySalva) {
-          toast.success(`API Key do provedor restaurada automaticamente.`);
-        } else {
-          toast.info(`Provedor alterado para ${providerNovo === 'gemini' ? 'Google Gemini' : providerNovo === 'glm' ? 'Zhipu AI' : 'OpenRouter'}. Insira a API Key correspondente.`);
-        }
-      }
-    } else {
-      setLlmModelFallback(novoModelo);
-      if (providerMudou) {
-        const keySalva = providerNovo === 'glm' ? savedKeyGlm : providerNovo === 'openrouter' ? savedKeyOpenrouter : '';
-        setLlmApiKeyFallback(keySalva);
-        if (keySalva) {
-          toast.success(`API Key do provedor restaurada automaticamente.`);
-        } else {
-          toast.info(`Provedor reserva alterado para ${providerNovo === 'gemini' ? 'Google Gemini' : providerNovo === 'glm' ? 'Zhipu AI' : 'OpenRouter'}. Insira a API Key correspondente.`);
-        }
+    setLlmModel(novoModelo);
+    if (providerMudou) {
+      const keySalva = providerNovo === 'glm' ? savedKeyGlm : providerNovo === 'openrouter' ? savedKeyOpenrouter : '';
+      setLlmApiKey(keySalva);
+      if (keySalva) {
+        toast.success(`API Key do provedor restaurada automaticamente.`);
+      } else {
+        toast.info(`Provedor alterado para ${providerNovo === 'gemini' ? 'Google Gemini' : providerNovo === 'glm' ? 'Zhipu AI' : 'OpenRouter'}. Insira a API Key correspondente.`);
       }
     }
   };
@@ -5048,8 +5766,6 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
       .then((data) => {
         setLlmApiKey(data.llmApiKey || '');
         setLlmModel(data.llmModel || '');
-        setLlmApiKeyFallback(data.llmApiKeyFallback || '');
-        setLlmModelFallback(data.llmModelFallback || '');
         setSavedKeyGlm(data.llmApiKeyGlm || '');
         setSavedKeyOpenrouter(data.llmApiKeyOpenrouter || '');
       })
@@ -5063,27 +5779,21 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
   const handleSalvar = async () => {
     setSalvando(true);
     try {
-      // Determinar keys por provedor baseado nos modelos selecionados
       const providerPrincipal = llmModel ? getProviderLocal(llmModel) : null;
-      const providerReserva = llmModelFallback ? getProviderLocal(llmModelFallback) : null;
 
-      // Salvar a key principal no campo do provedor correspondente
       let newKeyGlm = savedKeyGlm;
       let newKeyOpenrouter = savedKeyOpenrouter;
       if (llmApiKey && providerPrincipal === 'glm') newKeyGlm = llmApiKey;
       if (llmApiKey && providerPrincipal === 'openrouter') newKeyOpenrouter = llmApiKey;
-      // Mesma lógica para a key de fallback
-      if (llmApiKeyFallback && providerReserva === 'glm') newKeyGlm = llmApiKeyFallback;
-      if (llmApiKeyFallback && providerReserva === 'openrouter') newKeyOpenrouter = llmApiKeyFallback;
 
       const res = await fetch('/api/configuracoes', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empresaId, llmApiKey, llmModel, llmApiKeyFallback, llmModelFallback, llmApiKeyGlm: newKeyGlm, llmApiKeyOpenrouter: newKeyOpenrouter }),
+        body: JSON.stringify({ empresaId, llmApiKey, llmModel, llmApiKeyGlm: newKeyGlm, llmApiKeyOpenrouter: newKeyOpenrouter }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar configurações');
-      updateEmpresa({ llmApiKey, llmModel, llmApiKeyFallback, llmModelFallback, llmApiKeyGlm: newKeyGlm, llmApiKeyOpenrouter: newKeyOpenrouter });
+      updateEmpresa({ llmApiKey, llmModel, llmApiKeyGlm: newKeyGlm, llmApiKeyOpenrouter: newKeyOpenrouter });
       setSavedKeyGlm(newKeyGlm);
       setSavedKeyOpenrouter(newKeyOpenrouter);
       toast.success('Configurações salvas com sucesso!');
@@ -5095,49 +5805,29 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
     }
   };
 
-  const handleTestarConexao = async (tipo: 'principal' | 'fallback') => {
-    if (tipo === 'principal') {
-      setTestando(true);
-      setResultadoTeste(null);
-    } else {
-      setTestandoFallback(true);
-      setResultadoTesteFallback(null);
-    }
+  const handleTestarConexao = async () => {
+    setTestando(true);
+    setResultadoTeste(null);
     try {
-      const testBody: Record<string, unknown> = {
-        empresaId,
-        testarFallback: tipo === 'fallback',
-      };
-      if (tipo === 'fallback') {
-        testBody.llmModelFallback = llmModelFallback;
-        testBody.llmApiKeyFallback = llmApiKeyFallback;
-      } else {
-        testBody.llmModel = llmModel;
-        testBody.llmApiKey = llmApiKey;
-      }
       const inicio = performance.now();
       const res = await fetch('/api/configuracoes/testar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(testBody),
+        body: JSON.stringify({ empresaId, llmModel, llmApiKey }),
       });
       const data = await res.json();
       const tempoMs = Math.round(performance.now() - inicio);
-      const resultado = {
+      setResultadoTeste({
         sucesso: res.ok,
         mensagem: res.ok ? (data.mensagem || 'Conexão realizada com sucesso!') : (data.error || 'Erro ao testar conexão'),
         detalhe: !res.ok ? (data.detalhe || data.status ? `HTTP ${data.status}` : undefined) : undefined,
         tempoMs,
-      };
-      if (tipo === 'principal') setResultadoTeste(resultado);
-      else setResultadoTesteFallback(resultado);
+      });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao testar conexão';
-      if (tipo === 'principal') setResultadoTeste({ sucesso: false, mensagem: message });
-      else setResultadoTesteFallback({ sucesso: false, mensagem: message });
+      setResultadoTeste({ sucesso: false, mensagem: message });
     } finally {
-      if (tipo === 'principal') setTestando(false);
-      else setTestandoFallback(false);
+      setTestando(false);
     }
   };
 
@@ -5150,7 +5840,6 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
   }
 
   const providerPrincipal = llmModel ? getProviderLocal(llmModel) : 'gemini';
-  const providerReserva = llmModelFallback ? getProviderLocal(llmModelFallback) : 'glm';
 
   return (
     <div className="space-y-6">
@@ -5159,19 +5848,19 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
         <p className="text-sm text-muted-foreground mt-1">Configuração da IA Vision para extração de leituras</p>
       </div>
 
-      {/* Card - Modelo de IA Principal */}
+      {/* Card - Modelo de IA */}
       <Card className="border-border">
         <CardHeader className="pb-4">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
             <Cog className="w-5 h-5 text-amber-500" />
-            Modelo de IA Principal
+            Modelo de IA
           </CardTitle>
           <CardDescription className="text-sm">
-            Selecione o modelo e informe sua API Key. Se a IA apresentar problemas, alterne para outra opção.
+            Selecione o modelo e informe sua API Key. Recomendamos um plano pago para maior velocidade e sem limites.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Select value={llmModel} onValueChange={(v) => handleModelChange(v, 'principal')}>
+          <Select value={llmModel} onValueChange={(v) => handleModelChange(v)}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Selecione um modelo..." />
             </SelectTrigger>
@@ -5197,7 +5886,7 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
             </SelectContent>
           </Select>
 
-          {/* API Key Principal */}
+          {/* API Key */}
           <div className="space-y-2">
             <Label className="text-sm text-muted-foreground">API Key</Label>
             <div className="flex gap-2">
@@ -5258,11 +5947,11 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
         </CardContent>
       </Card>
 
-      {/* Botão Testar + Resultado Principal */}
+      {/* Botão Testar + Resultado */}
       <div className="space-y-3">
         <Button
           variant="outline"
-          onClick={() => handleTestarConexao('principal')}
+          onClick={handleTestarConexao}
           disabled={testando}
           className="w-full"
         >
@@ -5274,7 +5963,7 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
           ) : (
             <>
               <Wifi className="w-4 h-4 mr-2" />
-              Testar Conexão Principal
+              Testar Conexão
             </>
           )}
         </Button>
@@ -5291,162 +5980,6 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
                 </div>
                 {resultadoTeste.detalhe && (
                   <p className="mt-1 text-xs opacity-70 font-mono break-all">{resultadoTeste.detalhe}</p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <Separator className="my-2 bg-border" />
-      <div>
-        <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-          <ShieldAlert className="w-5 h-5 text-amber-500" />
-          IA Reserva (Fallback)
-        </h3>
-        <p className="text-sm text-muted-foreground mt-1">Quando a IA principal atingir o limite de requisições, o sistema usa automaticamente a reserva.</p>
-      </div>
-
-      {/* Card - Modelo Reserva */}
-      <Card className="border-border">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <Cog className="w-5 h-5 text-amber-500" />
-            Modelo de IA Reserva
-          </CardTitle>
-          <CardDescription className="text-sm">
-            Selecione um modelo diferente do principal. Será usado automaticamente quando o principal atingir o limite.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Select value={llmModelFallback} onValueChange={(v) => handleModelChange(v, 'fallback')}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Selecione um modelo reserva..." />
-            </SelectTrigger>
-            <SelectContent>
-              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Google Gemini</div>
-              {modelosIA.filter(m => m.provider === 'gemini').map((modelo) => (
-                <SelectItem key={modelo.value} value={modelo.value}>
-                  {modelo.label}
-                </SelectItem>
-              ))}
-              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t border-border mt-1 pt-2">Zhipu AI (GLM)</div>
-              {modelosIA.filter(m => m.provider === 'glm').map((modelo) => (
-                <SelectItem key={modelo.value} value={modelo.value}>
-                  {modelo.label}
-                </SelectItem>
-              ))}
-              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t border-border mt-1 pt-2">OpenRouter (Gratuito)</div>
-              {modelosIA.filter(m => m.provider === 'openrouter').map((modelo) => (
-                <SelectItem key={modelo.value} value={modelo.value}>
-                  {modelo.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* API Key Reserva */}
-          <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">API Key Reserva</Label>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Input
-                  type={showApiKeyFallback ? 'text' : 'password'}
-                  value={llmApiKeyFallback}
-                  onChange={(e) => setLlmApiKeyFallback(e.target.value)}
-                  placeholder="Cole sua API Key reserva aqui..."
-                  className="bg-muted border-border pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowApiKeyFallback(!showApiKeyFallback)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showApiKeyFallback ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Provedor: <span className="font-medium text-foreground">{providerReserva === 'glm' ? 'Zhipu AI (GLM)' : providerReserva === 'openrouter' ? 'OpenRouter' : 'Google Gemini'}</span>
-              {providerReserva === 'glm' && !llmApiKeyFallback && (
-                <span className="text-amber-400 ml-1"> - Formato: id.secret</span>
-              )}
-            </p>
-            <a
-              href={getKeyLink(providerReserva)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs text-amber-500 hover:text-amber-400 transition-colors"
-            >
-              <Key className="w-3 h-3" />
-              {getKeyLabel(providerReserva)}
-            </a>
-          </div>
-
-          {/* Aviso se reserva é do mesmo provedor */}
-          {llmModel && llmModelFallback && getProviderLocal(llmModel) === getProviderLocal(llmModelFallback) && (
-            <div className="flex items-center gap-2">
-              <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/30">
-                <AlertTriangle className="w-3 h-3 mr-1" />
-                Mesmo provedor - Troque para maximizar disponibilidade
-              </Badge>
-            </div>
-          )}
-          {!llmModelFallback ? (
-            <Badge variant="secondary" className="text-muted-foreground">
-              <Circle className="w-3 h-3 mr-1" />
-              Nenhum modelo reserva configurado
-            </Badge>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30">
-                <CheckCircle className="w-3 h-3 mr-1" />
-                {modelosIA.find(m => m.value === llmModelFallback)?.label || llmModelFallback}
-              </Badge>
-              {llmApiKeyFallback && (
-                <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30">
-                  <Key className="w-3 h-3 mr-1" />
-                  Key personalizada
-                </Badge>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Botão Testar + Resultado Reserva */}
-      <div className="space-y-3">
-        <Button
-          variant="outline"
-          onClick={() => handleTestarConexao('fallback')}
-          disabled={testandoFallback}
-          className="w-full"
-        >
-          {testandoFallback ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2" />
-              Testando...
-            </>
-          ) : (
-            <>
-              <Wifi className="w-4 h-4 mr-2" />
-              Testar Conexão Reserva
-            </>
-          )}
-        </Button>
-        {resultadoTesteFallback && (
-          <div className={`text-sm p-3 rounded-lg ${resultadoTesteFallback.sucesso ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-            <div className="flex items-start gap-2">
-              {resultadoTesteFallback.sucesso ? <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" /> : <X className="w-4 h-4 mt-0.5 shrink-0" />}
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <p>{resultadoTesteFallback.mensagem}</p>
-                  {resultadoTesteFallback.tempoMs != null && (
-                    <span className="text-xs opacity-60 shrink-0">{resultadoTesteFallback.tempoMs}ms</span>
-                  )}
-                </div>
-                {resultadoTesteFallback.detalhe && (
-                  <p className="mt-1 text-xs opacity-70 font-mono break-all">{resultadoTesteFallback.detalhe}</p>
                 )}
               </div>
             </div>
@@ -6084,6 +6617,70 @@ function AssinaturaTab() {
   );
 }
 
+// PWA INSTALL BANNER
+// ============================================
+function PWAInstallBanner() {
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showBanner, setShowBanner] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      // Não mostrar se já instalou
+      if (!window.matchMedia('(display-mode: standalone)').matches) {
+        const dismissed = localStorage.getItem('pwa-install-dismissed');
+        if (!dismissed) {
+          // Esperar 3 segundos para mostrar
+          setTimeout(() => setShowBanner(true), 3000);
+        }
+      }
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setShowBanner(false);
+    }
+    setDeferredPrompt(null);
+  };
+
+  const handleDismiss = () => {
+    setShowBanner(false);
+    localStorage.setItem('pwa-install-dismissed', 'true');
+  };
+
+  if (!showBanner) return null;
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-[100] bg-gradient-to-r from-[#1e3a5f] to-[#0f172a] border-t border-[#00d4aa]/30 px-4 py-3 flex items-center gap-3 animate-in slide-in-from-bottom duration-300">
+      <img src="/icon-192.png" alt="App" className="w-10 h-10 rounded-lg flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-white">Instalar LeiturasOficial</p>
+        <p className="text-xs text-gray-300">Acesse como app no seu celular</p>
+      </div>
+      <button
+        onClick={handleDismiss}
+        className="text-gray-400 hover:text-white p-1 flex-shrink-0"
+        aria-label="Fechar"
+      >
+        <X className="w-5 h-5" />
+      </button>
+      <button
+        onClick={handleInstall}
+        className="bg-[#00d4aa] hover:bg-[#00b894] text-[#0f172a] font-bold text-sm px-4 py-2 rounded-lg flex-shrink-0 transition-colors"
+      >
+        Instalar
+      </button>
+    </div>
+  );
+}
+
 // ============================================
 // MAIN APP COMPONENT
 // ============================================
@@ -6124,6 +6721,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <PWAInstallBanner />
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur border-b border-border">
         <div className="flex items-center justify-between px-4 py-3">
@@ -6217,12 +6815,17 @@ export default function App() {
                         <DatabaseBackup className="w-5 h-5" />
                         <span>Backup / Restaurar</span>
                       </button>
+                    </>
+                  )}
+                  {isSuperAdmin && (
+                    <>
+                      <Separator className="my-2 bg-border" />
                       <button
                         onClick={() => { setActiveTab('configuracoes'); setMenuOpen(false); }}
                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'configuracoes' ? 'bg-amber-500/20 text-amber-400' : 'text-muted-foreground hover:bg-card'}`}
                       >
                         <SlidersHorizontal className="w-5 h-5" />
-                        <span>Configurações</span>
+                        <span>Config. IA</span>
                       </button>
                     </>
                   )}
@@ -6310,7 +6913,7 @@ export default function App() {
         {activeTab === 'backup-restore' && isAdmin && (
           <BackupRestorePage empresaId={empresa?.id || ''} nomeEmpresa={empresa?.nome || ''} />
         )}
-        {activeTab === 'configuracoes' && isAdmin && (
+        {activeTab === 'configuracoes' && isSuperAdmin && (
           <ConfiguracoesPage empresaId={empresa?.id || ''} />
         )}
         {activeTab === 'gestao-empresas' && usuario?.email === 'hscopes@gmail.com' && (

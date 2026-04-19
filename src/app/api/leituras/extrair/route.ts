@@ -2,12 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateZhipuToken, getApiKeyForModel, detectProvider } from '@/lib/zhipu-auth';
 
 // ============================================
-// FUNÇÕES COMPARTILHADAS - Multi-provedor com Fallback
+// FUNÇÕES COMPARTILHADAS - Provedor Único
 // ============================================
-
-function getProvider(model: string): 'gemini' | 'glm' | 'openrouter' {
-  return detectProvider(model);
-}
 
 function extractContent(data: any, provider: string): string | null {
   if (provider === 'glm' || provider === 'openrouter') {
@@ -18,15 +14,14 @@ function extractContent(data: any, provider: string): string | null {
 
 // Faz chamada à API de IA e retorna o conteúdo de texto
 async function callAI(prompt: string, imagem: string, apiKey: string, model: string): Promise<{ content: string; provider: string }> {
-  const provider = getProvider(model);
+  const provider = detectProvider(model);
   const base64Data = imagem.split(',')[1];
   const mimeType = imagem.split(';')[0].split(':')[1];
 
   let response: Response;
-  const AI_TIMEOUT = 25000; // 25s cada chamada (principal+fallback ~55s, dentro do limite do Vercel)
+  const AI_TIMEOUT = 55000; // 55s (dentro do limite do Vercel)
 
   if (provider === 'glm') {
-    // Zhipu AI requer JWT gerado a partir da API Key ({id}.{secret})
     const authToken = generateZhipuToken(apiKey);
     const url = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
     const controller = new AbortController();
@@ -58,7 +53,6 @@ async function callAI(prompt: string, imagem: string, apiKey: string, model: str
       clearTimeout(timeoutId);
     }
   } else if (provider === 'openrouter') {
-    // OpenRouter usa Bearer token simples e formato OpenAI-compatible
     const url = 'https://openrouter.ai/api/v1/chat/completions';
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), AI_TIMEOUT);
@@ -120,9 +114,45 @@ async function callAI(prompt: string, imagem: string, apiKey: string, model: str
   const responseText = await response.text();
 
   if (!response.ok) {
-    const error = new Error(responseText);
-    (error as any).status = response.status;
-    throw error;
+    // Tentar extrair mensagem amigável de erros conhecidos
+    try {
+      const errData = JSON.parse(responseText);
+      const errCode = errData?.error?.code;
+      const errMsg = errData?.error?.message || '';
+
+      // Erros conhecidos do Zhipu (GLM)
+      if (provider === 'glm') {
+        if (errCode === '1305') {
+          throw new Error('Modelo GLM gratuito com excesso de tráfego no momento. Tente novamente em alguns segundos ou use outro modelo de IA.');
+        }
+        if (errCode === '1301' || errCode === '1302') {
+          throw new Error('Chave API do GLM inválida ou expirada. Verifique a configuração de IA.');
+        }
+        if (errCode === '1004' || errCode === '1006') {
+          throw new Error('Limite de uso da API GLM atingido. Tente novamente mais tarde ou use outro modelo.');
+        }
+      }
+
+      // Erros do Gemini
+      if (provider === 'gemini' && errData?.error?.message) {
+        throw new Error(`Erro do Gemini: ${errData.error.message}`);
+      }
+
+      // Erros do OpenRouter
+      if (provider === 'openrouter' && errData?.error) {
+        throw new Error(`Erro do OpenRouter: ${errData.error.message || errData.error}`);
+      }
+
+      // Fallback genérico
+      throw new Error(`Erro da IA (código ${response.status}): ${errMsg || 'Erro desconhecido'}`);
+    } catch (e) {
+      if (e instanceof Error && (e.message.includes('Modelo GLM') || e.message.includes('Chave API') || e.message.includes('Limite') || e.message.includes('Erro da IA'))) {
+        throw e; // Repassar erros amigáveis já traduzidos
+      }
+      const error = new Error(responseText);
+      (error as any).status = response.status;
+      throw error;
+    }
   }
 
   const data = JSON.parse(responseText);
@@ -138,11 +168,11 @@ async function callAI(prompt: string, imagem: string, apiKey: string, model: str
   return { content, provider };
 }
 
-// Extrair valores de leitura de uma imagem usando IA (com fallback automático em 429)
+// Extrair valores de leitura de uma imagem usando IA
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { imagem, nomeEntrada, nomeSaida, model: bodyModel, modelFallback, llmApiKey, llmApiKeyFallback, llmApiKeyGlm, llmApiKeyOpenrouter } = body;
+    const { imagem, nomeEntrada, nomeSaida, model: bodyModel, llmApiKey, llmApiKeyGlm, llmApiKeyOpenrouter } = body;
 
     if (!imagem) {
       return NextResponse.json({ error: 'Imagem é obrigatória' }, { status: 400 });
@@ -152,14 +182,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Formato de imagem inválido. Envie uma imagem em base64.' }, { status: 400 });
     }
 
-    // Modelo (prioridade: body > env > padrão)
-    const model = bodyModel?.trim() || process.env.LLM_MODEL?.trim() || 'gemini-2.5-flash-lite';
+    // Modelo (prioridade: body > padrao)
+    const model = bodyModel?.trim() || 'gemini-2.5-flash-lite';
 
-    // API Key: automática baseada no provedor do modelo (com fallback para keys salvas por provedor)
-    const apiKey = getApiKeyForModel(model, llmApiKey, llmApiKeyFallback, llmApiKeyGlm, llmApiKeyOpenrouter);
+    // API Key: do banco de dados (Config. IA)
+    const apiKey = getApiKeyForModel(model, llmApiKey, llmApiKeyGlm, llmApiKeyOpenrouter);
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'API Key não configurada. Configure nas Configurações da empresa.' },
+        { error: 'API Key não configurada. O super admin deve configurar nas Config. de IA.' },
         { status: 500 }
       );
     }
@@ -181,80 +211,25 @@ Regras:
 Responda apenas com o JSON:
 {"entrada": "valor_apos_${nomeE}", "saida": "valor_apos_${nomeS}", "confianca": 0_ate_100, "observacoes": "texto"}`;
 
-    let content: string;
-    let usedModel = model;
-    let usedProvider = getProvider(model);
-    let usedFallback = false;
+    console.log(`[EXTRAIR] Modelo: ${model} | Provedor: ${detectProvider(model)}`);
 
-    // ===== TENTATIVA 1: Modelo principal =====
-    try {
-      console.log(`[EXTRAIR] Tentando modelo principal: ${model}`);
-      const result = await callAI(prompt, imagem, apiKey, model);
-      content = result.content;
-      usedProvider = result.provider;
-    } catch (primaryError: any) {
-      const primaryStatus = primaryError?.status;
-      console.log(`[EXTRAIR] Erro principal (HTTP ${primaryStatus}):`, String(primaryError).substring(0, 200));
+    const result = await callAI(prompt, imagem, apiKey, model);
+    const content = result.content;
 
-      // Verificar se há fallback configurado
-      const fallbackModel = modelFallback?.trim();
-
-      if (!fallbackModel) {
-        // Sem fallback configurado, retornar erro original
-        const errorText = primaryError instanceof Error ? primaryError.message : String(primaryError);
-        return NextResponse.json(
-          { error: `Erro na IA (${model}): ${parseApiError(errorText, primaryStatus, getProvider(model))}` },
-          { status: 500 }
-        );
-      }
-
-      // API Key do fallback: automática baseada no provedor
-      const fallbackApiKey = getApiKeyForModel(fallbackModel, llmApiKeyFallback, llmApiKey, llmApiKeyGlm, llmApiKeyOpenrouter);
-      if (!fallbackApiKey) {
-        const errorText = primaryError instanceof Error ? primaryError.message : String(primaryError);
-        return NextResponse.json(
-          { error: `Erro na IA (${model}): ${parseApiError(errorText, primaryStatus, getProvider(model))}. Reserva sem API Key configurada.` },
-          { status: 500 }
-        );
-      }
-
-      // Tentar com modelo reserva
-      console.log(`[EXTRAIR] Usando FALLBACK: ${fallbackModel}`);
-      usedFallback = true;
-
-      try {
-        const result = await callAI(prompt, imagem, fallbackApiKey, fallbackModel);
-        content = result.content;
-        usedModel = fallbackModel;
-        usedProvider = result.provider;
-        console.log(`[EXTRAIR] FALLBACK OK: ${fallbackModel}`);
-      } catch (fallbackError: any) {
-        console.log(`[EXTRAIR] FALLBACK também falhou:`, String(fallbackError).substring(0, 200));
-        const fallbackErrorText = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
-        return NextResponse.json(
-          { error: `Modelo principal e reserva falharam. Principal (${model}): ${parseApiError(primaryError instanceof Error ? primaryError.message : String(primaryError), primaryStatus, getProvider(model))} | Reserva (${fallbackModel}): ${parseApiError(fallbackErrorText, fallbackError?.status, getProvider(fallbackModel))}` },
-          { status: 500 }
-        );
-      }
-    }
-
-    console.log(`[EXTRAIR] Conteúdo extraído (provedor: ${usedProvider}):`, content.substring(0, 200));
+    console.log(`[EXTRAIR] Conteúdo extraído (provedor: ${result.provider}):`, content.substring(0, 200));
 
     // Extrair JSON da resposta
     let resultado;
     try {
-      // Limpar resposta: remover markdown, espaços extras, e normalizar
       let cleanContent = content
         .replace(/```json\s*/gi, '')
         .replace(/```\s*/gi, '')
         .trim();
 
-      // Extrair JSON com suporte a aninhamento simples (1 nível)
       const jsonMatch = cleanContent.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/);
       if (jsonMatch) {
         resultado = JSON.parse(jsonMatch[0]);
       } else {
-        // Tentar parse direto do conteúdo limpo
         resultado = JSON.parse(cleanContent);
       }
     } catch {
@@ -297,9 +272,8 @@ Responda apenas com o JSON:
       saida: resultado.saida,
       confianca: resultado.confianca,
       observacoes: resultado.observacoes || '',
-      provider: usedProvider,
-      model: usedModel,
-      fallback: usedFallback,
+      provider: result.provider,
+      model,
     });
 
   } catch (error) {
@@ -307,20 +281,4 @@ Responda apenas com o JSON:
     const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: `Erro: ${errorMessage}` }, { status: 500 });
   }
-}
-
-// Função auxiliar para traduzir erros da API
-function parseApiError(errorText: string, status?: number, provider?: string): string {
-  try {
-    const errorJson = JSON.parse(errorText);
-    const msg = errorJson?.error?.message || errorJson?.message || '';
-
-    if (status === 429) return 'Limite de requisições atingido. Aguarde 1 minuto e tente novamente.';
-    if (status === 401 || status === 403) return 'API Key inválida';
-    if (status === 404) return `Modelo não encontrado`;
-    if (msg) return msg.substring(0, 150);
-  } catch {
-    // não é JSON
-  }
-  return errorText.substring(0, 150);
 }
