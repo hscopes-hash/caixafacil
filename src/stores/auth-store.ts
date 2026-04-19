@@ -1,7 +1,6 @@
 'use client';
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
 export type NivelAcesso = 'ADMINISTRADOR' | 'SUPERVISOR' | 'OPERADOR';
 
@@ -45,28 +44,26 @@ interface AuthState {
   updateEmpresa: (empresa: Partial<Empresa>) => void;
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      usuario: null,
-      empresa: null,
-      token: null,
-      isAuthenticated: false,
-      login: (usuario, empresa, token) =>
-        set({ usuario, empresa, token, isAuthenticated: true }),
-      logout: () =>
-        set({ usuario: null, empresa: null, token: null, isAuthenticated: false }),
-      updateUsuario: (usuarioData) =>
-        set((state) => ({
-          usuario: state.usuario ? { ...state.usuario, ...usuarioData } : null,
-        })),
-      updateEmpresa: (empresaData) =>
-        set((state) => ({
-          empresa: state.empresa ? { ...state.empresa, ...empresaData } : null,
-        })),
-    }),
-    {
-      name: 'auth-storage',
-    }
-  )
-);
+export const useAuthStore = create<AuthState>()((set) => ({
+  usuario: null,
+  empresa: null,
+  token: null,
+  isAuthenticated: false,
+  login: (usuario, empresa, token) =>
+    set({ usuario, empresa, token, isAuthenticated: true }),
+  logout: () =>
+    set({ usuario: null, empresa: null, token: null, isAuthenticated: false }),
+  updateUsuario: (usuarioData) =>
+    set((state) => ({
+      usuario: state.usuario ? { ...state.usuario, ...usuarioData } : null,
+    })),
+  updateEmpresa: (empresaData) =>
+    set((state) => ({
+      empresa: state.empresa ? { ...state.empresa, ...empresaData } : null,
+    })),
+}));
+
+// Limpar sessao persistida de versoes anteriores (auth-storage no localStorage)
+if (typeof window !== 'undefined') {
+  try { localStorage.removeItem('auth-storage'); } catch {}
+}
