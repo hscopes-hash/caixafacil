@@ -81,19 +81,44 @@ export async function POST(request: NextRequest) {
       },
     };
 
-    console.log('[CHECKOUT] Criando preferência:', JSON.stringify(preferencia, null, 2));
+    console.log('[CHECKOUT] Criando preferência para empresa:', user.empresaId, 'plano:', planoSaaSId);
 
-    const mpResponse = await fetch('https://api.mercadopago.com/checkout/preferences', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${mpAccessToken}`,
-        'X-Idempotency-Key': `${user.empresaId}-${plano.id}-${Date.now()}`,
-      },
-      body: JSON.stringify(preferencia),
-    });
+    // Timeout de 15s para chamada ao MercadoPago
+    const mpController = new AbortController();
+    const mpTimeout = setTimeout(() => mpController.abort(), 15000);
 
-    const mpData = await mpResponse.json();
+    let mpResponse: Response;
+    try {
+      mpResponse = await fetch('https://api.mercadopago.com/checkout/preferences', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${mpAccessToken}`,
+          'X-Idempotency-Key': `${user.empresaId}-${plano.id}-${Date.now()}`,
+        },
+        body: JSON.stringify(preferencia),
+        signal: mpController.signal,
+      });
+    } catch (mpError: any) {
+      clearTimeout(mpTimeout);
+      console.error('[CHECKOUT] Erro de conexao com MercadoPago:', mpError?.message);
+      return NextResponse.json(
+        { error: 'Falha ao conectar com o MercadoPago. Tente novamente em instantes.' },
+        { status: 504 }
+      );
+    }
+    clearTimeout(mpTimeout);
+
+    let mpData: any;
+    try {
+      mpData = await mpResponse.json();
+    } catch {
+      console.error('[CHECKOUT] Resposta do MercadoPago nao é JSON valido, status:', mpResponse.status);
+      return NextResponse.json(
+        { error: `Resposta invalida do MercadoPago (status ${mpResponse.status}). Tente novamente.` },
+        { status: 502 }
+      );
+    }
 
     if (!mpResponse.ok) {
       console.error('[CHECKOUT] Erro MercadoPago:', JSON.stringify(mpData));

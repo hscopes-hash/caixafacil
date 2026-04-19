@@ -189,15 +189,18 @@ export default function MercadoPagoCheckout({
     const abort = new AbortController();
     abortRef.current = abort;
     startElapsed();
+    console.log('[MPCheckout] Iniciando createPreference, token:', token ? token.substring(0, 10) + '...' : 'NULL');
 
-    // Timeout de 15 segundos para o fetch
+    // Timeout de 12 segundos (Vercel Hobby limita funcoes a 10s por padrao)
     const fetchTimeout = setTimeout(() => {
+      console.warn('[MPCheckout] Timeout de 12s atingido, abortando fetch');
       abort.abort();
-    }, 15000);
+    }, 12000);
 
     try {
       setStep('connecting');
       log('Conectando ao servidor...');
+      console.log('[MPCheckout] Enviando request para /api/assinatura-saas/checkout');
 
       setStep('creating_pref');
       log('Criando preferencia de pagamento no MercadoPago...');
@@ -213,16 +216,23 @@ export default function MercadoPagoCheckout({
       });
 
       clearTimeout(fetchTimeout);
+      console.log('[MPCheckout] Resposta recebida, status:', res.status);
 
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ error: 'Erro desconhecido' }));
-        if (errorData.code === 'MP_NOT_CONFIGURED') {
-          log('MercadoPago nao configurado no servidor');
-          stopElapsed();
-          setStep('mp_not_configured');
-          return;
+        let errorMsg = 'Erro ao criar pagamento';
+        try {
+          const errorData = await res.json();
+          if (errorData.code === 'MP_NOT_CONFIGURED') {
+            log('MercadoPago nao configurado no servidor');
+            stopElapsed();
+            setStep('mp_not_configured');
+            return;
+          }
+          errorMsg = errorData.error || errorMsg;
+        } catch {
+          errorMsg = `Erro do servidor (HTTP ${res.status}). A resposta nao e valida.`;
         }
-        throw new Error(errorData.error || 'Erro ao criar pagamento');
+        throw new Error(errorMsg);
       }
 
       const data = await res.json();
@@ -241,10 +251,12 @@ export default function MercadoPagoCheckout({
       stopElapsed();
 
       if (error instanceof Error && error.name === 'AbortError') {
-        log('Tempo esgotado: o servidor demorou mais de 15 segundos');
-        setErrorMessage('O servidor demorou demais para responder. Verifique sua conexao e tente novamente.');
+        console.error('[MPCheckout] Fetch abortado por timeout');
+        log('Tempo esgotado: servidor nao respondeu em 12 segundos');
+        setErrorMessage('O servidor demorou demais para responder. Tente o checkout externo ou recarregue a pagina.');
       } else {
-        const message = error instanceof Error ? error.message : 'Erro ao iniciar pagamento';
+        const message = error instanceof Error ? error.message : 'Erro de conexao com o servidor';
+        console.error('[MPCheckout] Erro no fetch:', message);
         log('Falha: ' + message);
         setErrorMessage(message);
       }
@@ -638,6 +650,23 @@ export default function MercadoPagoCheckout({
             </div>
 
             {statusLog.length > 0 && <StatusLogView />}
+
+            {/* Cancel + external checkout button (appears after 5s) */}
+            {elapsedSeconds >= 5 && (
+              <div className="space-y-2 pt-2">
+                <Button
+                  variant="outline"
+                  className="w-full border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                  onClick={handleExternalCheckout}
+                >
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  Pagar no site do MercadoPago
+                </Button>
+                <p className="text-[10px] text-center text-muted-foreground">
+                  Se demorar muito, pague direto no site do MercadoPago
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -861,11 +890,22 @@ export default function MercadoPagoCheckout({
                 <StatusLogView compact />
               </div>
             )}
-            <div className="flex gap-2 justify-center">
-              <Button variant="outline" onClick={handleClose}><ArrowLeft className="w-4 h-4 mr-2" /> Voltar</Button>
-              <Button className="bg-gradient-to-r from-amber-500 to-orange-600" onClick={handleRetry}>
-                <CreditCard className="w-4 h-4 mr-2" /> Tentar Novamente
+            <div className="space-y-2">
+              <Button className="w-full bg-gradient-to-r from-amber-500 to-orange-600" onClick={handleExternalCheckout}>
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Pagar no site do MercadoPago
               </Button>
+              <p className="text-xs text-muted-foreground text-center">
+                Abre o checkout oficial do MercadoPago em uma nova aba
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={handleRetry}>
+                  <RefreshCw className="w-4 h-4 mr-2" /> Tentar Novamente
+                </Button>
+                <Button variant="outline" className="flex-1" onClick={handleClose}>
+                  <ArrowLeft className="w-4 h-4 mr-2" /> Voltar
+                </Button>
+              </div>
             </div>
           </div>
         )}
