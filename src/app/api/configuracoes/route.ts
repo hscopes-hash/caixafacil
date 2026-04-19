@@ -25,8 +25,6 @@ export async function GET(request: NextRequest) {
         nome: true,
         llmApiKey: true,
         llmModel: true,
-        llmApiKeyFallback: true,
-        llmModelFallback: true,
         llmApiKeyGlm: true,
         llmApiKeyOpenrouter: true,
         mercadopagoAccessToken: true,
@@ -42,12 +40,9 @@ export async function GET(request: NextRequest) {
       success: true,
       llmApiKey: empresa.llmApiKey || '',
       llmModel: empresa.llmModel,
-      llmApiKeyFallback: empresa.llmApiKeyFallback || '',
-      llmModelFallback: empresa.llmModelFallback,
       llmApiKeyGlm: empresa.llmApiKeyGlm || '',
       llmApiKeyOpenrouter: empresa.llmApiKeyOpenrouter || '',
       llmApiKeyMasked: maskApiKey(empresa.llmApiKey),
-      llmApiKeyFallbackMasked: maskApiKey(empresa.llmApiKeyFallback),
       mercadopagoAccessToken: empresa.mercadopagoAccessToken || '',
       mercadopagoPublicKey: empresa.mercadopagoPublicKey || '',
       modeloPadrao: process.env.LLM_MODEL || 'gemini-2.5-flash-lite',
@@ -62,7 +57,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { empresaId, llmApiKey, llmModel, llmApiKeyFallback, llmModelFallback, llmApiKeyGlm, llmApiKeyOpenrouter, mercadopagoAccessToken, mercadopagoPublicKey } = body;
+    const { empresaId, llmApiKey, llmModel, llmApiKeyGlm, llmApiKeyOpenrouter, mercadopagoAccessToken, mercadopagoPublicKey } = body;
 
     if (!empresaId) {
       return NextResponse.json({ error: 'empresaId é obrigatório' }, { status: 400 });
@@ -86,14 +81,6 @@ export async function PUT(request: NextRequest) {
     if (llmModel !== undefined && llmModel !== null) {
       const trimmed = llmModel.trim();
       dadosAtualizacao.llmModel = trimmed === '' ? null : trimmed;
-    }
-    if (llmApiKeyFallback !== undefined && llmApiKeyFallback !== null) {
-      const trimmed = llmApiKeyFallback.trim();
-      dadosAtualizacao.llmApiKeyFallback = trimmed === '' ? null : trimmed;
-    }
-    if (llmModelFallback !== undefined && llmModelFallback !== null) {
-      const trimmed = llmModelFallback.trim();
-      dadosAtualizacao.llmModelFallback = trimmed === '' ? null : trimmed;
     }
     // Salvar keys por provedor para preenchimento automático
     if (llmApiKeyGlm !== undefined && llmApiKeyGlm !== null) {
@@ -121,8 +108,6 @@ export async function PUT(request: NextRequest) {
         id: true,
         llmApiKey: true,
         llmModel: true,
-        llmApiKeyFallback: true,
-        llmModelFallback: true,
         llmApiKeyGlm: true,
         llmApiKeyOpenrouter: true,
         mercadopagoAccessToken: true,
@@ -134,12 +119,9 @@ export async function PUT(request: NextRequest) {
       success: true,
       llmApiKey: empresaAtualizada.llmApiKey || '',
       llmModel: empresaAtualizada.llmModel,
-      llmApiKeyFallback: empresaAtualizada.llmApiKeyFallback || '',
-      llmModelFallback: empresaAtualizada.llmModelFallback,
       llmApiKeyGlm: empresaAtualizada.llmApiKeyGlm || '',
       llmApiKeyOpenrouter: empresaAtualizada.llmApiKeyOpenrouter || '',
       llmApiKeyMasked: maskApiKey(empresaAtualizada.llmApiKey),
-      llmApiKeyFallbackMasked: maskApiKey(empresaAtualizada.llmApiKeyFallback),
       mercadopagoAccessToken: empresaAtualizada.mercadopagoAccessToken || '',
       mercadopagoPublicKey: empresaAtualizada.mercadopagoPublicKey || '',
       mensagem: 'Configurações salvas com sucesso',
