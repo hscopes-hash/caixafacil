@@ -13,47 +13,58 @@ import {
 import { toast } from 'sonner';
 import {
   Loader2, CreditCard, QrCode, Smartphone, ArrowLeft, CheckCircle2, XCircle, Clock,
+  Check, AlertTriangle, ExternalLink, RefreshCw,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 
 // ============================================
-// SDK Loader — injects script tag manually
+// SDK Loader
 // ============================================
 const MP_SDK_URL = 'https://sdk.mercadopago.com/js/v2';
 let sdkLoadPromise: Promise<any> | null = null;
 
-function loadMercadoPagoSDK(): Promise<any> {
-  // If already loading or loaded, reuse the same promise
+function loadMercadoPagoSDK(onProgress?: (msg: string) => void): Promise<any> {
   if (sdkLoadPromise) return sdkLoadPromise;
 
-  // If already available in window (loaded by previous session/page)
   if (typeof window !== 'undefined' && (window as any).MercadoPago) {
     return Promise.resolve((window as any).MercadoPago);
   }
 
   sdkLoadPromise = new Promise<any>((resolve, reject) => {
+    // Timeout de 15 segundos
+    const timeout = setTimeout(() => {
+      sdkLoadPromise = null;
+      reject(new Error('TIMEOUT'));
+    }, 15000);
+
     try {
+      onProgress?.('Baixando SDK do MercadoPago...');
       const script = document.createElement('script');
       script.src = MP_SDK_URL;
       script.async = true;
 
       script.onload = () => {
+        onProgress?.('SDK carregado, inicializando...');
         const MPClass = (window as any).MercadoPago;
         if (MPClass) {
+          clearTimeout(timeout);
           resolve(MPClass);
         } else {
+          clearTimeout(timeout);
           sdkLoadPromise = null;
-          reject(new Error('MercadoPago SDK carregou mas window.MercadoPago nao esta disponivel'));
+          reject(new Error('SDK carregou mas MercadoPago nao esta disponivel'));
         }
       };
 
       script.onerror = () => {
+        clearTimeout(timeout);
         sdkLoadPromise = null;
-        reject(new Error('Falha ao carregar o script do MercadoPago'));
+        reject(new Error('Falha de rede ao baixar o SDK'));
       };
 
       document.head.appendChild(script);
     } catch (error) {
+      clearTimeout(timeout);
       sdkLoadPromise = null;
       reject(error);
     }
@@ -74,6 +85,14 @@ interface CheckoutParams {
   onSuccess: () => void;
 }
 
+type Step = 'idle' | 'loading' | 'sdk_loading' | 'payment' | 'processing' | 'done' | 'error' | 'mp_not_configured' | 'sdk_failed';
+
+interface StatusLog {
+  time: string;
+  message: string;
+  done: boolean;
+}
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -85,9 +104,11 @@ export default function MercadoPagoCheckout({
   onClose,
   onSuccess,
 }: CheckoutParams) {
-  const [step, setStep] = useState<'loading' | 'sdk_loading' | 'payment' | 'processing' | 'done' | 'error' | 'mp_not_configured'>('loading');
+  const [step, setStep] = useState<Step>('idle');
+  const [statusLog, setStatusLog] = useState<StatusLog[]>([]);
   const [preferenceId, setPreferenceId] = useState<string | null>(null);
   const [mpPublicKey, setMpPublicKey] = useState<string | null>(null);
+  const [initPoint, setInitPoint] = useState<string | null>(null);
   const [paymentResult, setPaymentResult] = useState<{ status: string; paymentId?: string } | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const brickContainerRef = useRef<HTMLDivElement>(null);
@@ -97,7 +118,14 @@ export default function MercadoPagoCheckout({
   const onSuccessRef = useRef(onSuccess);
   onSuccessRef.current = onSuccess;
 
-  // Unmount helper — safe call, never throws
+  // Helper: add status log entry
+  const log = useCallback((message: string, done = false) => {
+    if (!mountedRef.current) return;
+    const now = new Date();
+    const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+    setStatusLog((prev) => [...prev, { time, message, done }]);
+  }, []);
+
   const unmountBrick = () => {
     try {
       if (brickInstanceRef.current) {
@@ -109,26 +137,27 @@ export default function MercadoPagoCheckout({
     }
   };
 
-  // Step 1: Create preference and get public key
+  // Step 1: Create preference
   const createPreference = useCallback(async () => {
     try {
+      log('Conectando ao servidor...');
+      setStep('loading');
+
       const res = await fetch('/api/assinatura-saas/checkout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          planoSaaSId,
-          planoTipo,
-          embed: true,
-        }),
+        body: JSON.stringify({ planoSaaSId, planoTipo, embed: true }),
       });
+
+      log('Servidor respondeu', true);
 
       if (!res.ok) {
         const errorData = await res.json();
-        const isMPNotConfigured = errorData.code === 'MP_NOT_CONFIGURED';
-        if (isMPNotConfigured) {
+        if (errorData.code === 'MP_NOT_CONFIGURED') {
+          log('MercadoPago nao configurado no servidor');
           setStep('mp_not_configured');
           return;
         }
@@ -139,14 +168,18 @@ export default function MercadoPagoCheckout({
       if (!mountedRef.current) return;
       setPreferenceId(data.id);
       setMpPublicKey(data.publicKey);
+      // Guardar init_point como fallback
+      if (data.init_point) setInitPoint(data.init_point);
+      log('Preferencia de pagamento criada (ID: ' + data.id.substring(0, 8) + '...)', true);
       setStep('sdk_loading');
     } catch (error: unknown) {
       if (!mountedRef.current) return;
       const message = error instanceof Error ? error.message : 'Erro ao iniciar pagamento';
+      log('Erro: ' + message);
       setErrorMessage(message);
       setStep('error');
     }
-  }, [planoSaaSId, planoTipo, token]);
+  }, [planoSaaSId, planoTipo, token, log]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -157,31 +190,35 @@ export default function MercadoPagoCheckout({
     };
   }, [createPreference]);
 
-  // Step 2: Load SDK and initialize Payment Brick
+  // Step 2: Load SDK + create Brick
   useEffect(() => {
-    if (step !== 'sdk_loading' || !preferenceId || !mpPublicKey || !brickContainerRef.current) return;
+    if (step !== 'sdk_loading' || !preferenceId || !mpPublicKey) return;
 
     const container = brickContainerRef.current;
 
     const init = async () => {
       try {
-        // Load SDK — this returns window.MercadoPago class
-        const MPClass = await loadMercadoPagoSDK();
+        log('Carregando SDK do MercadoPago...');
+
+        const MPClass = await loadMercadoPagoSDK((msg) => log(msg));
         if (!mountedRef.current) return;
 
-        // Create instance with public key
+        log('SDK carregado com sucesso', true);
+        log('Inicializando formulario de pagamento...');
+
+        // Create MP instance
         const mp = new MPClass(mpPublicKey, { locale: 'pt-BR' });
         const bricksBuilder = mp.bricks();
 
-        // Parse valor from "R$ 99,90" to 99.9
         const valorNumerico = parseFloat(valor.replace(/[^\d,]/g, '').replace(',', '.'));
 
         if (!mountedRef.current) return;
         setStep('payment');
+        log('Formulario de pagamento pronto', true);
 
-        // Small delay to ensure the container is mounted in DOM
+        // Small delay for DOM
         await new Promise((r) => setTimeout(r, 100));
-        if (!mountedRef.current) return;
+        if (!mountedRef.current || !container) return;
 
         brickInstanceRef.current = bricksBuilder.create(
           'payment',
@@ -190,9 +227,7 @@ export default function MercadoPagoCheckout({
             initialization: {
               amount: valorNumerico,
               preferenceId,
-              payer: {
-                email: '',
-              },
+              payer: { email: '' },
             },
             customization: {
               visual: {
@@ -219,12 +254,11 @@ export default function MercadoPagoCheckout({
               },
             },
             callbacks: {
-              onReady: () => {
-                console.log('[MP Brick] Payment Brick pronto.');
-              },
+              onReady: () => log('Formulario renderizado e pronto para uso', true),
               onSubmit: async (formData: any) => {
                 if (!mountedRef.current) return;
                 setStep('processing');
+                log('Enviando pagamento ao MercadoPago...');
 
                 try {
                   const res = await fetch('/api/assinatura-saas/process-payment', {
@@ -257,6 +291,7 @@ export default function MercadoPagoCheckout({
 
                   const result = await res.json();
                   if (!mountedRef.current) return;
+                  log('Resposta do MercadoPago: ' + result.status, true);
                   setPaymentResult({ status: result.status, paymentId: result.id });
                   setStep('done');
                   if (result.status === 'approved') {
@@ -268,12 +303,14 @@ export default function MercadoPagoCheckout({
                 } catch (error: unknown) {
                   if (!mountedRef.current) return;
                   const message = error instanceof Error ? error.message : 'Erro ao processar pagamento';
+                  log('Falha no pagamento: ' + message);
                   toast.error(message);
                   setErrorMessage(message);
                   setStep('error');
                 }
               },
               onError: (error: any) => {
+                log('Erro no formulario: ' + (error?.message || 'desconhecido'));
                 console.error('[MP Brick Error]', error);
               },
             },
@@ -282,37 +319,80 @@ export default function MercadoPagoCheckout({
       } catch (error: unknown) {
         console.error('[MP Brick Init Error]', error);
         if (!mountedRef.current) return;
-        const message = error instanceof Error
-          ? error.message
-          : 'Nao foi possivel carregar o formulario de pagamento. Verifique sua conexao e tente novamente.';
-        setErrorMessage(message);
-        setStep('error');
+
+        const message = error instanceof Error ? error.message : 'Erro desconhecido';
+
+        if (message === 'TIMEOUT') {
+          log('Timeout: SDK nao carregou em 15 segundos');
+          setErrorMessage('O formulario de pagamento demorou demais para carregar. Tente o checkout externo ou recarregue a pagina.');
+          setStep('sdk_failed');
+        } else {
+          log('Falha ao carregar: ' + message);
+          setErrorMessage('Nao foi possivel carregar o formulario: ' + message);
+          setStep('sdk_failed');
+        }
       }
     };
 
     init();
 
-    return () => {
-      unmountBrick();
-    };
-  }, [step, preferenceId, mpPublicKey, valor, planoNome, planoTipo, token, planoSaaSId]);
+    return () => { unmountBrick(); };
+  }, [step, preferenceId, mpPublicKey, valor, planoNome, planoTipo, token, planoSaaSId, log]);
 
-  // Handle dialog close — unmount brick FIRST
-  const handleClose = useCallback(() => {
-    unmountBrick();
-    onClose();
-  }, [onClose]);
+  const handleClose = useCallback(() => { unmountBrick(); onClose(); }, [onClose]);
 
-  // Handle retry
   const handleRetry = useCallback(() => {
     unmountBrick();
-    setStep('loading');
+    setStep('idle');
     setErrorMessage('');
     setPaymentResult(null);
     setPreferenceId(null);
     setMpPublicKey(null);
+    setInitPoint(null);
+    setStatusLog([]);
     createPreference();
   }, [createPreference]);
+
+  // Fallback: open external checkout in new tab
+  const handleExternalCheckout = useCallback(async () => {
+    log('Abrindo checkout externo...');
+    try {
+      // Try to create a new preference with embed=false to get init_point
+      const res = await fetch('/api/assinatura-saas/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ planoSaaSId, planoTipo, embed: false }),
+      });
+      const data = await res.json();
+      if (data.init_point) {
+        window.open(data.init_point, '_blank');
+        log('Checkout externo aberto', true);
+        unmountBrick();
+        onClose();
+      } else {
+        toast.error('Nao foi possivel gerar o link de pagamento');
+      }
+    } catch {
+      toast.error('Erro ao gerar checkout externo');
+    }
+  }, [planoSaaSId, planoTipo, token, onClose]);
+
+  // Status log component
+  const StatusLogView = () => (
+    <div className="bg-muted/30 rounded-lg p-3 space-y-1.5 max-h-[140px] overflow-y-auto font-mono text-[11px]">
+      {statusLog.map((entry, i) => (
+        <div key={i} className="flex items-start gap-2">
+          <span className="text-muted-foreground shrink-0">{entry.time}</span>
+          {entry.done ? (
+            <Check className="w-3 h-3 text-emerald-400 shrink-0 mt-0.5" />
+          ) : (
+            <Loader2 className="w-3 h-3 text-amber-400 shrink-0 mt-0.5 animate-spin" />
+          )}
+          <span className={entry.done ? 'text-emerald-300/80' : 'text-foreground'}>{entry.message}</span>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) handleClose(); }}>
@@ -325,29 +405,39 @@ export default function MercadoPagoCheckout({
         </DialogHeader>
 
         {/* Loading — creating preference */}
-        {step === 'loading' && (
-          <div className="py-12 text-center">
-            <Loader2 className="w-10 h-10 mx-auto mb-4 animate-spin text-amber-400" />
-            <p className="text-muted-foreground">Preparando pagamento...</p>
+        {(step === 'idle' || step === 'loading') && (
+          <div className="py-8 text-center space-y-4">
+            <div className="relative w-14 h-14 mx-auto">
+              <Loader2 className="w-14 h-14 animate-spin text-amber-400" />
+              <CreditCard className="w-5 h-5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-amber-400" />
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">Preparando pagamento...</p>
+              <p className="text-sm text-muted-foreground mt-1">Criando preferencia no MercadoPago</p>
+            </div>
+            <StatusLogView />
           </div>
         )}
 
-        {/* Loading — loading SDK */}
+        {/* Loading — SDK */}
         {step === 'sdk_loading' && (
-          <div className="py-12 text-center">
-            <Loader2 className="w-10 h-10 mx-auto mb-4 animate-spin text-amber-400" />
-            <p className="text-muted-foreground">Carregando formulario de pagamento...</p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Conectando ao MercadoPago
-            </p>
+          <div className="py-8 text-center space-y-4">
+            <div className="relative w-14 h-14 mx-auto">
+              <Loader2 className="w-14 h-14 animate-spin text-amber-400" />
+              <CreditCard className="w-5 h-5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-amber-400" />
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">Carregando formulario de pagamento</p>
+              <p className="text-sm text-muted-foreground mt-1">Baixando SDK do MercadoPago (pode levar alguns segundos)</p>
+            </div>
+            <StatusLogView />
           </div>
         )}
 
         {/* Payment Brick */}
         {step === 'payment' && (
           <div>
-            {/* Order summary */}
-            <div className="p-4 rounded-lg bg-muted/50 border border-border mb-4">
+            <div className="p-4 rounded-lg bg-muted/50 border border-border mb-3">
               <div className="flex items-center justify-between mb-2">
                 <div>
                   <p className="font-semibold text-foreground">{planoNome}</p>
@@ -364,23 +454,23 @@ export default function MercadoPagoCheckout({
               </div>
               <Separator className="bg-border my-2" />
               <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                <div className="flex items-center gap-1">
-                  <CreditCard className="w-3.5 h-3.5" />
-                  <span>Cartao</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <QrCode className="w-3.5 h-3.5" />
-                  <span>PIX</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Smartphone className="w-3.5 h-3.5" />
-                  <span>Outros</span>
-                </div>
+                <div className="flex items-center gap-1"><CreditCard className="w-3.5 h-3.5" /><span>Cartao</span></div>
+                <div className="flex items-center gap-1"><QrCode className="w-3.5 h-3.5" /><span>PIX</span></div>
+                <div className="flex items-center gap-1"><Smartphone className="w-3.5 h-3.5" /><span>Outros</span></div>
               </div>
             </div>
 
-            {/* MP Brick container */}
             <div id="paymentBrick_container" ref={brickContainerRef} className="min-h-[300px]" />
+
+            {/* Collapsible status log */}
+            {statusLog.length > 0 && (
+              <details className="mt-3">
+                <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                  Detalhes do carregamento ({statusLog.length} etapas)
+                </summary>
+                <div className="mt-2"><StatusLogView /></div>
+              </details>
+            )}
 
             <p className="text-xs text-muted-foreground text-center mt-3 flex items-center justify-center gap-1">
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -393,29 +483,16 @@ export default function MercadoPagoCheckout({
 
         {/* Processing */}
         {step === 'processing' && (
-          <div className="py-12 text-center">
-            <div className="relative w-16 h-16 mx-auto mb-4">
-              <Loader2 className="w-16 h-16 animate-spin text-amber-400" />
-              <CreditCard className="w-6 h-6 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-amber-400" />
+          <div className="py-8 text-center space-y-4">
+            <div className="relative w-14 h-14 mx-auto">
+              <Loader2 className="w-14 h-14 animate-spin text-amber-400" />
+              <CreditCard className="w-5 h-5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-amber-400" />
             </div>
-            <p className="font-semibold text-foreground mb-1">Processando pagamento...</p>
-            <p className="text-sm text-muted-foreground">
-              Aguarde enquanto confirmamos seu pagamento
-            </p>
-            <div className="mt-4 space-y-2">
-              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                Validando dados
-              </div>
-              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" style={{ animationDelay: '0.5s' }} />
-                Processando transacao
-              </div>
-              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" style={{ animationDelay: '1s' }} />
-                Confirmando pagamento
-              </div>
+            <div>
+              <p className="font-semibold text-foreground">Processando pagamento...</p>
+              <p className="text-sm text-muted-foreground mt-1">Aguarde a confirmacao do MercadoPago</p>
             </div>
+            <StatusLogView />
           </div>
         )}
 
@@ -429,19 +506,13 @@ export default function MercadoPagoCheckout({
                 </div>
                 <p className="text-lg font-bold text-foreground mb-1">Pagamento Aprovado!</p>
                 <p className="text-sm text-muted-foreground mb-2">
-                  Sua assinatura do plano <strong className="text-foreground">{planoNome}</strong> foi ativada com sucesso.
+                  Assinatura do plano <strong className="text-foreground">{planoNome}</strong> ativada.
                 </p>
                 {paymentResult.paymentId && (
-                  <p className="text-xs text-muted-foreground">
-                    ID do pagamento: {paymentResult.paymentId}
-                  </p>
+                  <p className="text-xs text-muted-foreground">ID: {paymentResult.paymentId}</p>
                 )}
-                <Button
-                  className="mt-6 bg-gradient-to-r from-emerald-500 to-teal-600"
-                  onClick={() => { unmountBrick(); onSuccessRef.current(); }}
-                >
-                  <CheckCircle2 className="w-4 h-4 mr-2" />
-                  Continuar
+                <Button className="mt-6 bg-gradient-to-r from-emerald-500 to-teal-600" onClick={() => { unmountBrick(); onSuccessRef.current(); }}>
+                  <CheckCircle2 className="w-4 h-4 mr-2" /> Continuar
                 </Button>
               </div>
             ) : paymentResult.status === 'pending' ? (
@@ -450,18 +521,9 @@ export default function MercadoPagoCheckout({
                   <Clock className="w-10 h-10 text-amber-400" />
                 </div>
                 <p className="text-lg font-bold text-foreground mb-1">Pagamento Pendente</p>
-                <p className="text-sm text-muted-foreground mb-2">
-                  Seu pagamento esta sendo processado. A assinatura sera ativada automaticamente apos a confirmacao.
-                </p>
-                <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 mb-4">
-                  Aguardando confirmacao
-                </Badge>
-                <div className="mt-4">
-                  <Button variant="outline" onClick={handleClose}>
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Voltar
-                  </Button>
-                </div>
+                <p className="text-sm text-muted-foreground mb-4">A assinatura sera ativada automaticamente.</p>
+                <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 mb-4">Aguardando confirmacao</Badge>
+                <div className="mt-4"><Button variant="outline" onClick={handleClose}><ArrowLeft className="w-4 h-4 mr-2" /> Voltar</Button></div>
               </div>
             ) : paymentResult.status === 'rejected' ? (
               <div className="text-center">
@@ -469,18 +531,10 @@ export default function MercadoPagoCheckout({
                   <XCircle className="w-10 h-10 text-red-400" />
                 </div>
                 <p className="text-lg font-bold text-foreground mb-1">Pagamento Recusado</p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  O pagamento nao foi aprovado. Verifique os dados do cartao ou tente outro metodo de pagamento.
-                </p>
+                <p className="text-sm text-muted-foreground mb-4">Verifique os dados ou tente outro metodo.</p>
                 <div className="flex gap-2 justify-center">
-                  <Button variant="outline" onClick={handleClose}>
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Voltar
-                  </Button>
-                  <Button className="bg-gradient-to-r from-amber-500 to-orange-600" onClick={handleRetry}>
-                    <CreditCard className="w-4 h-4 mr-2" />
-                    Tentar Novamente
-                  </Button>
+                  <Button variant="outline" onClick={handleClose}><ArrowLeft className="w-4 h-4 mr-2" /> Voltar</Button>
+                  <Button className="bg-gradient-to-r from-amber-500 to-orange-600" onClick={handleRetry}><CreditCard className="w-4 h-4 mr-2" /> Tentar Novamente</Button>
                 </div>
               </div>
             ) : (
@@ -489,15 +543,50 @@ export default function MercadoPagoCheckout({
                   <Clock className="w-10 h-10 text-amber-400" />
                 </div>
                 <p className="text-lg font-bold text-foreground mb-1">Pagamento em Analise</p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Seu pagamento esta em analise. Voce recebera uma atualizacao em breve.
-                </p>
-                <Button variant="outline" onClick={handleClose}>
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Voltar
-                </Button>
+                <p className="text-sm text-muted-foreground mb-4">Voce recebera uma atualizacao em breve.</p>
+                <Button variant="outline" onClick={handleClose}><ArrowLeft className="w-4 h-4 mr-2" /> Voltar</Button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* SDK Failed — with fallback */}
+        {step === 'sdk_failed' && (
+          <div className="py-6 space-y-4">
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="w-10 h-10 text-amber-400" />
+              </div>
+              <p className="text-lg font-bold text-foreground mb-1">Nao foi possivel carregar o formulario</p>
+              <p className="text-sm text-muted-foreground mb-4">{errorMessage}</p>
+            </div>
+
+            {/* Show status log */}
+            {statusLog.length > 0 && (
+              <div className="p-3 rounded-lg bg-muted/30 border border-border">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Log do processo:</p>
+                <StatusLogView />
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="space-y-2">
+              <Button className="w-full bg-gradient-to-r from-amber-500 to-orange-600" onClick={handleExternalCheckout}>
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Pagar no site do MercadoPago
+              </Button>
+              <p className="text-xs text-muted-foreground text-center">
+                Abre o checkout oficial do MercadoPago em uma nova aba
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={handleRetry}>
+                  <RefreshCw className="w-4 h-4 mr-2" /> Tentar Brick
+                </Button>
+                <Button variant="outline" className="flex-1" onClick={handleClose}>
+                  <ArrowLeft className="w-4 h-4 mr-2" /> Voltar
+                </Button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -510,47 +599,42 @@ export default function MercadoPagoCheckout({
               </div>
               <p className="text-lg font-bold text-foreground mb-2">MercadoPago nao configurado</p>
               <p className="text-sm text-muted-foreground mb-4">
-                Para processar pagamentos, o administrador precisa configurar as credenciais do MercadoPago.
+                O administrador precisa configurar as credenciais do MercadoPago.
               </p>
               <div className="p-4 rounded-lg bg-muted/50 border border-border mb-4 text-left">
                 <p className="text-sm font-medium text-foreground mb-2">Como configurar:</p>
                 <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
-                  <li>Acesse a aba <strong className="text-foreground">CONFIG SAAS</strong> no menu lateral</li>
-                  <li>Role ate a secao <strong className="text-foreground">Mercado Pago</strong></li>
-                  <li>Preencha o <strong className="text-foreground">Access Token</strong> (producao ou sandbox)</li>
-                  <li>Preencha a <strong className="text-foreground">Public Key</strong></li>
-                  <li>Clique em <strong className="text-foreground">Salvar Configuracoes</strong></li>
+                  <li>Acesse <strong className="text-foreground">CONFIG SAAS</strong></li>
+                  <li>Role ate <strong className="text-foreground">Mercado Pago</strong></li>
+                  <li>Preencha <strong className="text-foreground">Access Token</strong> e <strong className="text-foreground">Public Key</strong></li>
+                  <li>Clique em <strong className="text-foreground">Salvar</strong></li>
                 </ol>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Obtenha as credenciais em:{' '}
-                  <span className="text-amber-400 break-all">
-                    mercadopago.com.br/developers/panel/credentials
-                  </span>
-                </p>
               </div>
-              <Button variant="outline" onClick={handleClose}>
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Voltar
-              </Button>
+              <Button variant="outline" onClick={handleClose}><ArrowLeft className="w-4 h-4 mr-2" /> Voltar</Button>
             </div>
           </div>
         )}
 
-        {/* Error */}
+        {/* Generic Error */}
         {step === 'error' && (
-          <div className="py-8 text-center">
-            <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4">
-              <XCircle className="w-10 h-10 text-red-400" />
+          <div className="py-8 space-y-4">
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4">
+                <XCircle className="w-10 h-10 text-red-400" />
+              </div>
+              <p className="text-lg font-bold text-foreground mb-2">Erro no Pagamento</p>
+              <p className="text-sm text-muted-foreground">{errorMessage}</p>
             </div>
-            <p className="text-lg font-bold text-foreground mb-2">Erro no Pagamento</p>
-            <p className="text-sm text-muted-foreground mb-6">{errorMessage}</p>
+            {statusLog.length > 0 && (
+              <div className="p-3 rounded-lg bg-muted/30 border border-border">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Log:</p>
+                <StatusLogView />
+              </div>
+            )}
             <div className="flex gap-2 justify-center">
-              <Button variant="outline" onClick={handleClose}>
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Voltar
-              </Button>
+              <Button variant="outline" onClick={handleClose}><ArrowLeft className="w-4 h-4 mr-2" /> Voltar</Button>
               <Button className="bg-gradient-to-r from-amber-500 to-orange-600" onClick={handleRetry}>
-                Tentar Novamente
+                <CreditCard className="w-4 h-4 mr-2" /> Tentar Novamente
               </Button>
             </div>
           </div>
