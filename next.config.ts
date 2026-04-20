@@ -9,6 +9,15 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
   },
+  // Build ID inclui a versão do app para rastreabilidade
+  generateBuildId: async () => {
+    try {
+      const { VERSION_STRING } = await import('./src/lib/version');
+      return `leituras-${VERSION_STRING}-${Date.now().toString(36)}`;
+    } catch {
+      return `leituras-${Date.now().toString(36)}`;
+    }
+  },
 };
 
 export default nextConfig;
