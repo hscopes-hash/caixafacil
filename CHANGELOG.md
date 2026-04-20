@@ -4,6 +4,10 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 
 ---
 
+## [v2.25.10.1] - 2026-04-20
+
+v2.25.10.1 - Build: versao exibida automaticamente em cada build (prebuild + build ID com versao)
+
 ## [v2.25.10.0] - 2026-04-20
 
 v2.25.10.0 - Site comercial: landing page completa em /site (dark theme, amber/gold)
