@@ -417,20 +417,33 @@ export default function MercadoPagoCheckout({
                 }
               },
               onError: (error: any) => {
-                log('Erro no formulario: ' + (error?.message || 'desconhecido'));
+                if (!mountedRef.current) return;
+                const msg = error?.message || JSON.stringify(error) || 'desconhecido';
+                log('Erro no formulario: ' + msg);
                 console.error('[MP Brick Error]', error);
+                // Se o erro acontecer antes do brick ficar pronto, mostra fallback
+                if (!brickReady) {
+                  setStep('sdk_failed');
+                  setErrorMessage('Erro ao carregar formulario: ' + msg);
+                  stopElapsed();
+                  unmountBrick();
+                }
               },
             },
           },
         );
 
-        // Safety timeout: if onReady doesn't fire in 30 seconds
+        // Safety timeout: if onReady doesn't fire in 15 seconds, show fallback
         timerRef.current = setTimeout(() => {
           if (!mountedRef.current) return;
           if (!brickReady) {
-            log('O formulario esta demorando mais que o esperado...');
+            log('O formulario nao carregou em 15s. Use o checkout externo.', true);
+            setStep('sdk_failed');
+            setErrorMessage('O formulario embutido demorou demais para carregar. Use o checkout externo como alternativa.');
+            stopElapsed();
+            unmountBrick();
           }
-        }, 30000);
+        }, 15000);
       } catch (error: unknown) {
         console.error('[MP Brick Init Error]', error);
         if (!mountedRef.current) return;
@@ -708,8 +721,21 @@ export default function MercadoPagoCheckout({
                   <p className="text-sm font-semibold text-foreground">Renderizando formulario de pagamento...</p>
                   <p className="text-xs text-muted-foreground">O MercadoPago esta preparando o formulario</p>
                   <ElapsedTimer />
+                  {elapsedSeconds > 10 && (
+                    <p className="text-xs text-amber-400 mt-1">Se nao carregar em breve, o checkout externo estara disponivel</p>
+                  )}
                 </div>
                 {statusLog.length > 0 && <StatusLogView compact />}
+                {elapsedSeconds >= 8 && (
+                  <Button
+                    variant="outline"
+                    className="w-full border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                    onClick={handleExternalCheckout}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Pagar no site do MercadoPago
+                  </Button>
+                )}
               </div>
             )}
 
