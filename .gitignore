@@ -62,3 +62,4 @@ agent-ctx/
 worklog.md
 # JuiceFS config file
 .config
+.env*.local
