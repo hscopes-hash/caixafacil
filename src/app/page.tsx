@@ -6553,7 +6553,7 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
           </div>
 
           <a
-            href="https://www.mercadopago.com.br/developers/panel/credentials"
+            href="https://www.mercadopago.com.br/developers/panel/app"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 text-xs text-sky-500 hover:text-sky-400 transition-colors"
