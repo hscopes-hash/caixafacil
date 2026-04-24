@@ -870,7 +870,7 @@ function LoginPage() {
 // DASHBOARD COMPONENT
 // ============================================
 function DashboardPage({ data, onNavigate }: { data: DashboardData | null; onNavigate: (tab: string) => void }) {
-  if (!data) return null;
+  if (!data?.clientes || !data?.maquinas || !data?.financeiro) return null;
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -8010,10 +8010,21 @@ export default function App() {
     setLoadingDashboard(true);
     try {
       const res = await fetch(`/api/dashboard?empresaId=${empresa?.id}`);
+      if (!res.ok) {
+        console.error('Dashboard API error:', res.status);
+        setDashboardData(null);
+        return;
+      }
       const data = await res.json();
-      setDashboardData(data);
+      if (data && data.clientes && data.maquinas && data.financeiro) {
+        setDashboardData(data);
+      } else {
+        console.error('Dashboard data missing expected fields');
+        setDashboardData(null);
+      }
     } catch (error) {
       console.error('Erro ao carregar dashboard');
+      setDashboardData(null);
     } finally {
       setLoadingDashboard(false);
     }
