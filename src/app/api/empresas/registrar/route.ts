@@ -82,10 +82,10 @@ export async function POST(request: NextRequest) {
       empresa: novaEmpresa,
       token,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Erro ao registrar empresa:', error);
     return NextResponse.json(
-      { error: 'Erro interno do servidor', detail: error?.message || String(error), code: error?.code || 'UNKNOWN' },
+      { error: 'Erro interno do servidor' },
       { status: 500 }
     );
   }
