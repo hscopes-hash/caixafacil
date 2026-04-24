@@ -5,35 +5,46 @@ import { useEffect } from 'react';
 export function PWARegister() {
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      navigator.serviceWorker
-        .register('/sw.js', { scope: '/' })
-        .then((registration) => {
-          console.log('SW registrado:', registration.scope);
+      // First, unregister any existing service workers to force a clean state
+      // This prevents issues when the app was installed on a different URL
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const reg of registrations) {
+          reg.unregister();
+        }
+      });
 
-          // Check for updates every time the page loads
-          registration.update();
+      // Then register the fresh service worker after a short delay
+      setTimeout(() => {
+        navigator.serviceWorker
+          .register('/sw.js', { scope: '/' })
+          .then((registration) => {
+            console.log('SW registrado:', registration.scope);
 
-          // Also check periodically every 5 minutes
-          setInterval(() => {
+            // Check for updates every time the page loads
             registration.update();
-          }, 5 * 60 * 1000);
 
-          // When a new SW is installed, reload the page to get fresh content
-          registration.addEventListener('updatefound', () => {
-            const newWorker = registration.installing;
-            if (newWorker) {
-              newWorker.addEventListener('statechange', () => {
-                if (newWorker.state === 'activated') {
-                  // Reload to get the new version
-                  window.location.reload();
-                }
-              });
-            }
+            // Also check periodically every 5 minutes
+            setInterval(() => {
+              registration.update();
+            }, 5 * 60 * 1000);
+
+            // When a new SW is installed, reload the page to get fresh content
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing;
+              if (newWorker) {
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'activated') {
+                    // Reload to get the new version
+                    window.location.reload();
+                  }
+                });
+              }
+            });
+          })
+          .catch((error) => {
+            console.log('SW falhou:', error);
           });
-        })
-        .catch((error) => {
-          console.log('SW falhou:', error);
-        });
+      }, 1000);
     }
   }, []);
 

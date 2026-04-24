@@ -1,4 +1,4 @@
-const CACHE_NAME = 'leituras-oficial-v3';
+const CACHE_NAME = 'leituras-oficial-v4';
 
 // Domains that should NEVER be intercepted by the service worker
 // (MercadoPago and similar payment providers need fresh, uncached resources)
