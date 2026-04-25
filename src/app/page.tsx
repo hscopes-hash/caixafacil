@@ -4883,10 +4883,9 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
                   onChange={(e) => setFormData({ ...formData, classe: parseInt(e.target.value) })}
                   className="w-full h-9 rounded-md border border-border bg-muted px-3 text-sm text-foreground"
                 >
-                  <option value={0}>Primária (aparece no dashboard)</option>
-                  <option value={1}>Secundária (não aparece no resumo)</option>
+                  <option value={0}>Primária</option>
+                  <option value={1}>Secundária</option>
                 </select>
-                <p className="text-xs text-muted-foreground">Tipos primários aparecem no resumo do dashboard</p>
               </div>
             </div>
             <DialogFooter>
