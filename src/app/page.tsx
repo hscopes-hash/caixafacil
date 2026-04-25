@@ -63,6 +63,7 @@ interface TipoMaquina {
   nomeEntrada: string;
   nomeSaida: string;
   ativo: boolean;
+  classe: number; // 0=primária, 1=secundária
   _count?: { maquinas: number };
 }
 
@@ -4718,6 +4719,7 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
     descricao: '',
     nomeEntrada: 'E',
     nomeSaida: 'S',
+    classe: 0,
   });
 
   useEffect(() => {
@@ -4793,6 +4795,7 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
       descricao: '',
       nomeEntrada: 'E',
       nomeSaida: 'S',
+      classe: 0,
     });
     setTipoEditando(null);
   };
@@ -4803,6 +4806,7 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
       descricao: tipo.descricao,
       nomeEntrada: tipo.nomeEntrada || 'E',
       nomeSaida: tipo.nomeSaida || 'S',
+      classe: tipo.classe ?? 0,
     });
     setDialogOpen(true);
   };
@@ -4866,6 +4870,18 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
                   <p className="text-xs text-muted-foreground">Label do campo de saída</p>
                 </div>
               </div>
+              <div className="space-y-2">
+                <Label>Classe</Label>
+                <select
+                  value={formData.classe}
+                  onChange={(e) => setFormData({ ...formData, classe: parseInt(e.target.value) })}
+                  className="w-full h-9 rounded-md border border-border bg-muted px-3 text-sm text-foreground"
+                >
+                  <option value={0}>Primária (aparece no dashboard)</option>
+                  <option value={1}>Secundária (não aparece no resumo)</option>
+                </select>
+                <p className="text-xs text-muted-foreground">Tipos primários aparecem no resumo do dashboard</p>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
@@ -4899,6 +4915,9 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-foreground">{tipo.descricao}</p>
+                      <Badge variant={tipo.classe === 0 ? 'default' : 'secondary'} className={tipo.classe === 0 ? 'bg-emerald-600 text-white' : ''}>
+                        {tipo.classe === 0 ? 'Primária' : 'Secundária'}
+                      </Badge>
                       {!tipo.ativo && (
                         <Badge variant="secondary">Inativo</Badge>
                       )}

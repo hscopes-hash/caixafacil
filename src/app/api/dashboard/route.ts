@@ -43,10 +43,11 @@ export async function GET(request: NextRequest) {
       },
     }) : 0;
 
-    // Máquinas por tipo - usar findMany ao invés de groupBy
+    // Máquinas por tipo - apenas tipos primários (classe=0) para o resumo do dashboard
     const maquinasComTipo = clienteIds.length > 0 ? await db.maquina.findMany({
       where: {
         clienteId: { in: clienteIds },
+        tipo: { classe: 0 },
       },
       select: {
         tipoId: true,

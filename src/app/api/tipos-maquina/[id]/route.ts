@@ -43,7 +43,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { descricao, nomeEntrada, nomeSaida, ativo } = body;
+    const { descricao, nomeEntrada, nomeSaida, ativo, classe } = body;
 
     const tipo = await db.tipoMaquina.update({
       where: { id },
@@ -52,6 +52,7 @@ export async function PUT(
         nomeEntrada,
         nomeSaida,
         ativo,
+        classe: classe ?? 0,
       },
     });
 

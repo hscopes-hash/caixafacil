@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { descricao, nomeEntrada, nomeSaida, empresaId } = body;
+    const { descricao, nomeEntrada, nomeSaida, empresaId, classe } = body;
 
     if (!descricao || !empresaId) {
       return NextResponse.json(
@@ -71,6 +71,7 @@ export async function POST(request: NextRequest) {
         nomeEntrada: nomeEntrada || 'E',
         nomeSaida: nomeSaida || 'S',
         empresaId,
+        classe: classe ?? 0,
       },
     });
 
