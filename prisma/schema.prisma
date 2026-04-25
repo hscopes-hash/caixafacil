@@ -122,6 +122,7 @@ model TipoMaquina {
   nomeEntrada   String    @default("E")
   nomeSaida     String    @default("S")
   ativo         Boolean   @default(true)
+  classe        Int       @default(0) // 0=primária, 1=secundária
   empresaId     String
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
