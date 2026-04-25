@@ -1,5 +1,5 @@
 {
-  "buildCommand": "node scripts/increment-version.mjs && prisma generate && next build && node scripts/print-version.mjs",
+  "buildCommand": "prisma generate && next build && node scripts/print-version.mjs",
   "installCommand": "npm install --legacy-peer-deps",
   "framework": "nextjs",
   "regions": ["gru1"],
