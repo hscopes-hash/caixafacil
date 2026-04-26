@@ -2744,8 +2744,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
 
   // Função helper para processar arquivo de imagem e adicionar ao lote
   const processarArquivoImagem = (file: File) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
+    try {
+      const url = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => {
         const maxDim = 1280;
@@ -2767,10 +2767,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
             origem: 'LOTE',
           }]);
         }
+        URL.revokeObjectURL(url);
       };
-      img.src = reader.result as string;
-    };
-    reader.readAsDataURL(file);
+      img.onerror = () => {
+        console.error('Erro ao carregar imagem:', file.name);
+        URL.revokeObjectURL(url);
+      };
+      img.src = url;
+    } catch (err) {
+      console.error('Erro ao processar arquivo:', err);
+    }
   };
 
   const processarLote = async () => {
@@ -4177,8 +4183,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                         onChange={(event) => {
                           const files = event.target.files;
                           if (!files || files.length === 0) return;
+                          const fileArray = Array.from(files);
                           event.target.value = '';
-                          Array.from(files).forEach(file => processarArquivoImagem(file));
+                          fileArray.forEach((file) => {
+                            try { processarArquivoImagem(file); } catch (err) { console.error('Erro foto:', err); }
+                          });
                         }}
                       />
                       <Button className="w-full bg-gradient-to-r from-emerald-500 to-teal-600" asChild>
