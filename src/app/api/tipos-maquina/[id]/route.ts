@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
-// Garantir que todas as colunas extras existem (auto-migração)
-async function ensureColumns() {
-  try {
-    await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS classe INTEGER DEFAULT 0`);
-  } catch (e) { /* ignorar */ }
-  try {
-    await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS "imagemReferencia" TEXT`);
-  } catch (e) { /* ignorar */ }
-  try {
-    await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS "roiEntrada" JSONB`);
-  } catch (e) { /* ignorar */ }
-  try {
-    await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS "roiSaida" JSONB`);
-  } catch (e) { /* ignorar */ }
+// Garantir schema correto e remove colunas obsoletas
+async function ensureSchema() {
+  try { await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS classe INTEGER DEFAULT 0`); } catch (e) { /* ignorar */ }
+  try { await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina DROP COLUMN IF EXISTS "imagemReferencia"`); } catch (e) { /* ignorar */ }
+  try { await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina DROP COLUMN IF EXISTS "roiEntrada"`); } catch (e) { /* ignorar */ }
+  try { await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina DROP COLUMN IF EXISTS "roiSaida"`); } catch (e) { /* ignorar */ }
 }
 
 // Buscar tipo de máquina por ID
@@ -57,10 +49,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await ensureColumns();
+    await ensureSchema();
     const { id } = await params;
     const body = await request.json();
-    const { descricao, nomeEntrada, nomeSaida, ativo, classe, imagemReferencia, roiEntrada, roiSaida } = body;
+    const { descricao, nomeEntrada, nomeSaida, ativo, classe } = body;
 
     const tipo = await db.tipoMaquina.update({
       where: { id },
@@ -70,9 +62,6 @@ export async function PUT(
         nomeSaida,
         ativo,
         classe: classe ?? 0,
-        ...(imagemReferencia !== undefined && { imagemReferencia: imagemReferencia || null }),
-        ...(roiEntrada !== undefined && { roiEntrada }),
-        ...(roiSaida !== undefined && { roiSaida }),
       },
     });
 

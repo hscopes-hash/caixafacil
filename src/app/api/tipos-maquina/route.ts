@@ -1,29 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
-// Garantir que todas as colunas extras existem (auto-migração)
-async function ensureColumns() {
+// Garantir que a coluna classe existe e remove colunas obsoletas
+async function ensureSchema() {
   try {
     await db.$executeRawUnsafe(`
       ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS classe INTEGER DEFAULT 0
     `);
   } catch (e) { /* ignorar */ }
-  try {
-    await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS "imagemReferencia" TEXT`);
-  } catch (e) { /* ignorar */ }
-  try {
-    await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS "roiEntrada" JSONB`);
-  } catch (e) { /* ignorar */ }
-  try {
-    await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS "roiSaida" JSONB`);
-  } catch (e) { /* ignorar */ }
+  // Remover colunas de câmera/ROI (obsoletas)
+  try { await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina DROP COLUMN IF EXISTS "imagemReferencia"`); } catch (e) { /* ignorar */ }
+  try { await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina DROP COLUMN IF EXISTS "roiEntrada"`); } catch (e) { /* ignorar */ }
+  try { await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina DROP COLUMN IF EXISTS "roiSaida"`); } catch (e) { /* ignorar */ }
 }
 
 // Listar tipos de máquina
 export async function GET(request: NextRequest) {
   try {
-    // Auto-migrar colunas antes de consultar
-    await ensureColumns();
+    // Auto-migrar schema antes de consultar
+    await ensureSchema();
 
     const { searchParams } = new URL(request.url);
     const empresaId = searchParams.get('empresaId');
@@ -64,11 +59,11 @@ export async function GET(request: NextRequest) {
 // Criar novo tipo de máquina
 export async function POST(request: NextRequest) {
   try {
-    // Auto-migrar colunas antes de criar
-    await ensureColumns();
+    // Auto-migrar schema antes de criar
+    await ensureSchema();
 
     const body = await request.json();
-    const { descricao, nomeEntrada, nomeSaida, empresaId, classe, imagemReferencia, roiEntrada, roiSaida } = body;
+    const { descricao, nomeEntrada, nomeSaida, empresaId, classe } = body;
 
     if (!descricao || !empresaId) {
       return NextResponse.json(
@@ -96,9 +91,6 @@ export async function POST(request: NextRequest) {
         nomeSaida: nomeSaida || 'S',
         empresaId,
         classe: classe ?? 0,
-        imagemReferencia: imagemReferencia || null,
-        roiEntrada: roiEntrada || null,
-        roiSaida: roiSaida || null,
       },
     });
 

@@ -113,17 +113,6 @@ export async function GET() {
       // Coluna já existe, ignorar
     }
 
-    // Adicionar colunas de câmera/ROI
-    try {
-      await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS "imagemReferencia" TEXT`);
-    } catch (e) { /* ignorar */ }
-    try {
-      await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS "roiEntrada" JSONB`);
-    } catch (e) { /* ignorar */ }
-    try {
-      await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS "roiSaida" JSONB`);
-    } catch (e) { /* ignorar */ }
-
     // Criar tabela maquinas
     await db.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS maquinas (

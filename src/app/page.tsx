@@ -19,9 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import dynamic from 'next/dynamic';
 
-const RoiMarker = dynamic(() => import('@/components/RoiMarker'), { ssr: false });
 import {
   LogOut, Menu, Users, Cog, DollarSign, Settings, ChevronRight,
   Music, Circle, Gamepad2, Gift, TrendingUp, TrendingDown, Clock,
@@ -60,13 +58,6 @@ interface Cliente {
   _count?: { maquinas: number; assinaturas: number };
 }
 
-interface ROI {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
 interface TipoMaquina {
   id: string;
   descricao: string;
@@ -74,9 +65,6 @@ interface TipoMaquina {
   nomeSaida: string;
   ativo: boolean;
   classe: number; // 0=primária, 1=secundária
-  imagemReferencia?: string | null;
-  roiEntrada?: ROI | null;
-  roiSaida?: ROI | null;
   _count?: { maquinas: number };
 }
 
@@ -4733,9 +4721,6 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
     nomeEntrada: 'E',
     nomeSaida: 'S',
     classe: 0,
-    imagemReferencia: '' as string,
-    roiEntrada: null as ROI | null,
-    roiSaida: null as ROI | null,
   });
 
   useEffect(() => {
@@ -4818,9 +4803,6 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
       nomeEntrada: 'E',
       nomeSaida: 'S',
       classe: 0,
-      imagemReferencia: '',
-      roiEntrada: null,
-      roiSaida: null,
     });
     setTipoEditando(null);
   };
@@ -4832,9 +4814,6 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
       nomeEntrada: tipo.nomeEntrada || 'E',
       nomeSaida: tipo.nomeSaida || 'S',
       classe: tipo.classe ?? 0,
-      imagemReferencia: tipo.imagemReferencia || '',
-      roiEntrada: tipo.roiEntrada || null,
-      roiSaida: tipo.roiSaida || null,
     });
     setDialogOpen(true);
   };
@@ -4909,17 +4888,6 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
                   <option value={1}>Secundária</option>
                 </select>
               </div>
-              {/* Marcação de ROI para câmera */}
-              <RoiMarker
-                imagem={formData.imagemReferencia || null}
-                roiEntrada={formData.roiEntrada}
-                roiSaida={formData.roiSaida}
-                nomeEntrada={formData.nomeEntrada}
-                nomeSaida={formData.nomeSaida}
-                onEntradaChange={(roi) => setFormData((f) => ({ ...f, roiEntrada: roi }))}
-                onSaidaChange={(roi) => setFormData((f) => ({ ...f, roiSaida: roi }))}
-                onImagemChange={(img) => setFormData((f) => ({ ...f, imagemReferencia: img }))}
-              />
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>

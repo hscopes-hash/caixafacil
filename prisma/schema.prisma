@@ -123,9 +123,6 @@ model TipoMaquina {
   nomeSaida        String   @default("S")
   ativo            Boolean  @default(true)
   classe           Int      @default(0) // 0=primária, 1=secundária
-  imagemReferencia String?  // URL da imagem de referência para câmera
-  roiEntrada       Json?    // { x, y, w, h } em % (0-100) — região de interesse da entrada
-  roiSaida         Json?    // { x, y, w, h } em % (0-100) — região de interesse da saída
   empresaId        String
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
