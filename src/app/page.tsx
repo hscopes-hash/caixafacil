@@ -291,6 +291,7 @@ function LoginPage() {
       });
 
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
 
       if (!res.ok) {
         toast.error(data.error || 'Erro ao fazer login');
@@ -338,6 +339,7 @@ function LoginPage() {
       });
 
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
 
       if (!res.ok) {
         toast.error(data.error || 'Erro ao criar empresa');
@@ -365,6 +367,7 @@ function LoginPage() {
     try {
       const res = await fetch(`/api/empresas/por-email?email=${encodeURIComponent(buscarEmail.trim())}`);
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
 
       if (!res.ok) {
         toast.error(data.error || 'Erro ao buscar');
@@ -401,6 +404,7 @@ function LoginPage() {
       });
 
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
 
       if (!res.ok) {
         toast.error(data.error || 'Credenciais inválidas');
@@ -1062,6 +1066,7 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
     try {
       const res = await fetch(`/api/clientes?empresaId=${empresaId}`);
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       setClientes(data);
     } catch (error) {
       toast.error('Erro ao carregar clientes');
@@ -1446,6 +1451,7 @@ function MaquinasPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: bool
       if (filtroStatus !== 'todos') url += `&status=${filtroStatus}`;
       const res = await fetch(url);
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       setMaquinas(data);
     } catch (error) {
       toast.error('Erro ao carregar máquinas');
@@ -1458,6 +1464,7 @@ function MaquinasPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: bool
     try {
       const res = await fetch(`/api/clientes?empresaId=${empresaId}`);
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       setClientes(data);
     } catch (error) {
       console.error('Erro ao carregar clientes');
@@ -1468,6 +1475,7 @@ function MaquinasPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: bool
     try {
       const res = await fetch(`/api/tipos-maquina?empresaId=${empresaId}&ativo=true`);
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       setTipos(data);
     } catch (error) {
       console.error('Erro ao carregar tipos');
@@ -1898,6 +1906,7 @@ function UsuariosPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: bool
     try {
       const res = await fetch(`/api/usuarios?empresaId=${empresaId}`);
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       setUsuarios(data);
     } catch (error) {
       toast.error('Erro ao carregar usuários');
@@ -1923,6 +1932,7 @@ function UsuariosPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: bool
           body: JSON.stringify(dataToSend),
         });
         const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
         if (!res.ok) throw new Error(data.error || 'Erro ao atualizar usuário');
         toast.success('Usuário atualizado!');
       } else {
@@ -1932,6 +1942,7 @@ function UsuariosPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: bool
           body: JSON.stringify({ ...formData, empresaId }),
         });
         const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
         if (!res.ok) throw new Error(data.error || 'Erro ao cadastrar usuário');
         toast.success('Usuário cadastrado!');
       }
@@ -2270,6 +2281,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     try {
       const res = await fetch(`/api/clientes?empresaId=${empresaId}`);
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       setClientes(data.filter((c: Cliente) => !c.bloqueado && c.ativo));
     } catch (error) {
       toast.error('Erro ao carregar clientes');
@@ -2281,6 +2293,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     try {
       const res = await fetch(`/api/maquinas?empresaId=${empresaId}&clienteId=${clienteId}`);
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       
       const maquinasComLeitura: MaquinaLeitura[] = data.map((m: Maquina) => ({
         ...m,
@@ -2310,6 +2323,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
       const hoje = new Date().toISOString().split('T')[0];
       const res = await fetch(`/api/debitos?empresaId=${empresaId}&clienteId=${clienteSelecionado.id}&paga=false&dataMax=${hoje}`);
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       const total = Array.isArray(data) ? data.reduce((sum: number, d: any) => sum + d.valor, 0) : 0;
       setDebitosVencidos(total);
     } catch {
@@ -2631,6 +2645,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
       });
 
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
 
       if (!res.ok) {
         throw new Error(data.error || 'Erro ao extrair leitura');
@@ -3662,6 +3677,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
       });
 
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
 
       if (!res.ok) {
         throw new Error(data.error || 'Erro ao salvar leituras');
@@ -4779,6 +4795,7 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
         return;
       }
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       setTipos(Array.isArray(data) ? data : []);
     } catch (error) {
       toast.error('Erro ao carregar tipos de máquina');
@@ -4830,6 +4847,7 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
     try {
       const res = await fetch(`/api/tipos-maquina/${tipo.id}`, { method: 'DELETE' });
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       if (!res.ok) throw new Error(data.error);
       toast.success('Tipo excluído');
       loadTipos();
@@ -5028,6 +5046,7 @@ function PagamentosPage({ empresaId, isSupervisor }: { empresaId: string; isSupe
       if (filtroStatus !== 'todos') url += `&status=${filtroStatus}`;
       const res = await fetch(url);
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       setPagamentos(data);
     } catch (error) {
       toast.error('Erro ao carregar pagamentos');
@@ -5221,6 +5240,7 @@ function RelatoriosPage({ empresaId }: { empresaId: string }) {
     try {
       const res = await fetch(`/api/clientes?empresaId=${empresaId}`);
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       setClientes(data);
     } catch (error) {
       console.error('Erro ao carregar clientes');
@@ -5242,6 +5262,7 @@ function RelatoriosPage({ empresaId }: { empresaId: string }) {
 
       const res = await fetch(url);
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
 
       if (!res.ok) {
         throw new Error(data.error || 'Erro ao gerar relatório');
@@ -5532,9 +5553,11 @@ function BackupRestorePage({ empresaId, nomeEmpresa }: { empresaId: string; nome
       const res = await fetch(`/api/backup?empresaId=${empresaId}`);
       if (!res.ok) {
         const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
         throw new Error(data.error || 'Erro ao gerar backup');
       }
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
 
       setBackupInfo({
         dataBackup: data.dataBackup,
@@ -5601,6 +5624,7 @@ function BackupRestorePage({ empresaId, nomeEmpresa }: { empresaId: string; nome
       });
 
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
 
       if (!res.ok) {
         throw new Error(data.error || 'Erro ao restaurar backup');
@@ -5850,6 +5874,7 @@ function GestaoEmpresasPage({ adminEmail }: { adminEmail: string }) {
     try {
       const res = await fetch(`/api/empresas/gestao?adminEmail=${adminEmail}`);
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       if (res.ok) {
         setEmpresas(data);
       } else {
@@ -6346,6 +6371,7 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
         body: JSON.stringify({ empresaId, llmApiKey, llmModel, llmApiKeyGemini: newKeyGemini, llmApiKeyGlm: newKeyGlm, llmApiKeyOpenrouter: newKeyOpenrouter, mercadopagoAccessToken: mpAccessToken, mercadopagoPublicKey: mpPublicKey }),
       });
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar configurações');
       updateEmpresa({ llmApiKey, llmModel, llmApiKeyGemini: newKeyGemini, llmApiKeyGlm: newKeyGlm, llmApiKeyOpenrouter: newKeyOpenrouter });
       setSavedKeyGemini(newKeyGemini);
@@ -6371,6 +6397,7 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
         body: JSON.stringify({ empresaId, llmModel, llmApiKey }),
       });
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       const tempoMs = Math.round(performance.now() - inicio);
       setResultadoTeste({
         sucesso: res.ok,
@@ -6752,6 +6779,7 @@ function AssinaturaTab() {
         });
         if (res.ok) {
           const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
           if (data.assinatura?.status === 'ATIVA') {
             // Webhook ativou a assinatura!
             setStatusData(data);
@@ -6784,6 +6812,7 @@ function AssinaturaTab() {
         throw new Error(errorData?.error || `Erro HTTP ${res.status}`);
       }
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       setStatusData(data);
     } catch (error) {
       console.error('Erro ao carregar status da assinatura:', error);
@@ -7444,6 +7473,7 @@ function DebitosPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string; 
     try {
       const res = await fetch(`/api/clientes?empresaId=${empresaId}`);
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       setClientes(data.filter((c: Cliente) => !c.bloqueado && c.ativo));
     } catch (error) {
       toast.error('Erro ao carregar clientes');
@@ -7461,6 +7491,7 @@ function DebitosPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string; 
         return;
       }
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       setDebitos(Array.isArray(data) ? data : []);
     } catch (error) {
       toast.error('Erro ao carregar débitos');
@@ -7617,9 +7648,11 @@ function DebitosPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string; 
       });
 
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
 
       if (!res.ok) {
-        throw new Error(data.error || 'Erro ao comunicar com IA');
+        const detalhe = data.detalhe ? ' (' + data.detalhe.substring(0, 100) + ')' : '';
+        throw new Error((data.error || 'Erro ao comunicar com IA') + detalhe);
       }
 
       const aiMsg: ChatMessage = {
@@ -8108,6 +8141,7 @@ export default function App() {
         return;
       }
       const data = await res.json();
+      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       if (data && data.clientes && data.maquinas && data.financeiro) {
         setDashboardData(data);
       } else {
