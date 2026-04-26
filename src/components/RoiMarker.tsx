@@ -241,7 +241,7 @@ export default function RoiMarker({
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
-                className="cursor-crosshair w-full"
+                className="cursor-crosshair block mx-auto"
               />
               <button
                 onClick={() => onImagemChange('')}
