@@ -1,4 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+#!/usr/bin/env python3
+# Fix script for chat-ia/route.ts
+
+new_content = r'''import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { generateZhipuToken, getApiKeyForModel, detectProvider } from '@/lib/zhipu-auth';
 
@@ -326,3 +329,9 @@ ${debitosContext}`;
     );
   }
 }
+'''
+
+with open('/home/z/caixafacil/src/app/api/debitos/chat-ia/route.ts', 'w') as f:
+    f.write(new_content)
+
+print('chat-ia route.ts atualizado com sucesso')
