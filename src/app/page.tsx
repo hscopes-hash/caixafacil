@@ -1498,7 +1498,10 @@ function MaquinasPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: bool
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(dataToSend),
         });
-        if (!res.ok) throw new Error();
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.error || 'Erro ao atualizar');
+        }
         toast.success('Máquina atualizada!');
       } else {
         const res = await fetch('/api/maquinas', {
@@ -1506,14 +1509,18 @@ function MaquinasPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: bool
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(dataToSend),
         });
-        if (!res.ok) throw new Error();
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.error || 'Erro ao salvar');
+        }
         toast.success('Máquina cadastrada!');
       }
       setDialogOpen(false);
       resetForm();
       loadMaquinas();
-    } catch {
-      toast.error('Erro ao salvar máquina');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Erro ao salvar máquina';
+      toast.error(message);
     }
   };
 

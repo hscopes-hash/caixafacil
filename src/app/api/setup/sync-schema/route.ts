@@ -113,6 +113,10 @@ export async function GET() {
       // Coluna já existe, ignorar
     }
 
+    // Criar enums necessários para a tabela maquinas
+    try { await db.$executeRawUnsafe(`CREATE TYPE "StatusMaquina" AS ENUM ('ATIVA', 'INATIVA', 'MANUTENCAO', 'VENDIDA')`); } catch (e) { /* já existe */ }
+    try { await db.$executeRawUnsafe(`CREATE TYPE "TipoMoeda" AS ENUM ('M001', 'M005', 'M010', 'M025')`); } catch (e) { /* já existe */ }
+
     // Criar tabela maquinas
     await db.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS maquinas (

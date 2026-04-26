@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
+// Garantir que os enums existem (auto-migração)
+async function ensureEnums() {
+  try { await db.$executeRawUnsafe(`CREATE TYPE "StatusMaquina" AS ENUM ('ATIVA', 'INATIVA', 'MANUTENCAO', 'VENDIDA')`); } catch (e) { /* já existe */ }
+  try { await db.$executeRawUnsafe(`CREATE TYPE "TipoMoeda" AS ENUM ('M001', 'M005', 'M010', 'M025')`); } catch (e) { /* já existe */ }
+}
+
 // Listar máquinas
 export async function GET(request: NextRequest) {
   try {
+    await ensureEnums();
     const { searchParams } = new URL(request.url);
     const empresaId = searchParams.get('empresaId');
     const clienteId = searchParams.get('clienteId');
@@ -57,6 +64,7 @@ export async function GET(request: NextRequest) {
 // Criar nova máquina
 export async function POST(request: NextRequest) {
   try {
+    await ensureEnums();
     const body = await request.json();
     const {
       codigo,
