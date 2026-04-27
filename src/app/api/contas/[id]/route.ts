@@ -52,9 +52,9 @@ export async function PUT(
 
     if (descricao !== undefined) updateData.descricao = descricao;
     if (valor !== undefined) updateData.valor = valor;
-    if (data) updateData.data = new Date(data);
-    else if (dataVencimento) updateData.data = new Date(dataVencimento);
-    if (dataPagamento) updateData.dataPagamento = new Date(dataPagamento);
+    if (data) updateData.data = new Date(data + 'T12:00:00');
+    else if (dataVencimento) updateData.data = new Date(dataVencimento + 'T12:00:00');
+    if (dataPagamento) updateData.dataPagamento = new Date(dataPagamento + 'T12:00:00');
     if (paga !== undefined) updateData.paga = paga;
     if (observacoes !== undefined) updateData.observacoes = observacoes;
     if (tipo !== undefined) updateData.tipo = parseInt(String(tipo), 10);

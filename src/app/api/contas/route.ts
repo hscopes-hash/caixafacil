@@ -96,8 +96,8 @@ export async function POST(request: NextRequest) {
       data: {
         descricao,
         valor,
-        data: new Date(dataConta),
-        dataPagamento: dataPagamento ? new Date(dataPagamento) : undefined,
+        data: new Date(dataConta + 'T12:00:00'),
+        dataPagamento: dataPagamento ? new Date(dataPagamento + 'T12:00:00') : undefined,
         paga: paga === true || paga === 'true',
         observacoes,
         tipo: tipo !== undefined ? parseInt(String(tipo), 10) : 1,
