@@ -7792,34 +7792,58 @@ function FluxoCaixaPage({ empresaId, isAdmin, isSupervisor }: { empresaId: strin
       {clienteSelecionado && contas.length > 0 && (
         <Card className="border-0 shadow-lg bg-gradient-to-r from-amber-500/10 to-orange-600/10">
           <CardContent className="p-4 space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-green-400">A Receber:</span>
-              <span className="font-medium text-green-400">{formatCurrency(totalReceber)}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">  Recebido:</span>
-              <span className="text-sm text-muted-foreground">{formatCurrency(totalReceberPago)}</span>
-            </div>
-            <Separator className="bg-border" />
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-red-400">A Pagar:</span>
-              <span className="font-medium text-red-400">{formatCurrency(totalPagar)}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">  Pago:</span>
-              <span className="text-sm text-muted-foreground">{formatCurrency(totalPagarPago)}</span>
-            </div>
-            <Separator className="bg-border" />
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-foreground">Saldo:</span>
-              <span className={`font-bold text-lg ${saldo >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {formatCurrency(saldo)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-amber-400">Total Pendente:</span>
-              <span className="font-bold text-amber-400">{formatCurrency(totalPendente)}</span>
-            </div>
+            {filtroTipo !== 0 && (
+              <>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-green-400">A Receber:</span>
+                  <span className="font-medium text-green-400">{formatCurrency(totalReceber)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">  Recebido:</span>
+                  <span className="text-sm text-muted-foreground">{formatCurrency(totalReceberPago)}</span>
+                </div>
+                {filtroTipo === null && <Separator className="bg-border" />}
+              </>
+            )}
+            {filtroTipo !== 1 && (
+              <>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-red-400">A Pagar:</span>
+                  <span className="font-medium text-red-400">{formatCurrency(totalPagar)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">  Pago:</span>
+                  <span className="text-sm text-muted-foreground">{formatCurrency(totalPagarPago)}</span>
+                </div>
+                {filtroTipo === null && <Separator className="bg-border" />}
+              </>
+            )}
+            {filtroTipo === null && (
+              <>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-foreground">Saldo:</span>
+                  <span className={`font-bold text-lg ${saldo >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {formatCurrency(saldo)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-amber-400">Total Pendente:</span>
+                  <span className="font-bold text-amber-400">{formatCurrency(totalPendente)}</span>
+                </div>
+              </>
+            )}
+            {filtroTipo === 1 && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-green-400">Pendente a Receber:</span>
+                <span className="font-bold text-green-400">{formatCurrency(totalReceberPendente)}</span>
+              </div>
+            )}
+            {filtroTipo === 0 && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-red-400">Pendente a Pagar:</span>
+                <span className="font-bold text-red-400">{formatCurrency(totalPagarPendente)}</span>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
