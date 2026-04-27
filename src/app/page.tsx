@@ -7418,6 +7418,7 @@ function FluxoCaixaPage({ empresaId, isAdmin, isSupervisor }: { empresaId: strin
   const [saving, setSaving] = useState(false);
   const [editingConta, setEditingConta] = useState<ContaItem | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const formCardRef = useRef<HTMLDivElement>(null);
 
   // Form state
   const [formDescricao, setFormDescricao] = useState('');
@@ -7568,6 +7569,10 @@ function FluxoCaixaPage({ empresaId, isAdmin, isSupervisor }: { empresaId: strin
     setFormObservacoes(conta.observacoes || '');
     setFormTipo(conta.tipo);
     setShowForm(true);
+    // Rolar ate o card de edicao apos renderizar
+    setTimeout(() => {
+      formCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   };
 
   const handleDelete = async (id: string) => {
@@ -7695,7 +7700,7 @@ function FluxoCaixaPage({ empresaId, isAdmin, isSupervisor }: { empresaId: strin
 
       {/* Add/Edit Form */}
       {showForm && (
-        <Card className="border-0 shadow-lg bg-card">
+        <Card ref={formCardRef} className="border-0 shadow-lg bg-card">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg text-foreground">
               {editingConta ? 'Editar Conta' : 'Nova Conta'}
