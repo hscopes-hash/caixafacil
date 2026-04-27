@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    @page {
+      size: 794px 1123px;
+      margin: 0;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 794px;
+      height: 1123px;
+      background: #eff0f0;
+      font-family: 'Inter', 'Noto Sans SC', sans-serif;
+    }
+    .cover {
+      position: relative;
+      width: 794px;
+      height: 1123px;
+      overflow: hidden;
+    }
+
+    /* Layer 0 - Background */
+    .bg-layer {
+      position: absolute;
+      inset: 0;
+      background: #ffffff;
+      z-index: 0;
+    }
+
+    /* Layer 1 - Background decorative */
+    .decor-layer {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      z-index: 1;
+    }
+    .color-dash {
+      position: absolute;
+      left: 0.12 * 794px;  /* 95px */
+      top: 0.15 * 1123px;  /* 168px */
+      width: 50px;
+      height: 5px;
+      background: #c8233e;
+    }
+    .right-watermark {
+      position: absolute;
+      right: 30px;
+      top: 50%;
+      transform: translateY(-50%) rotate(90deg);
+      font-size: 140pt;
+      font-weight: 900;
+      color: #4d626d;
+      opacity: 0.03;
+      white-space: nowrap;
+      letter-spacing: 20px;
+      font-family: 'Inter', sans-serif;
+    }
+    .grid-lines {
+      position: absolute;
+      inset: 0;
+    }
+    .grid-lines .h-line {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      height: 0.5px;
+      background: #4d626d;
+      opacity: 0.04;
+    }
+    .grid-lines .v-line {
+      position: absolute;
+      top: 0;
+      height: 100%;
+      width: 0.5px;
+      background: #4d626d;
+      opacity: 0.04;
+    }
+
+    /* Layer 2 - Structure */
+    .structure-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+    }
+    .meta-accent-line {
+      position: absolute;
+      left: 0.12 * 794px;
+      top: 700px;
+      width: 2px;
+      height: 60px;
+      background: #4d626d;
+      opacity: 0.5;
+    }
+
+    /* Layer 3 - Content */
+    .content-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+    }
+    .kicker {
+      position: absolute;
+      left: 95px;
+      top: 185px;
+      font-size: 11pt;
+      font-weight: 400;
+      letter-spacing: 4pt;
+      text-transform: uppercase;
+      color: #737a7d;
+      opacity: 0.8;
+    }
+    .hero-title {
+      position: absolute;
+      left: 95px;
+      top: 260px;
+      font-size: 54pt;
+      font-weight: 900;
+      line-height: 1.1;
+      color: #171919;
+      max-width: 580px;
+    }
+    .hero-title .brand {
+      color: #c8233e;
+    }
+    .summary-block {
+      position: absolute;
+      left: 95px;
+      top: 460px;
+      font-size: 14pt;
+      font-weight: 300;
+      line-height: 1.7;
+      color: #171919;
+      max-width: 480px;
+      opacity: 0.75;
+    }
+    .meta-info {
+      position: absolute;
+      left: 115px;
+      top: 710px;
+      font-size: 12pt;
+      font-weight: 400;
+      line-height: 2.0;
+      color: #171919;
+      opacity: 0.7;
+    }
+    .meta-info strong {
+      font-weight: 600;
+    }
+    .footer-info {
+      position: absolute;
+      right: 0.12 * 794px;
+      bottom: 0.10 * 1123px;
+      font-size: 10pt;
+      font-weight: 400;
+      letter-spacing: 2pt;
+      text-transform: uppercase;
+      color: #737a7d;
+      opacity: 0.5;
+    }
+    .version-tag {
+      position: absolute;
+      left: 95px;
+      bottom: 0.10 * 1123px;
+      font-size: 10pt;
+      font-weight: 600;
+      color: #c8233e;
+      letter-spacing: 1pt;
+    }
+  </style>
+</head>
+<body>
+  <div class="cover">
+    <div class="bg-layer"></div>
+
+    <div class="decor-layer">
+      <div class="color-dash"></div>
+      <div class="right-watermark">CAIXAFACIL</div>
+      <div class="grid-lines">
+        <div class="h-line" style="top: 20%;"></div>
+        <div class="h-line" style="top: 40%;"></div>
+        <div class="h-line" style="top: 60%;"></div>
+        <div class="h-line" style="top: 80%;"></div>
+        <div class="v-line" style="left: 30%;"></div>
+        <div class="v-line" style="left: 60%;"></div>
+      </div>
+    </div>
+
+    <div class="structure-layer">
+      <div class="meta-accent-line"></div>
+    </div>
+
+    <div class="content-layer">
+      <div class="kicker">Manual do Operador</div>
+      <div class="hero-title"><span class="brand">Caixa</span>Facil</div>
+      <div class="summary-block">
+        Sistema completo de gestao para maquinas de entretenimento.
+        Dashboard financeiro, cobranca por leitura de equipamentos,
+        controle de clientes e assistente com inteligencia artificial.
+      </div>
+      <div class="meta-info">
+        <strong>Plataforma:</strong> Web / Mobile (PWA)<br>
+        <strong>Linguagem:</strong> Portugues Brasileiro<br>
+        <strong>Ultima atualizacao:</strong> Abril 2026
+      </div>
+      <div class="footer-info">Documento de Uso Interno</div>
+      <div class="version-tag">v2.25.10</div>
+    </div>
+  </div>
+</body>
+</html>
