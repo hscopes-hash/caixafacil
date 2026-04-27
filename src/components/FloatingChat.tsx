@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuthStore } from '@/stores/auth-store';
-import { X, Send, Sparkles, Minimize2, Volume2, VolumeX } from 'lucide-react';
+import { X, Send, Sparkles, Minimize2, Volume2, VolumeX, Mic, MicOff } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 interface ChatMessage {
@@ -10,6 +10,7 @@ interface ChatMessage {
   content: string;
 }
 
+// ==================== TTS - Text to Speech ====================
 function speak(text: string): void {
   if (typeof window === 'undefined' || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
@@ -27,6 +28,14 @@ function speak(text: string): void {
   window.speechSynthesis.speak(utterance);
 }
 
+// ==================== STT - Speech to Text ====================
+type SpeechRecognitionStatus = 'idle' | 'listening' | 'processing';
+
+function getSpeechRecognition(): (typeof window.SpeechRecognition) | null {
+  if (typeof window === 'undefined') return null;
+  return window.SpeechRecognition || (window as any).webkitSpeechRecognition || null;
+}
+
 export default function FloatingChat() {
   const { empresa } = useAuthStore();
   const [open, setOpen] = useState(false);
@@ -35,8 +44,10 @@ export default function FloatingChat() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
+  const [micStatus, setMicStatus] = useState<SpeechRecognitionStatus>('idle');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   // Carregar vozes disponiveis
   useEffect(() => {
@@ -48,11 +59,15 @@ export default function FloatingChat() {
     }
   }, []);
 
-  // Limpar fala ao fechar o chat
+  // Limpar fala e microfone ao fechar o chat
   useEffect(() => {
-    if (!open && typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
+    if (!open) {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      stopListening();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const scrollToBottom = useCallback(() => {
@@ -73,8 +88,90 @@ export default function FloatingChat() {
     }
   }, [open, minimized]);
 
+  // ==================== Microfone ====================
+  const stopListening = useCallback(() => {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
+      recognitionRef.current = null;
+    }
+    setMicStatus('idle');
+  }, []);
+
+  const startListening = useCallback(() => {
+    const SpeechRecognition = getSpeechRecognition();
+    if (!SpeechRecognition) {
+      setMicStatus('idle');
+      return;
+    }
+
+    // Parar TTS enquanto escuta (para nao confundir)
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'pt-BR';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => setMicStatus('listening');
+
+    recognition.onresult = (event: any) => {
+      let transcript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      setInput(transcript);
+    };
+
+    recognition.onend = () => {
+      // Se tem texto, envia automaticamente
+      if (input.trim()) {
+        setTimeout(() => {
+          setMicStatus('idle');
+        }, 300);
+      } else {
+        setMicStatus('idle');
+      }
+    };
+
+    recognition.onerror = () => setMicStatus('idle');
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  }, [input]);
+
+  const toggleMic = () => {
+    if (micStatus === 'listening') {
+      stopListening();
+    } else {
+      startListening();
+    }
+  };
+
+  // Enviar automaticamente quando para de escutar
+  useEffect(() => {
+    if (micStatus === 'idle' && input.trim() && !loading) {
+      // Pequeno delay para garantir que o input foi atualizado
+      const timer = setTimeout(() => {
+        const SpeechRecognition = getSpeechRecognition();
+        // So envia se NAO estiver mais escutando
+        if (!recognitionRef.current && input.trim() && !loading) {
+          // O usuario pode estar digitando, so envia se veio do mic
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [micStatus]);
+
+  // ==================== Enviar mensagem ====================
   const sendMessage = async () => {
     if (!input.trim() || !empresa?.id || loading) return;
+
+    // Parar microfone se estiver ativo
+    stopListening();
 
     const userMsg = input.trim();
     setInput('');
@@ -96,7 +193,6 @@ export default function FloatingChat() {
         setMessages(prev => [...prev, { role: 'assistant', content: errorText }]);
       } else {
         setMessages(prev => [...prev, { role: 'assistant', content: responseText }]);
-        // Falar a resposta se voz estiver ativada
         if (voiceOn) {
           speak(responseText);
         }
@@ -114,6 +210,9 @@ export default function FloatingChat() {
     }
     setVoiceOn(prev => !prev);
   };
+
+  // Detecta se o navegador suporta reconhecimento de voz
+  const hasSpeechRecognition = typeof window !== 'undefined' && !!getSpeechRecognition();
 
   if (!empresa?.id) return null;
 
@@ -184,9 +283,18 @@ export default function FloatingChat() {
                       <Sparkles className="w-10 h-10 mx-auto mb-3 text-amber-500/50" />
                       <p className="text-sm text-muted-foreground">Ola! Sou o assistente do CaixaFacil.</p>
                       <p className="text-xs text-muted-foreground mt-1">Posso ajudar com clientes, maquinas, fluxo de caixa e mais.</p>
-                      {voiceOn && (
-                        <p className="text-xs text-amber-500/50 mt-2">Respostas com voz ativada</p>
-                      )}
+                      <div className="flex items-center justify-center gap-3 mt-3">
+                        {voiceOn && (
+                          <span className="flex items-center gap-1 text-xs text-amber-500/50">
+                            <Volume2 className="w-3 h-3" /> Voz ativada
+                          </span>
+                        )}
+                        {hasSpeechRecognition && (
+                          <span className="flex items-center gap-1 text-xs text-amber-500/50">
+                            <Mic className="w-3 h-3" /> Microfone disponivel
+                          </span>
+                        )}
+                      </div>
                     </div>
                   )}
                   {messages.map((msg, i) => (
@@ -211,9 +319,37 @@ export default function FloatingChat() {
                 </div>
               </div>
 
+              {/* Indicador de escuta */}
+              {micStatus === 'listening' && (
+                <div className="px-3 py-2 flex items-center gap-2 text-sm text-amber-500 shrink-0">
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                    <span className="font-medium">Ouvindo...</span>
+                  </div>
+                  {input && (
+                    <span className="text-muted-foreground text-xs truncate">{input}</span>
+                  )}
+                </div>
+              )}
+
               {/* Input - sempre visivel, shrink-0 */}
               <div className="p-3 border-t border-border shrink-0 bg-card">
                 <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} className="flex gap-2">
+                  {hasSpeechRecognition && (
+                    <button
+                      type="button"
+                      onClick={toggleMic}
+                      disabled={loading}
+                      className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                        micStatus === 'listening'
+                          ? 'bg-red-500 text-white animate-pulse'
+                          : 'bg-muted text-muted-foreground hover:bg-amber-500/20 hover:text-amber-500'
+                      }`}
+                      title={micStatus === 'listening' ? 'Parar de ouvir' : 'Falar'}
+                    >
+                      {micStatus === 'listening' ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                    </button>
+                  )}
                   <Input
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
