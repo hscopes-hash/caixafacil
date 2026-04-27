@@ -33,6 +33,7 @@ import { VERSION_DISPLAY, VERSION_WITH_DATE } from '@/lib/version';
 import GestaoPlanosSaaS from '@/components/GestaoPlanosSaaS';
 import PainelFinanceiroSaaS from '@/components/PainelFinanceiroSaaS';
 import { redirectToCheckout } from '@/components/MercadoPagoCheckout';
+import FloatingChat from '@/components/FloatingChat';
 
 // ============================================
 // TYPES
@@ -2321,7 +2322,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     }
     try {
       const hoje = new Date().toISOString().split('T')[0];
-      const res = await fetch(`/api/debitos?empresaId=${empresaId}&clienteId=${clienteSelecionado.id}&paga=false&dataMax=${hoje}`);
+      const res = await fetch(`/api/contas?empresaId=${empresaId}&clienteId=${clienteSelecionado.id}&paga=false&dataMax=${hoje}`);
       const data = await res.json();
       console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       const total = Array.isArray(data) ? data.reduce((sum: number, d: any) => sum + d.valor, 0) : 0;
@@ -3678,12 +3679,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
       if (debitosVencidos > 0) {
         try {
           const hoje = new Date().toISOString().split('T')[0];
-          const debRes = await fetch(`/api/debitos?empresaId=${empresaId}&clienteId=${clienteSelecionado.id}&paga=false&dataMax=${hoje}`);
+          const debRes = await fetch(`/api/contas?empresaId=${empresaId}&clienteId=${clienteSelecionado.id}&paga=false&dataMax=${hoje}`);
           const debitos = await debRes.json();
           if (Array.isArray(debitos) && debitos.length > 0) {
             await Promise.all(
               debitos.map((d: any) =>
-                fetch(`/api/debitos/${d.id}`, {
+                fetch(`/api/contas/${d.id}`, {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ paga: true }),
@@ -5255,7 +5256,7 @@ function RelatoriosPage({ empresaId }: { empresaId: string }) {
       if (clienteSelecionado !== 'todos') {
         try {
           const hoje = new Date().toISOString().split('T')[0];
-          const debRes = await fetch(`/api/debitos?empresaId=${empresaId}&clienteId=${clienteSelecionado}&paga=false&dataMax=${hoje}`);
+          const debRes = await fetch(`/api/contas?empresaId=${empresaId}&clienteId=${clienteSelecionado}&paga=false&dataMax=${hoje}`);
           const debData = await debRes.json();
           const debTotal = Array.isArray(debData) ? debData.reduce((sum: number, d: any) => sum + d.valor, 0) : 0;
           setDebitoTotal(debTotal);
@@ -5266,7 +5267,7 @@ function RelatoriosPage({ empresaId }: { empresaId: string }) {
         // Para "todos os clientes", buscar todos os débitos
         try {
           const hoje = new Date().toISOString().split('T')[0];
-          const debRes = await fetch(`/api/debitos?empresaId=${empresaId}&paga=false&dataMax=${hoje}`);
+          const debRes = await fetch(`/api/contas?empresaId=${empresaId}&paga=false&dataMax=${hoje}`);
           const debData = await debRes.json();
           const debTotal = Array.isArray(debData) ? debData.reduce((sum: number, d: any) => sum + d.valor, 0) : 0;
           setDebitoTotal(debTotal);
@@ -7385,7 +7386,7 @@ function AssinaturaTab() {
 // ============================================
 // DESPESAS PAGE COMPONENT
 // ============================================
-interface Debito {
+interface ContaItem {
   id: string;
   descricao: string;
   valor: number;
@@ -7393,6 +7394,7 @@ interface Debito {
   paga: boolean;
   dataPagamento?: string;
   observacoes?: string;
+  tipo: number;
   empresaId: string;
   clienteId: string;
   createdAt: string;
@@ -7407,14 +7409,14 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-function DebitosPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string; isAdmin: boolean; isSupervisor: boolean }) {
+function FluxoCaixaPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string; isAdmin: boolean; isSupervisor: boolean }) {
   const { empresa } = useAuthStore();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteSelecionado, setClienteSelecionado] = useState<string>('');
-  const [debitos, setDebitos] = useState<Debito[]>([]);
+  const [contas, setContas] = useState<ContaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [editingDebito, setEditingDebito] = useState<Debito | null>(null);
+  const [editingConta, setEditingConta] = useState<ContaItem | null>(null);
   const [showForm, setShowForm] = useState(false);
 
   // Form state
@@ -7422,15 +7424,10 @@ function DebitosPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string; 
   const [formValor, setFormValor] = useState('');
   const [formData, setFormData] = useState(new Date().toISOString().split('T')[0]);
   const [formObservacoes, setFormObservacoes] = useState('');
+  const [formTipo, setFormTipo] = useState<number>(1); // 0 = A Pagar, 1 = A Receber
 
-  // Chat IA state
-  const [chatOpen, setChatOpen] = useState(false);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [chatLoading, setChatLoading] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  // Filter
+  const [filtroTipo, setFiltroTipo] = useState<number | null>(null); // null = todos
 
   useEffect(() => {
     loadClientes();
@@ -7438,55 +7435,59 @@ function DebitosPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string; 
 
   useEffect(() => {
     if (clienteSelecionado) {
-      loadDebitos();
+      loadContas();
     } else {
-      setDebitos([]);
+      setContas([]);
       setLoading(false);
     }
   }, [clienteSelecionado, empresaId]);
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages]);
 
   const loadClientes = async () => {
     try {
       const res = await fetch(`/api/clientes?empresaId=${empresaId}`);
       const data = await res.json();
-      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
+      console.log("[FLUXO-CAIXA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       setClientes(data.filter((c: Cliente) => !c.bloqueado && c.ativo));
     } catch (error) {
       toast.error('Erro ao carregar clientes');
     }
   };
 
-  const loadDebitos = async () => {
+  const loadContas = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/debitos?empresaId=${empresaId}&clienteId=${clienteSelecionado}`);
+      let url = `/api/contas?empresaId=${empresaId}&clienteId=${clienteSelecionado}`;
+      if (filtroTipo !== null) url += `&tipo=${filtroTipo}`;
+      const res = await fetch(url);
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        toast.error(errData.error || 'Erro ao carregar débitos');
-        setDebitos([]);
+        toast.error(errData.error || 'Erro ao carregar contas');
+        setContas([]);
         return;
       }
       const data = await res.json();
-      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
-      setDebitos(Array.isArray(data) ? data : []);
+      console.log("[FLUXO-CAIXA] Response:", res.status, JSON.stringify(data).substring(0, 300));
+      setContas(Array.isArray(data) ? data : []);
     } catch (error) {
-      toast.error('Erro ao carregar débitos');
-      setDebitos([]);
+      toast.error('Erro ao carregar contas');
+      setContas([]);
     } finally {
       setLoading(false);
     }
   };
+
+  // Reload when filter changes
+  useEffect(() => {
+    if (clienteSelecionado) loadContas();
+  }, [filtroTipo]);
 
   const resetForm = () => {
     setFormDescricao('');
     setFormValor('');
     setFormData(new Date().toISOString().split('T')[0]);
     setFormObservacoes('');
-    setEditingDebito(null);
+    setFormTipo(1);
+    setEditingConta(null);
     setShowForm(false);
   };
 
@@ -7504,8 +7505,8 @@ function DebitosPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string; 
 
     setSaving(true);
     try {
-      if (editingDebito) {
-        const res = await fetch(`/api/debitos/${editingDebito.id}`, {
+      if (editingConta) {
+        const res = await fetch(`/api/contas/${editingConta.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -7513,16 +7514,17 @@ function DebitosPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string; 
             valor: valorNum,
             data: formData,
             observacoes: formObservacoes.trim() || null,
+            tipo: formTipo,
           }),
         });
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
-          toast.error(errData.error || 'Erro ao atualizar débito');
+          toast.error(errData.error || 'Erro ao atualizar conta');
           return;
         }
-        toast.success('Débito atualizado!');
+        toast.success('Conta atualizada!');
       } else {
-        const res = await fetch('/api/debitos', {
+        const res = await fetch('/api/contas', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -7530,59 +7532,61 @@ function DebitosPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string; 
             valor: valorNum,
             data: formData,
             observacoes: formObservacoes.trim() || null,
+            tipo: formTipo,
             empresaId,
             clienteId: clienteSelecionado,
           }),
         });
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
-          toast.error(errData.error || 'Erro ao adicionar débito');
+          toast.error(errData.error || 'Erro ao adicionar conta');
           return;
         }
-        toast.success('Débito adicionado!');
+        toast.success('Conta adicionada!');
       }
       resetForm();
       setShowForm(false);
-      loadDebitos();
+      loadContas();
     } catch (error) {
-      console.error('Erro ao salvar débito:', error);
-      toast.error('Erro ao salvar débito');
+      console.error('Erro ao salvar conta:', error);
+      toast.error('Erro ao salvar conta');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleEdit = (debito: Debito) => {
-    setEditingDebito(debito);
-    setFormDescricao(debito.descricao);
-    setFormValor(debito.valor.toString());
-    setFormData(new Date(debito.data).toISOString().split('T')[0]);
-    setFormObservacoes(debito.observacoes || '');
+  const handleEdit = (conta: ContaItem) => {
+    setEditingConta(conta);
+    setFormDescricao(conta.descricao);
+    setFormValor(conta.valor.toString());
+    setFormData(new Date(conta.data).toISOString().split('T')[0]);
+    setFormObservacoes(conta.observacoes || '');
+    setFormTipo(conta.tipo);
     setShowForm(true);
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este débito?')) return;
+    if (!confirm('Tem certeza que deseja excluir esta conta?')) return;
     try {
-      await fetch(`/api/debitos/${id}`, { method: 'DELETE' });
-      toast.success('Débito removido!');
-      loadDebitos();
+      await fetch(`/api/contas/${id}`, { method: 'DELETE' });
+      toast.success('Conta removida!');
+      loadContas();
     } catch (error) {
-      toast.error('Erro ao remover débito');
+      toast.error('Erro ao remover conta');
     }
   };
 
-  const handleTogglePaga = async (debito: Debito) => {
+  const handleTogglePaga = async (conta: ContaItem) => {
     try {
-      await fetch(`/api/debitos/${debito.id}`, {
+      await fetch(`/api/contas/${conta.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paga: !debito.paga }),
+        body: JSON.stringify({ paga: !conta.paga }),
       });
-      toast.success(debito.paga ? 'Débito marcado como pendente' : 'Débito marcado como pago!');
-      loadDebitos();
+      toast.success(conta.paga ? 'Conta marcada como pendente' : 'Conta liquidada!');
+      loadContas();
     } catch (error) {
-      toast.error('Erro ao atualizar débito');
+      toast.error('Erro ao atualizar conta');
     }
   };
 
@@ -7598,116 +7602,23 @@ function DebitosPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string; 
   };
 
   // Totals
-  const totalGeral = debitos.reduce((sum, d) => sum + d.valor, 0);
-  const totalPago = debitos.filter(d => d.paga).reduce((sum, d) => sum + d.valor, 0);
-  const totalPendente = debitos.filter(d => !d.paga).reduce((sum, d) => sum + d.valor, 0);
+  const totalReceber = contas.filter(c => c.tipo === 1).reduce((sum, c) => sum + c.valor, 0);
+  const totalPagar = contas.filter(c => c.tipo === 0).reduce((sum, c) => sum + c.valor, 0);
+  const totalReceberPago = contas.filter(c => c.tipo === 1 && c.paga).reduce((sum, c) => sum + c.valor, 0);
+  const totalPagarPago = contas.filter(c => c.tipo === 0 && c.paga).reduce((sum, c) => sum + c.valor, 0);
+  const totalReceberPendente = totalReceber - totalReceberPago;
+  const totalPagarPendente = totalPagar - totalPagarPago;
+  const saldo = totalReceber - totalPagar;
+  const totalPendente = contas.filter(c => !c.paga).reduce((sum, c) => sum + c.valor, 0);
 
-  // Chat IA functions
-  const sendChatMessage = async (message: string) => {
-    if (!message.trim()) return;
-
-    const userMsg: ChatMessage = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: message,
-      timestamp: new Date(),
-    };
-    setChatMessages(prev => [...prev, userMsg]);
-    setChatInput('');
-    setChatLoading(true);
-
-    try {
-      const res = await fetch('/api/debitos/chat-ia', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mensagem: message,
-          empresaId,
-          clienteId: clienteSelecionado || undefined,
-        }),
-      });
-
-      const data = await res.json();
-      console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
-
-      if (!res.ok) {
-        const detalhe = data.detalhe ? ' (' + data.detalhe.substring(0, 100) + ')' : '';
-        throw new Error((data.error || 'Erro ao comunicar com IA') + detalhe);
-      }
-
-      const aiMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: data.text,
-        timestamp: new Date(),
-      };
-      setChatMessages(prev => [...prev, aiMsg]);
-
-      // Refresh expenses if an action was taken
-      if (data.acao) {
-        loadDebitos();
-      }
-
-      // Voice response
-      speakText(data.text);
-    } catch (error: any) {
-      const errorMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: `Erro: ${error.message}`,
-        timestamp: new Date(),
-      };
-      setChatMessages(prev => [...prev, errorMsg]);
-    } finally {
-      setChatLoading(false);
-    }
-  };
-
-  const speakText = (text: string) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) return;
-    // Stop any ongoing speech
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'pt-BR';
-    utterance.rate = 1.1;
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const startListening = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      toast.error('Reconhecimento de voz não suportado neste navegador');
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'pt-BR';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
-    recognition.onerror = (event: any) => {
-      setIsListening(false);
-      if (event.error !== 'no-speech') {
-        toast.error('Erro no reconhecimento de voz');
-      }
-    };
-    recognition.onresult = (event: any) => {
-      const text = event.results[0][0].transcript;
-      sendChatMessage(text);
-    };
-
-    recognition.start();
-  };
+  // Chat IA state (moved out of component for floating widget)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _chatRef = useRef<HTMLDivElement>(null);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-foreground">Débitos</h2>
+        <h2 className="text-xl font-bold text-foreground">Fluxo de Caixa</h2>
         <Button
           onClick={() => {
             if (!clienteSelecionado) {
@@ -7720,7 +7631,7 @@ function DebitosPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string; 
           className="bg-gradient-to-r from-amber-500 to-orange-600 text-white hover:from-amber-600 hover:to-orange-700"
         >
           <Plus className="w-4 h-4 mr-2" />
-          Novo Débito
+          Nova Conta
         </Button>
       </div>
 
@@ -7741,21 +7652,81 @@ function DebitosPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string; 
         </CardContent>
       </Card>
 
-      {/* Add/Edit Expense Form */}
+      {/* Filter by tipo */}
+      {clienteSelecionado && (
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant={filtroTipo === null ? 'default' : 'outline'}
+            onClick={() => setFiltroTipo(null)}
+            className={filtroTipo === null ? 'bg-amber-500 text-white hover:bg-amber-600' : 'border-border text-muted-foreground'}
+          >
+            Todas
+          </Button>
+          <Button
+            size="sm"
+            variant={filtroTipo === 1 ? 'default' : 'outline'}
+            onClick={() => setFiltroTipo(1)}
+            className={filtroTipo === 1 ? 'bg-green-600 text-white hover:bg-green-700' : 'border-green-500/50 text-green-400'}
+          >
+            A Receber
+          </Button>
+          <Button
+            size="sm"
+            variant={filtroTipo === 0 ? 'default' : 'outline'}
+            onClick={() => setFiltroTipo(0)}
+            className={filtroTipo === 0 ? 'bg-red-600 text-white hover:bg-red-700' : 'border-red-500/50 text-red-400'}
+          >
+            A Pagar
+          </Button>
+        </div>
+      )}
+
+      {/* Add/Edit Form */}
       {showForm && (
         <Card className="border-0 shadow-lg bg-card">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg text-foreground">
-              {editingDebito ? 'Editar Débito' : 'Novo Débito'}
+              {editingConta ? 'Editar Conta' : 'Nova Conta'}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            {/* Tipo Toggle */}
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Tipo *</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFormTipo(1)}
+                  className={`p-3 rounded-lg border-2 transition-all text-center ${
+                    formTipo === 1
+                      ? 'border-green-500 bg-green-500/10 text-green-400'
+                      : 'border-border bg-muted text-muted-foreground hover:border-green-500/50'
+                  }`}
+                >
+                  <p className="font-semibold text-sm">A Receber</p>
+                  <p className="text-xs mt-0.5">Entrada de dinheiro</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormTipo(0)}
+                  className={`p-3 rounded-lg border-2 transition-all text-center ${
+                    formTipo === 0
+                      ? 'border-red-500 bg-red-500/10 text-red-400'
+                      : 'border-border bg-muted text-muted-foreground hover:border-red-500/50'
+                  }`}
+                >
+                  <p className="font-semibold text-sm">A Pagar</p>
+                  <p className="text-xs mt-0.5">Saída de dinheiro</p>
+                </button>
+              </div>
+            </div>
             <div className="space-y-2">
               <Label className="text-muted-foreground">Descrição *</Label>
               <Input
                 value={formDescricao}
                 onChange={(e) => setFormDescricao(e.target.value)}
-                placeholder="Ex: Compra de peças, Manutenção..."
+                placeholder="Ex: Aluguel máquina, Manutenção, Venda..."
                 className="bg-muted border-border text-foreground"
               />
             </div>
@@ -7796,7 +7767,7 @@ function DebitosPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string; 
                 disabled={saving}
                 className="flex-1 bg-gradient-to-r from-amber-500 to-orange-600 text-white hover:from-amber-600 hover:to-orange-700"
               >
-                {saving ? 'Salvando...' : editingDebito ? 'Atualizar' : 'Adicionar'}
+                {saving ? 'Salvando...' : editingConta ? 'Atualizar' : 'Adicionar'}
               </Button>
               <Button variant="outline" onClick={resetForm} className="border-border text-muted-foreground">
                 Cancelar
@@ -7806,84 +7777,133 @@ function DebitosPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string; 
         </Card>
       )}
 
-      {/* Expenses List */}
+      {/* Saldo Card */}
+      {clienteSelecionado && contas.length > 0 && (
+        <Card className="border-0 shadow-lg bg-gradient-to-r from-amber-500/10 to-orange-600/10">
+          <CardContent className="p-4 space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-green-400">A Receber:</span>
+              <span className="font-medium text-green-400">{formatCurrency(totalReceber)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">  Recebido:</span>
+              <span className="text-sm text-muted-foreground">{formatCurrency(totalReceberPago)}</span>
+            </div>
+            <Separator className="bg-border" />
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-red-400">A Pagar:</span>
+              <span className="font-medium text-red-400">{formatCurrency(totalPagar)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">  Pago:</span>
+              <span className="text-sm text-muted-foreground">{formatCurrency(totalPagarPago)}</span>
+            </div>
+            <Separator className="bg-border" />
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium text-foreground">Saldo:</span>
+              <span className={`font-bold text-lg ${saldo >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {formatCurrency(saldo)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium text-amber-400">Total Pendente:</span>
+              <span className="font-bold text-amber-400">{formatCurrency(totalPendente)}</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Contas List */}
       {!clienteSelecionado ? (
         <Card className="border-0 shadow-lg bg-card">
           <CardContent className="py-8 text-center text-muted-foreground">
             <Receipt className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p>Selecione um cliente para ver seus débitos</p>
+            <p>Selecione um cliente para ver o fluxo de caixa</p>
           </CardContent>
         </Card>
       ) : loading ? (
         <div className="text-center py-8 text-muted-foreground">Carregando...</div>
-      ) : debitos.length === 0 ? (
+      ) : contas.length === 0 ? (
         <Card className="border-0 shadow-lg bg-card">
           <CardContent className="py-8 text-center text-muted-foreground">
             <Receipt className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p>Nenhum débito encontrado</p>
+            <p>Nenhuma conta encontrada</p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-2">
-          {debitos.map((debito) => (
-            <Card key={debito.id} className={`border-0 shadow-lg ${
-              debito.paga ? 'bg-card opacity-70' : 'bg-card'
+          {contas.map((conta) => (
+            <Card key={conta.id} className={`border-0 shadow-lg ${
+              conta.paga ? 'bg-card opacity-70' : 'bg-card'
             }`}>
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    debito.paga ? 'bg-green-600/20' : 'bg-amber-600/20'
+                    conta.tipo === 0
+                      ? 'bg-red-600/20'
+                      : 'bg-green-600/20'
                   }`}>
-                    <Receipt className={`w-5 h-5 ${debito.paga ? 'text-green-400' : 'text-amber-400'}`} />
+                    {conta.tipo === 0 ? (
+                      <TrendingDown className={`w-5 h-5 ${conta.paga ? 'text-red-400/60' : 'text-red-400'}`} />
+                    ) : (
+                      <TrendingUp className={`w-5 h-5 ${conta.paga ? 'text-green-400/60' : 'text-green-400'}`} />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className={`font-bold text-foreground ${debito.paga ? 'line-through opacity-60' : ''}`}>
-                        {formatCurrency(debito.valor)}
+                      <p className={`font-bold text-foreground ${conta.paga ? 'line-through opacity-60' : ''}`}>
+                        {conta.tipo === 0 ? '-' : '+'}{formatCurrency(conta.valor)}
                       </p>
-                      <Badge variant={debito.paga ? 'default' : 'outline'} className={
-                        debito.paga ? 'bg-green-600 text-white' : 'text-amber-400 border-amber-500/50'
+                      <Badge variant="outline" className={
+                        conta.tipo === 0
+                          ? 'bg-red-600/20 text-red-400 border-red-500/50'
+                          : 'bg-green-600/20 text-green-400 border-green-500/50'
                       }>
-                        {debito.paga ? 'Paga' : 'Pendente'}
+                        {conta.tipo === 0 ? 'A Pagar' : 'A Receber'}
+                      </Badge>
+                      <Badge variant={conta.paga ? 'default' : 'outline'} className={
+                        conta.paga ? 'bg-blue-600 text-white' : 'text-amber-400 border-amber-500/50'
+                      }>
+                        {conta.paga ? 'Liquidada' : 'Pendente'}
                       </Badge>
                     </div>
-                    <p className="text-sm text-muted-foreground mt-0.5">{debito.descricao}</p>
+                    <p className="text-sm text-muted-foreground mt-0.5">{conta.descricao}</p>
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <CalendarDays className="w-3 h-3" />
-                        {formatDate(debito.data)}
+                        {formatDate(conta.data)}
                       </span>
-                      {debito.dataPagamento && (
-                        <span className="text-green-400">Pago em {formatDate(debito.dataPagamento)}</span>
+                      {conta.dataPagamento && (
+                        <span className="text-green-400">Liquidada em {formatDate(conta.dataPagamento)}</span>
                       )}
                     </div>
-                    {debito.observacoes && (
-                      <p className="text-xs text-muted-foreground mt-1 italic">{debito.observacoes}</p>
+                    {conta.observacoes && (
+                      <p className="text-xs text-muted-foreground mt-1 italic">{conta.observacoes}</p>
                     )}
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button
-                      onClick={() => handleTogglePaga(debito)}
+                      onClick={() => handleTogglePaga(conta)}
                       className={`p-2 rounded-lg transition-colors ${
-                        debito.paga
-                          ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30'
-                          : 'bg-muted text-muted-foreground hover:bg-amber-600/20 hover:text-amber-400'
+                        conta.paga
+                          ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30'
+                          : 'bg-muted text-muted-foreground hover:bg-green-600/20 hover:text-green-400'
                       }`}
-                      title={debito.paga ? 'Marcar como pendente' : 'Marcar como paga'}
+                      title={conta.paga ? 'Marcar como pendente' : 'Liquidar'}
                     >
                       <CheckCircle className="w-4 h-4" />
                     </button>
                     {(isAdmin || isSupervisor) && (
                       <>
                         <button
-                          onClick={() => handleEdit(debito)}
+                          onClick={() => handleEdit(conta)}
                           className="p-2 rounded-lg bg-muted text-muted-foreground hover:bg-amber-600/20 hover:text-amber-400 transition-colors"
                           title="Editar"
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(debito.id)}
+                          onClick={() => handleDelete(conta.id)}
                           className="p-2 rounded-lg bg-muted text-muted-foreground hover:bg-red-600/20 hover:text-red-400 transition-colors"
                           title="Excluir"
                         >
@@ -7896,136 +7916,7 @@ function DebitosPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string; 
               </CardContent>
             </Card>
           ))}
-
-          {/* Footer Summary */}
-          <Card className="border-0 shadow-lg bg-gradient-to-r from-amber-500/10 to-orange-600/10">
-            <CardContent className="p-4 space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Total Geral:</span>
-                <span className="font-bold text-foreground">{formatCurrency(totalGeral)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-green-400">Total Pago:</span>
-                <span className="font-medium text-green-400">{formatCurrency(totalPago)}</span>
-              </div>
-              <Separator className="bg-border" />
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-amber-400">Total Pendente:</span>
-                <span className="font-bold text-amber-400">{formatCurrency(totalPendente)}</span>
-              </div>
-            </CardContent>
-          </Card>
         </div>
-      )}
-
-      {/* AI Chat Button */}
-      <button
-        onClick={() => setChatOpen(!chatOpen)}
-        className={`fixed bottom-20 right-4 z-50 w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-all ${
-          chatOpen
-            ? 'bg-red-500 text-white hover:bg-red-600'
-            : 'bg-gradient-to-r from-amber-500 to-orange-600 text-white hover:from-amber-600 hover:to-orange-700'
-        }`}
-        title="Assistente IA"
-      >
-        {chatOpen ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
-      </button>
-
-      {/* AI Chat Panel */}
-      {chatOpen && (
-        <Card className="fixed bottom-36 right-4 z-50 w-[calc(100vw-2rem)] sm:w-96 h-[500px] flex flex-col border border-border shadow-2xl bg-background">
-          <CardHeader className="py-3 px-4 border-b border-border flex-shrink-0">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-white" />
-              </div>
-              <div>
-                <CardTitle className="text-sm text-foreground">Assistente IA</CardTitle>
-                <p className="text-xs text-muted-foreground">Controle de débitos por voz ou texto</p>
-              </div>
-              {isSpeaking && (
-                <Volume2 className="w-4 h-4 text-amber-400 ml-auto animate-pulse" />
-              )}
-            </div>
-          </CardHeader>
-
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
-            {chatMessages.length === 0 && (
-              <div className="text-center text-muted-foreground text-sm py-8">
-                <Sparkles className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p>Olá! Posso ajudar com seus débitos.</p>
-                <p className="text-xs mt-1">Ex: &quot;Adicione um débito de 50 reais&quot;</p>
-              </div>
-            )}
-            {chatMessages.map((msg) => (
-              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${
-                  msg.role === 'user'
-                    ? 'bg-amber-500 text-white border border-amber-400'
-                    : 'bg-muted text-foreground border border-border'
-                }`}>
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
-                  <p className={`text-[10px] mt-1 ${msg.role === 'user' ? 'text-amber-200' : 'text-muted-foreground'}`}>
-                    {msg.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                </div>
-              </div>
-            ))}
-            {chatLoading && (
-              <div className="flex justify-start">
-                <div className="bg-muted border border-border rounded-xl px-3 py-2">
-                  <div className="flex gap-1">
-                    <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '300ms' }} />
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-
-          {/* Input */}
-          <div className="p-3 border-t border-border flex-shrink-0">
-            <div className="flex gap-2 items-center">
-              <button
-                onClick={startListening}
-                disabled={isListening || chatLoading}
-                className={`p-2 rounded-lg transition-colors flex-shrink-0 ${
-                  isListening
-                    ? 'bg-red-500 text-white animate-pulse'
-                    : 'bg-muted text-muted-foreground hover:bg-amber-600/20 hover:text-amber-400'
-                }`}
-                title="Falar"
-              >
-                {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-              </button>
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    sendChatMessage(chatInput);
-                  }
-                }}
-                placeholder="Digite seu comando..."
-                disabled={chatLoading}
-                className="flex-1 bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-amber-500/50 disabled:opacity-50"
-              />
-              <button
-                onClick={() => sendChatMessage(chatInput)}
-                disabled={chatLoading || !chatInput.trim()}
-                className="p-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 text-white hover:from-amber-600 hover:to-orange-700 transition-colors flex-shrink-0 disabled:opacity-50"
-                title="Enviar"
-              >
-                <Send className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </Card>
       )}
     </div>
   );
@@ -8208,11 +8099,11 @@ export default function App() {
                     <span>Pagamentos</span>
                   </button>
                   <button
-                    onClick={() => { setActiveTab('debitos'); setMenuOpen(false); }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'debitos' ? 'bg-amber-500/20 text-amber-400' : 'text-muted-foreground hover:bg-card'}`}
+                    onClick={() => { setActiveTab('fluxo-caixa'); setMenuOpen(false); }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'fluxo-caixa' ? 'bg-amber-500/20 text-amber-400' : 'text-muted-foreground hover:bg-card'}`}
                   >
                     <Receipt className="w-5 h-5" />
-                    <span>Débitos</span>
+                    <span>Fluxo de Caixa</span>
                   </button>
                   {isAdmin && (
                     <button
@@ -8337,8 +8228,8 @@ export default function App() {
         {activeTab === 'pagamentos' && (
           <PagamentosPage empresaId={empresa?.id || ''} isSupervisor={isSupervisor} />
         )}
-        {activeTab === 'debitos' && (
-          <DebitosPage empresaId={empresa?.id || ''} isAdmin={isAdmin} isSupervisor={isSupervisor} />
+        {activeTab === 'fluxo-caixa' && (
+          <FluxoCaixaPage empresaId={empresa?.id || ''} isAdmin={isAdmin} isSupervisor={isSupervisor} />
         )}
         {activeTab === 'usuarios' && (
           <UsuariosPage empresaId={empresa?.id || ''} isAdmin={isAdmin} />
@@ -8398,6 +8289,7 @@ export default function App() {
           ))}
         </div>
       </nav>
+      <FloatingChat />
     </div>
   );
 }

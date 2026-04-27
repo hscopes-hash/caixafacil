@@ -49,7 +49,7 @@ model Empresa {
   tiposMaquina    TipoMaquina[]
   assinaturasSaaS AssinaturaSaaS[]
   pagamentosSaaS  PagamentoSaaS[]
-  debitos         Debito[]
+  contas          Conta[]
 
   @@map("empresas")
 }
@@ -108,7 +108,7 @@ model Cliente {
   assinaturas     Assinatura[]
   pagamentos      Pagamento[]
   leituras        Leitura[]
-  debitos         Debito[]
+  contas          Conta[]
 
   @@map("clientes")
 }
@@ -349,9 +349,9 @@ model WebhookLog {
 }
 
 // ============================================
-// DÉBITO - Débitos dos clientes
+// CONTA - Contas a Pagar e Receber (Fluxo de Caixa)
 // ============================================
-model Debito {
+model Conta {
   id             String    @id @default(cuid())
   descricao      String
   valor          Float
@@ -359,6 +359,7 @@ model Debito {
   paga           Boolean   @default(false)
   dataPagamento  DateTime?
   observacoes    String?
+  tipo           Int       @default(1) // 0 = A Pagar, 1 = A Receber
   empresaId      String
   clienteId      String
   createdAt      DateTime  @default(now())

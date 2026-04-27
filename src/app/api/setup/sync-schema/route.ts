@@ -244,7 +244,7 @@ export async function GET() {
       )
     `);
 
-    // Criar tabela debitos
+    // Criar tabela debitos (contas a pagar e receber)
     await db.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS debitos (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -254,6 +254,7 @@ export async function GET() {
         paga BOOLEAN DEFAULT false,
         "dataPagamento" TIMESTAMP(3),
         observacoes TEXT,
+        tipo INTEGER DEFAULT 1,
         "empresaId" TEXT NOT NULL,
         "clienteId" TEXT NOT NULL,
         "createdAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP,
@@ -262,6 +263,15 @@ export async function GET() {
         FOREIGN KEY ("clienteId") REFERENCES clientes(id) ON DELETE CASCADE
       )
     `);
+
+    // Adicionar coluna tipo se não existir
+    try {
+      await db.$executeRawUnsafe(`
+        ALTER TABLE debitos ADD COLUMN IF NOT EXISTS tipo INTEGER DEFAULT 1
+      `);
+    } catch (e) {
+      // Coluna já existe, ignorar
+    }
 
     // Criar tabela planos_saas
     await db.$executeRawUnsafe(`
