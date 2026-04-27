@@ -2,12 +2,29 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuthStore } from '@/stores/auth-store';
-import { X, Send, Sparkles, Minimize2 } from 'lucide-react';
+import { X, Send, Sparkles, Minimize2, Volume2, VolumeX } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+}
+
+function speak(text: string): void {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const clean = text.replace(/[-•]\s/g, '').replace(/\n+/g, '. ').replace(/\s+/g, ' ').trim();
+  if (!clean) return;
+  const utterance = new SpeechSynthesisUtterance(clean);
+  utterance.lang = 'pt-BR';
+  utterance.rate = 1.05;
+  utterance.pitch = 1;
+
+  const voices = window.speechSynthesis.getVoices();
+  const ptVoice = voices.find(v => v.lang.startsWith('pt'));
+  if (ptVoice) utterance.voice = ptVoice;
+
+  window.speechSynthesis.speak(utterance);
 }
 
 export default function FloatingChat() {
@@ -17,8 +34,26 @@ export default function FloatingChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [voiceOn, setVoiceOn] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Carregar vozes disponiveis
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
+      };
+    }
+  }, []);
+
+  // Limpar fala ao fechar o chat
+  useEffect(() => {
+    if (!open && typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+  }, [open]);
 
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current) {
@@ -30,7 +65,7 @@ export default function FloatingChat() {
     scrollToBottom();
   }, [messages, loading, scrollToBottom]);
 
-  // Bloquear scroll do body quando o chat está aberto (mobile)
+  // Bloquear scroll do body quando o chat esta aberto (mobile)
   useEffect(() => {
     if (open && !minimized) {
       document.body.style.overflow = 'hidden';
@@ -54,17 +89,30 @@ export default function FloatingChat() {
       });
 
       const data = await res.json();
+      const responseText = data.text || 'Sem resposta.';
 
       if (!res.ok) {
-        setMessages(prev => [...prev, { role: 'assistant', content: data.error || 'Erro ao processar mensagem.' }]);
+        const errorText = data.error || 'Erro ao processar mensagem.';
+        setMessages(prev => [...prev, { role: 'assistant', content: errorText }]);
       } else {
-        setMessages(prev => [...prev, { role: 'assistant', content: data.text || 'Sem resposta.' }]);
+        setMessages(prev => [...prev, { role: 'assistant', content: responseText }]);
+        // Falar a resposta se voz estiver ativada
+        if (voiceOn) {
+          speak(responseText);
+        }
       }
     } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Erro de conexão. Tente novamente.' }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Erro de conexao. Tente novamente.' }]);
     } finally {
       setLoading(false);
     }
+  };
+
+  const toggleVoice = () => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setVoiceOn(prev => !prev);
   };
 
   if (!empresa?.id) return null;
@@ -106,6 +154,13 @@ export default function FloatingChat() {
               <span className="font-semibold text-sm">CaixaFacil IA</span>
             </div>
             <div className="flex items-center gap-1">
+              <button
+                onClick={toggleVoice}
+                className="p-1 hover:bg-white/20 rounded"
+                title={voiceOn ? 'Desativar voz' : 'Ativar voz'}
+              >
+                {voiceOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4 opacity-60" />}
+              </button>
               <button onClick={() => setMinimized(!minimized)} className="p-1 hover:bg-white/20 rounded">
                 <Minimize2 className="w-4 h-4" />
               </button>
@@ -129,6 +184,9 @@ export default function FloatingChat() {
                       <Sparkles className="w-10 h-10 mx-auto mb-3 text-amber-500/50" />
                       <p className="text-sm text-muted-foreground">Ola! Sou o assistente do CaixaFacil.</p>
                       <p className="text-xs text-muted-foreground mt-1">Posso ajudar com clientes, maquinas, fluxo de caixa e mais.</p>
+                      {voiceOn && (
+                        <p className="text-xs text-amber-500/50 mt-2">Respostas com voz ativada</p>
+                      )}
                     </div>
                   )}
                   {messages.map((msg, i) => (
