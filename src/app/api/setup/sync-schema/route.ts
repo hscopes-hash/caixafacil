@@ -381,6 +381,61 @@ export async function GET() {
       )
     `);
 
+    // Criar tabela chat_historico
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS chat_historico (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+        "empresaId" TEXT NOT NULL,
+        "sessaoId" TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        "acaoExecutada" TEXT,
+        "resultadoAcao" TEXT,
+        "criadoEm" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP,
+        "deletadoEm" TIMESTAMP(3)
+      )
+    `);
+
+    // Criar indices para chat_historico
+    try {
+      await db.$executeRawUnsafe(`
+        CREATE INDEX IF NOT EXISTS chat_historico_empresaId_criadoEm_idx ON chat_historico("empresaId", "criadoEm")
+      `);
+    } catch (e) { /* indice ja existe */ }
+    try {
+      await db.$executeRawUnsafe(`
+        CREATE INDEX IF NOT EXISTS chat_historico_empresaId_sessaoId_idx ON chat_historico("empresaId", "sessaoId")
+      `);
+    } catch (e) { /* indice ja existe */ }
+    try {
+      await db.$executeRawUnsafe(`
+        CREATE INDEX IF NOT EXISTS chat_historico_deletadoEm_idx ON chat_historico("deletadoEm")
+      `);
+    } catch (e) { /* indice ja existe */ }
+
+    // Auto-limpeza: marcar como deletado registros com mais de 30 dias
+    try {
+      await db.$executeRawUnsafe(`
+        UPDATE chat_historico
+        SET "deletadoEm" = CURRENT_TIMESTAMP
+        WHERE "deletadoEm" IS NULL
+        AND "criadoEm" < CURRENT_TIMESTAMP - INTERVAL '30 days'
+      `);
+    } catch (e) {
+      // Tabela pode nao existir ainda na primeira vez
+    }
+
+    // Auto-limpeza: remover fisicamente registros deletados ha mais de 7 dias
+    try {
+      await db.$executeRawUnsafe(`
+        DELETE FROM chat_historico
+        WHERE "deletadoEm" IS NOT NULL
+        AND "deletadoEm" < CURRENT_TIMESTAMP - INTERVAL '7 days'
+      `);
+    } catch (e) {
+      // Tabela pode nao existir ainda
+    }
+
     results.push('✓ Todas as tabelas foram criadas/verificadas com sucesso!');
 
     return NextResponse.json({

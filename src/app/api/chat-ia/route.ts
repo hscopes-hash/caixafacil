@@ -11,6 +11,22 @@ interface LLMAction {
 
 const DESTRUCTIVE_ACTIONS = new Set(['criar_conta', 'liquidar_conta', 'excluir_conta']);
 
+// Salvar mensagem no historico (fire-and-forget, nao bloqueia a resposta)
+function saveToHistory(empresaId: string, sessaoId: string, role: string, content: string, acaoExecutada?: string | null, resultadoAcao?: string | null): void {
+  db.chatHistorico.create({
+    data: {
+      empresaId,
+      sessaoId,
+      role,
+      content: content.substring(0, 5000), // Limitar a 5000 chars
+      acaoExecutada: acaoExecutada || null,
+      resultadoAcao: resultadoAcao || null,
+    },
+  }).catch(err => {
+    console.warn('Erro ao salvar historico do chat:', err);
+  });
+}
+
 function parseActionFromResponse(text: string): { action: LLMAction | null; friendlyText: string } {
   let action: LLMAction | null = null;
 
@@ -219,7 +235,7 @@ function formatActionResult(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { mensagem, empresaId, clienteId, messages: historyMessages, confirmAction } = body;
+    const { mensagem, empresaId, clienteId, messages: historyMessages, confirmAction, sessaoId } = body;
 
     if (!empresaId) {
       return NextResponse.json({ error: 'empresaId e obrigatorio' }, { status: 400 });
@@ -230,6 +246,12 @@ export async function POST(request: NextRequest) {
       try {
         const { finalText: actionText, resultadoAcao } = await runAction(confirmAction, empresaId);
         const formatted = formatActionResult(actionText || 'Acao executada.', resultadoAcao, confirmAction);
+
+        // Salvar resultado da acao confirmada no historico
+        if (sessaoId) {
+          saveToHistory(empresaId, sessaoId, 'assistant', formatted || 'Acao executada com sucesso.', confirmAction.acao, resultadoAcao ? JSON.stringify(resultadoAcao) : null);
+        }
+
         return NextResponse.json({
           text: formatted || 'Acao executada com sucesso.',
           acao: confirmAction.acao,
@@ -247,6 +269,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Mensagem e obrigatoria' }, { status: 400 });
     }
 
+    // Salvar mensagem do usuario no historico
+    if (sessaoId) {
+      saveToHistory(empresaId, sessaoId, 'user', mensagem);
+    }
+
     // ========== NORMAL CHAT FLOW (com historico multi-turn) ==========
 
     // Gather comprehensive company context
@@ -255,6 +282,55 @@ export async function POST(request: NextRequest) {
       companyContext = await gatherCompanyContext(empresaId);
     } catch (ctxErr) {
       console.warn('Nao foi possivel buscar contexto da empresa:', ctxErr);
+    }
+
+    // Gather conversation summary from last 24h (for cross-session memory)
+    let conversationSummary = '';
+    try {
+      const last24hSessions = await db.$queryRawUnsafe<Array<{ sessaoId: string }>>(
+        `SELECT "sessaoId" FROM chat_historico
+         WHERE "empresaId" = $1 AND "deletadoEm" IS NULL
+         AND "criadoEm" > NOW() - INTERVAL '24 hours'
+         GROUP BY "sessaoId"
+         ORDER BY MAX("criadoEm") ASC`,
+        empresaId
+      );
+
+      if (last24hSessions.length > 0) {
+        const summaries: string[] = [];
+        for (const session of last24hSessions) {
+          const userMessages = await db.$queryRawUnsafe<Array<{ content: string; criadoEm: Date }>>(
+            `SELECT content, "criadoEm" FROM chat_historico
+             WHERE "empresaId" = $1 AND "sessaoId" = $2 AND "deletadoEm" IS NULL AND role = 'user'
+             ORDER BY "criadoEm" ASC`,
+            empresaId, session.sessaoId
+          );
+          if (userMessages.length > 0) {
+            const questions = userMessages.slice(-5).map(m => m.content.substring(0, 100));
+            summaries.push(`Perguntas recentes: ${questions.join(' | ')}`);
+          }
+        }
+
+        // Acoes executadas nas ultimas 24h
+        const recentActions = await db.$queryRawUnsafe<Array<{ acaoExecutada: string; content: string }>>(
+          `SELECT "acaoExecutada", content FROM chat_historico
+           WHERE "empresaId" = $1 AND "deletadoEm" IS NULL
+           AND "acaoExecutada" IS NOT NULL
+           AND "criadoEm" > NOW() - INTERVAL '24 hours'
+           ORDER BY "criadoEm" DESC LIMIT 10`,
+          empresaId
+        );
+
+        if (summaries.length > 0 || recentActions.length > 0) {
+          conversationSummary = '\nCONTEXTO DE CONVERSAS RECENTES (ultimas 24h):\n';
+          if (summaries.length > 0) conversationSummary += summaries.join('\n');
+          if (recentActions.length > 0) {
+            conversationSummary += '\nAcoes recentes do usuario: ' + recentActions.map(a => `[${a.acaoExecutada}] ${a.content.substring(0, 60)}`).join(' | ');
+          }
+        }
+      }
+    } catch {
+      // Nao bloqueia se falhar (tabela pode nao existir ainda)
     }
 
     // Buscar configuracoes de IA da empresa (CONFIG SAAS)
@@ -291,7 +367,7 @@ Voce tem acesso a dados em tempo real da empresa e pode responder perguntas sobr
 - Pagamentos e assinaturas
 
 Dados atuais da empresa:
-${companyContext}
+${companyContext}${conversationSummary}
 
 Responda em portugues brasileiro de forma clara e objetiva.
 Se o usuario pedir para criar/alterar dados, use as acoes disponiveis.
@@ -464,6 +540,11 @@ Use formato de moeda brasileiro (R$ X.XXX,XX) nos valores.`;
 
     // ========== ACAO DESTRUTIVA: pedir confirmacao ==========
     if (parsed.action?.acao && parsed.action.dados && DESTRUCTIVE_ACTIONS.has(parsed.action.acao)) {
+      // Salvar a resposta pendente de confirmacao no historico
+      if (sessaoId) {
+        saveToHistory(empresaId, sessaoId, 'assistant', finalText, parsed.action.acao, JSON.stringify(parsed.action.dados));
+      }
+
       return NextResponse.json({
         text: finalText,
         acao: parsed.action.acao,
@@ -485,6 +566,15 @@ Use formato de moeda brasileiro (R$ X.XXX,XX) nos valores.`;
         console.error('Erro ao executar acao:', acaoErr);
         finalText = `Erro ao executar acao: ${acaoErr instanceof Error ? acaoErr.message : 'Erro desconhecido'}`;
       }
+    }
+
+    // Salvar resposta do assistente no historico
+    if (sessaoId) {
+      saveToHistory(
+        empresaId, sessaoId, 'assistant', finalText,
+        parsed.action?.acao || null,
+        resultadoAcao ? JSON.stringify(resultadoAcao).substring(0, 3000) : null
+      );
     }
 
     return NextResponse.json({

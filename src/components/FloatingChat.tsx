@@ -36,6 +36,11 @@ function getSpeechRecognition(): (typeof window.SpeechRecognition) | null {
   return window.SpeechRecognition || (window as any).webkitSpeechRecognition || null;
 }
 
+// Gerar ID de sessao unico
+function generateSessionId(): string {
+  return `sess_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+}
+
 export default function FloatingChat() {
   const { empresa } = useAuthStore();
   const [open, setOpen] = useState(false);
@@ -45,6 +50,8 @@ export default function FloatingChat() {
   const [loading, setLoading] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
   const [micStatus, setMicStatus] = useState<SpeechRecognitionStatus>('idle');
+  const [sessaoId, setSessaoId] = useState<string>('');
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -74,6 +81,36 @@ export default function FloatingChat() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Carregar historico ao abrir o chat
+  useEffect(() => {
+    if (open && empresa?.id && !historyLoaded) {
+      loadHistory();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, empresa?.id]);
+
+  const loadHistory = async () => {
+    try {
+      const res = await fetch(`/api/chat-ia/historico?empresaId=${empresa.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.messages && data.messages.length > 0) {
+          setMessages(data.messages.map((m: any) => ({ role: m.role, content: m.content })));
+          setSessaoId(data.sessaoId);
+        } else {
+          // Sem historico, criar nova sessao
+          setSessaoId(generateSessionId());
+        }
+      } else {
+        setSessaoId(generateSessionId());
+      }
+    } catch {
+      setSessaoId(generateSessionId());
+    } finally {
+      setHistoryLoaded(true);
+    }
+  };
 
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current) {
@@ -131,7 +168,6 @@ export default function FloatingChat() {
     };
 
     recognition.onend = () => {
-      // Se tem texto, envia automaticamente
       if (input.trim()) {
         setTimeout(() => {
           setMicStatus('idle');
@@ -158,10 +194,8 @@ export default function FloatingChat() {
   // Enviar automaticamente quando para de escutar
   useEffect(() => {
     if (micStatus === 'idle' && input.trim() && !loading) {
-      // Pequeno delay para garantir que o input foi atualizado
       const timer = setTimeout(() => {
         const SpeechRecognition = getSpeechRecognition();
-        // So envia se NAO estiver mais escutando
         if (!recognitionRef.current && input.trim() && !loading) {
           // O usuario pode estar digitando, so envia se veio do mic
         }
@@ -188,6 +222,7 @@ export default function FloatingChat() {
         body: JSON.stringify({
           empresaId: empresa.id,
           confirmAction: confirmingAction,
+          sessaoId,
         }),
       });
 
@@ -255,6 +290,13 @@ export default function FloatingChat() {
     // Parar microfone se estiver ativo
     stopListening();
 
+    // Garantir que temos um sessaoId
+    let currentSessaoId = sessaoId;
+    if (!currentSessaoId) {
+      currentSessaoId = generateSessionId();
+      setSessaoId(currentSessaoId);
+    }
+
     const userMsg = input.trim();
     setInput('');
 
@@ -279,6 +321,7 @@ export default function FloatingChat() {
           mensagem: userMsg,
           empresaId: empresa.id,
           messages: historyToSend,
+          sessaoId: currentSessaoId,
         }),
       });
 
@@ -298,10 +341,6 @@ export default function FloatingChat() {
 
         // Verificar se precisa de confirmacao para acao destrutiva
         if (data.requiresConfirmation && data.pendingAction) {
-          // O indice da mensagem do assistente e messages.length (antigo) + 1 (user) + 0 (assistant)
-          // Mas como usamos functional update, precisamos calcular com base no estado atual
-          // messages.length foi atualizado no setMessages acima, entao:
-          // newMessages.length + 1 = indice do assistente
           const assistantIndex = newMessages.length; // newMessages ja tem a msg do user
           setConfirmingMsgIndex(assistantIndex);
           setConfirmingAction(data.pendingAction);
@@ -361,6 +400,9 @@ export default function FloatingChat() {
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4" />
               <span className="font-semibold text-sm">CaixaFacil IA</span>
+              {!minimized && messages.length > 0 && (
+                <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-full ml-1">Com memoria</span>
+              )}
             </div>
             <div className="flex items-center gap-1">
               <button
@@ -388,12 +430,17 @@ export default function FloatingChat() {
                 onScroll={(e) => e.stopPropagation()}
               >
                 <div className="space-y-3">
-                  {messages.length === 0 && (
+                  {!historyLoaded && (
+                    <div className="flex justify-center py-8">
+                      <div className="w-5 h-5 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+                    </div>
+                  )}
+                  {historyLoaded && messages.length === 0 && (
                     <div className="text-center py-8">
                       <Sparkles className="w-10 h-10 mx-auto mb-3 text-amber-500/50" />
                       <p className="text-sm text-muted-foreground">Ola! Sou o assistente do CaixaFacil.</p>
                       <p className="text-xs text-muted-foreground mt-1">Posso ajudar com clientes, maquinas, fluxo de caixa e mais.</p>
-                      <p className="text-xs text-muted-foreground mt-1">Lembro do contexto da nossa conversa!</p>
+                      <p className="text-xs text-muted-foreground mt-1">Lembro das nossas conversas anteriores!</p>
                       <div className="flex items-center justify-center gap-3 mt-3">
                         {voiceOn && (
                           <span className="flex items-center gap-1 text-xs text-amber-500/50">
@@ -406,6 +453,11 @@ export default function FloatingChat() {
                           </span>
                         )}
                       </div>
+                    </div>
+                  )}
+                  {historyLoaded && messages.length > 0 && (
+                    <div className="text-[10px] text-muted-foreground/50 text-center mb-1">
+                      Retomando ultima conversa
                     </div>
                   )}
                   {messages.map((msg, i) => (

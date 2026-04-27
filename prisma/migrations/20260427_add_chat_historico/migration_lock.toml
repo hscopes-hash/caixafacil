@@ -1,0 +1,3 @@
+-- This is an empty migration.
+-- The actual migration for chat_historico is handled by sync-schema
+-- because we don't have local database access for prisma migrate dev.
