@@ -3699,6 +3699,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
       }
 
       // Gerar lancamento de conta a receber automaticamente (LEITURA)
+      // Logica: jogado = total (entradas - saidas). Parte do cliente = jogado * acertoPct/100.
+      // O sistema cobra o RESTANTE (jogado - parte do cliente).
       if (maquinasPreenchidas.length > 0 && clienteSelecionado) {
         try {
           const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
@@ -3706,7 +3708,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
             const calcVal = calcularValor(m.moeda, m.diferencaEntrada) - calcularValor(m.moeda, m.diferencaSaida);
             return acc + calcVal;
           }, 0);
-          const valorConta = jogado * (acertoPct / 100);
+          const valorConta = jogado * ((100 - acertoPct) / 100); // Restante = parte do sistema
 
           if (valorConta > 0) {
             await fetch('/api/contas', {
