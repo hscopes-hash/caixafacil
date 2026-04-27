@@ -3698,6 +3698,37 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
         }
       }
 
+      // Gerar lancamento de conta a receber automaticamente (LEITURA)
+      if (maquinasPreenchidas.length > 0 && clienteSelecionado) {
+        try {
+          const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
+          const jogado = maquinasPreenchidas.reduce((acc, m) => {
+            const calcVal = calcularValor(m.moeda, m.diferencaEntrada) - calcularValor(m.moeda, m.diferencaSaida);
+            return acc + calcVal;
+          }, 0);
+          const valorConta = jogado * (acertoPct / 100);
+
+          if (valorConta > 0) {
+            await fetch('/api/contas', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                descricao: 'LEITURA',
+                valor: Math.round(valorConta * 100) / 100,
+                data: new Date().toISOString().split('T')[0],
+                tipo: 1, // A receber
+                paga: true, // Quitado
+                clienteId: clienteSelecionado.id,
+                empresaId: empresaId,
+                dataPagamento: new Date().toISOString().split('T')[0],
+              }),
+            });
+          }
+        } catch {
+          // Falha ao gerar lancamento nao impede o fluxo
+        }
+      }
+
       if (clienteSelecionado) {
         loadMaquinasCliente(clienteSelecionado.id);
       }
