@@ -10,34 +10,45 @@ interface LLMAction {
 }
 
 function parseActionFromResponse(text: string): { action: LLMAction | null; friendlyText: string } {
-  const jsonMatch = text.match(/```json\s*([\s\S]*?)```/);
-  let rawJsonMatch: RegExpMatchArray | null = null;
-  if (!jsonMatch) {
-    rawJsonMatch = text.match(/\{[\s\S]*?"acao"[\s\S]*?\}/);
-  }
   let action: LLMAction | null = null;
-  let friendlyText = text;
-  const jsonBlock = jsonMatch ? jsonMatch[1].trim() : rawJsonMatch ? rawJsonMatch[0] : null;
+
+  // 1) Tentar extrair JSON de bloco ```json ... ```
+  const jsonMatch = text.match(/```json\s*([\s\S]*?)```/);
+  // 2) Tentar extrair JSON bruto com "acao"
+  const rawJsonMatch = !jsonMatch ? text.match(/\{[\s\S]*?"acao"[\s\S]*?\}/) : null;
+  // 3) Fallback: JSON inline com "acao"
+  const anyJsonMatch = (!jsonMatch && !rawJsonMatch) ? text.match(/\{[^{}]*?"acao"[^{}]*\}/) : null;
+
+  const jsonBlock = jsonMatch ? jsonMatch[1].trim() : rawJsonMatch ? rawJsonMatch[0] : anyJsonMatch ? anyJsonMatch[0] : null;
+
   if (jsonBlock) {
     try {
       action = JSON.parse(jsonBlock);
-      friendlyText = text.replace(/```json\s*[\s\S]*?```/, '').trim();
-      if (rawJsonMatch && !jsonMatch) {
-        friendlyText = text.replace(rawJsonMatch[0], '').trim();
-      }
     } catch {
       try {
         const cleaned = jsonBlock.replace(/[,]\s*([}\]])/g, '$1');
         action = JSON.parse(cleaned);
-        friendlyText = text.replace(/```json\s*[\s\S]*?```/, '').trim();
-        if (rawJsonMatch && !jsonMatch) {
-          friendlyText = text.replace(rawJsonMatch[0], '').trim();
-        }
       } catch {}
     }
   }
-  const cleaned = (friendlyText || text).replace(/^\s*[\r\n]+|\s*[\r\n]+$/g, '').trim();
-  return { action, friendlyText: cleaned };
+
+  // Remover qualquer JSON da resposta para obter o texto amigavel
+  let friendlyText = text
+    .replace(/```json[\s\S]*?```/g, '')
+    .replace(/\{[\s\S]*?"acao"[\s\S]*?\}/g, '')
+    .replace(/\{[^{}]*?"acao"[^{}]*\}/g, '')
+    .replace(/```[\s\S]*?```/g, '')
+    .trim();
+
+  // Se ainda for JSON puro, limpar
+  if (friendlyText.startsWith('{') && friendlyText.endsWith('}')) {
+    friendlyText = '';
+  }
+
+  // Limpar linhas vazias extras
+  friendlyText = friendlyText.replace(/\n{3,}/g, '\n\n').trim();
+
+  return { action, friendlyText };
 }
 
 export async function POST(request: NextRequest) {
@@ -215,21 +226,24 @@ Use formato de moeda brasileiro (R$ X.XXX,XX) nos valores.`;
       finalText = parsed.action.friendlyText;
     }
     // 2) Usar texto limpo fora do bloco JSON
-    else if (parsed.friendlyText && parsed.friendlyText !== llmMessage) {
+    else if (parsed.friendlyText) {
       finalText = parsed.friendlyText;
     }
-    // 3) Fallback: remover blocos json da resposta
+    // 3) Fallback: limpar qualquer JSON residual
     if (!finalText.trim()) {
-      finalText = llmMessage.replace(/```json[\s\S]*?```/g, '').trim() || '';
+      finalText = llmMessage
+        .replace(/```json[\s\S]*?```/g, '')
+        .replace(/\{[\s\S]*?"acao"[\s\S]*?\}/g, '')
+        .replace(/\{[^{}]*?"acao"[^{}]*\}/g, '')
+        .replace(/```[\s\S]*?```/g, '')
+        .trim();
     }
-    // 4) NUNCA mostrar JSON bruto para o usuario
+    // 4) Se ainda for JSON puro, usar mensagem generica
     if (!finalText.trim() || (finalText.trim().startsWith('{') && finalText.trim().endsWith('}'))) {
-      if (parsed.action?.acao) {
-        finalText = parsed.action.friendlyText || 'Ação executada com sucesso.';
-      } else {
-        finalText = llmMessage.substring(0, 200);
-      }
+      finalText = parsed.action?.friendlyText || 'Acao executada com sucesso.';
     }
+    // 5) Limpar linhas duplicadas
+    finalText = finalText.replace(/\n{3,}/g, '\n\n').trim();
 
     // Executar ação se identificada
     let resultadoAcao: unknown = null;
