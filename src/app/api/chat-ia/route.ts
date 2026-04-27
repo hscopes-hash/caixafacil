@@ -170,7 +170,23 @@ async function runAction(
   return { finalText, resultadoAcao };
 }
 
+// ==================== Helpers de formatacao ====================
+function fmtBrl(valor: number): string {
+  return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtDate(data: string | Date | null): string {
+  if (!data) return '';
+  try {
+    return new Date(data).toLocaleDateString('pt-BR');
+  } catch {
+    return '';
+  }
+}
+
 // ==================== Formatar resultado das acoes ====================
+// IMPORTANTE: Toda resposta aqui deve ser em linguagem natural, adequada para TTS (fala).
+// Evitar simbolos como |, [], {}. Usar frases completas com pontuacao.
 function formatActionResult(
   finalText: string,
   resultadoAcao: unknown,
@@ -181,52 +197,113 @@ function formatActionResult(
 
   if (resultadoAcao && Array.isArray(resultadoAcao) && resultadoAcao.length > 0) {
     if (acaoNome === 'listar_contas') {
-      const total = resultadoAcao.reduce((s: number, d: any) => s + (d.valor || 0), 0);
-      const pendentes = resultadoAcao.filter((d: any) => !d.paga);
-      const totalPendente = pendentes.reduce((s: number, d: any) => s + (d.valor || 0), 0);
-      text = text + '\n\n' +
-        resultadoAcao.map((d: any) => {
-          const tipoStr = d.tipo === 0 ? 'PAGAR' : 'RECEBER';
-          return `- [${tipoStr}] ${(d.descricao || 'Sem descricao')} | R$ ${(d.valor || 0).toFixed(2)} | ${(d.paga ? 'Liquidada' : 'Pendente')}`;
-        }).join('\n') +
-        '\n\nTotal: ' + resultadoAcao.length + ' conta(s) | R$ ' + total.toFixed(2) +
-        '\nPendentes: ' + pendentes.length + ' | R$ ' + totalPendente.toFixed(2);
+      const receber = resultadoAcao.filter((d: any) => d.tipo === 1);
+      const pagar = resultadoAcao.filter((d: any) => d.tipo === 0);
+      const totalGeral = resultadoAcao.reduce((s: number, d: any) => s + (d.valor || 0), 0);
+      const totalReceberPend = receber.filter((d: any) => !d.paga).reduce((s: number, d: any) => s + (d.valor || 0), 0);
+      const totalPagarPend = pagar.filter((d: any) => !d.paga).reduce((s: number, d: any) => s + (d.valor || 0), 0);
+      const totalReceberLiq = receber.filter((d: any) => d.paga).reduce((s: number, d: any) => s + (d.valor || 0), 0);
+      const totalPagarLiq = pagar.filter((d: any) => d.paga).reduce((s: number, d: any) => s + (d.valor || 0), 0);
+      const isMista = receber.length > 0 && pagar.length > 0;
+
+      let intro = '';
+      if (isMista) {
+        intro = `Encontrei ${resultadoAcao.length} contas no total:\n\n`;
+      } else if (receber.length > 0) {
+        const pendentes = receber.filter((d: any) => !d.paga).length;
+        intro = `Voce tem ${receber.length} conta${receber.length > 1 ? 's' : ''} a receber`;
+        if (pendentes > 0) intro += ` (${pendentes} pendente${pendentes > 1 ? 's' : ''})`;
+        intro += `:\n\n`;
+      } else if (pagar.length > 0) {
+        const pendentes = pagar.filter((d: any) => !d.paga).length;
+        intro = `Voce tem ${pagar.length} conta${pagar.length > 1 ? 's' : ''} a pagar`;
+        if (pendentes > 0) intro += ` (${pendentes} pendente${pendentes > 1 ? 's' : ''})`;
+        intro += `:\n\n`;
+      }
+
+      const listaContas = resultadoAcao.map((d: any, i: number) => {
+        const verbo = d.tipo === 0 ? 'Pagar a' : 'Receber de';
+        const cliente = d.cliente?.nome || 'Sem cliente cadastrado';
+        const valor = fmtBrl(d.valor || 0);
+        const status = d.paga ? 'ja liquidada' : 'pendente';
+        const venc = d.data ? `, vencimento em ${fmtDate(d.data)}` : '';
+        const descExtra = (d.descricao && d.descricao !== cliente) ? ` (${d.descricao})` : '';
+        return `${i + 1}. ${verbo} ${cliente}${descExtra}, R$ ${valor}, ${status}${venc}`;
+      }).join('\n');
+
+      text = intro + listaContas + '\n\n';
+
+      if (isMista) {
+        text += `Total geral: R$ ${fmtBrl(totalGeral)}.\n`;
+        text += `A receber pendente: R$ ${fmtBrl(totalReceberPend)}. A receber ja liquidado: R$ ${fmtBrl(totalReceberLiq)}.\n`;
+        text += `A pagar pendente: R$ ${fmtBrl(totalPagarPend)}. A pagar ja pago: R$ ${fmtBrl(totalPagarLiq)}.`;
+      } else if (receber.length > 0) {
+        text += `Total: R$ ${fmtBrl(totalGeral)}.`;
+        if (totalReceberLiq > 0) text += ` Pendente: R$ ${fmtBrl(totalReceberPend)}. Ja recebido: R$ ${fmtBrl(totalReceberLiq)}.`;
+      } else if (pagar.length > 0) {
+        text += `Total: R$ ${fmtBrl(totalGeral)}.`;
+        if (totalPagarLiq > 0) text += ` Pendente: R$ ${fmtBrl(totalPagarPend)}. Ja pago: R$ ${fmtBrl(totalPagarLiq)}.`;
+      }
+
     } else if (acaoNome === 'listar_clientes') {
+      const ativos = resultadoAcao.filter((c: any) => c.ativo && !c.bloqueado).length;
       text = text + '\n\n' +
-        resultadoAcao.map((c: any) => {
-          const statusStr = c.bloqueado ? 'BLOQUEADO' : (c.ativo ? 'Ativo' : 'Inativo');
-          return `- ${c.nome} | Tel: ${c.telefone || '-'} | ${statusStr}`;
+        `Voce tem ${resultadoAcao.length} clientes cadastrados (${ativos} ativos):\n\n` +
+        resultadoAcao.map((c: any, i: number) => {
+          const status = c.bloqueado ? 'bloqueado' : (c.ativo ? 'ativo' : 'inativo');
+          const tel = c.telefone ? `, telefone ${c.telefone}` : '';
+          return `${i + 1}. ${c.nome}, ${status}${tel}`;
         }).join('\n');
+
     } else if (acaoNome === 'listar_maquinas') {
+      const ativas = resultadoAcao.filter((m: any) => m.status === 'ATIVA').length;
       text = text + '\n\n' +
-        resultadoAcao.map((m: any) => {
-          return `- ${m.codigo} (${m.descricao || '-'}) | ${m.status} | ${m.cliente?.nome || '-'} | ${m.localizacao || '-'}`;
+        `Foram encontradas ${resultadoAcao.length} maquinas (${ativas} ativas):\n\n` +
+        resultadoAcao.map((m: any, i: number) => {
+          const cliente = m.cliente?.nome || 'Sem cliente';
+          const loc = m.localizacao ? `, em ${m.localizacao}` : '';
+          const desc = m.descricao && m.descricao !== '-' ? ` (${m.descricao})` : '';
+          const statusStr = m.status === 'ATIVA' ? 'ativa' : m.status === 'MANUTENCAO' ? 'em manutencao' : 'inativa';
+          return `${i + 1}. Maquina ${m.codigo}${desc}, do cliente ${cliente}${loc}, ${statusStr}`;
         }).join('\n');
+
     } else {
       const total = resultadoAcao.reduce((s: number, d: any) => s + (d.valor || 0), 0);
       text = text + '\n\n' +
         resultadoAcao.map((d: any) =>
-          '- ' + (d.descricao || 'Sem descricao') + ' | R$ ' + (d.valor || 0).toFixed(2) + ' | ' + (d.paga ? 'Liquidada' : 'Pendente')
+          '- ' + (d.descricao || 'Sem descricao') + ', R$ ' + fmtBrl(d.valor || 0) + ', ' + (d.paga ? 'liquidada' : 'pendente')
         ).join('\n') +
-        '\n\nTotal: ' + resultadoAcao.length + ' conta(s) | R$ ' + total.toFixed(2);
+        '\n\nTotal: ' + resultadoAcao.length + ' registros, R$ ' + fmtBrl(total);
     }
   } else if (resultadoAcao && !Array.isArray(resultadoAcao)) {
     if (acaoNome === 'criar_conta') {
       const desc = (resultadoAcao as any).descricao || '';
       const valor = (resultadoAcao as any).valor || 0;
-      const tipoStr = (resultadoAcao as any).tipo === 0 ? 'A Pagar' : 'A Receber';
-      text = text + '\n\nConta criada: ' + tipoStr + ' - ' + desc + ' | R$ ' + valor.toFixed(2);
+      const tipoStr = (resultadoAcao as any).tipo === 0 ? 'a pagar' : 'a receber';
+      const cliente = (resultadoAcao as any).cliente?.nome || '';
+      const clienteStr = cliente ? ` do cliente ${cliente}` : '';
+      text = text + '\n\nConta criada com sucesso! Conta ' + tipoStr + clienteStr + ', ' + desc + ', no valor de R$ ' + fmtBrl(valor);
     } else if (acaoNome === 'liquidar_conta') {
       const desc = (resultadoAcao as any).descricao || '';
       const valor = (resultadoAcao as any).valor || 0;
-      text = text + '\n\nConta liquidada: ' + desc + ' | R$ ' + valor.toFixed(2);
+      const cliente = (resultadoAcao as any).cliente?.nome || '';
+      const clienteStr = cliente ? ` do cliente ${cliente}` : '';
+      text = text + '\n\nConta liquidada com sucesso! ' + desc + clienteStr + ', R$ ' + fmtBrl(valor);
     } else if (acaoNome === 'excluir_conta') {
       text = text + '\n\nConta excluida com sucesso.';
     } else if (acaoNome === 'resumo_financeiro') {
       text = text + '\n\n' + String(resultadoAcao);
     }
   } else if (resultadoAcao && Array.isArray(resultadoAcao) && resultadoAcao.length === 0) {
-    text = text + '\n\nNenhum registro encontrado.';
+    if (acaoNome === 'listar_contas') {
+      text = text + '\n\nNenhuma conta encontrada com esse filtro. Que tal criar uma nova conta?';
+    } else if (acaoNome === 'listar_clientes') {
+      text = text + '\n\nNenhum cliente encontrado. Cadastre clientes pela tela de Clientes.';
+    } else if (acaoNome === 'listar_maquinas') {
+      text = text + '\n\nNenhuma maquina encontrada.';
+    } else {
+      text = text + '\n\nNenhum registro encontrado.';
+    }
   }
 
   return text.replace(/\n{3,}/g, '\n\n').trim();
@@ -476,27 +553,42 @@ Voce tem acesso a dados em tempo real da empresa e pode responder perguntas sobr
 - Leituras recentes (valores de entrada/saida)
 - Pagamentos e assinaturas
 
-Dados atuais da empresa:
+RESUMO ATUAL DA EMPRESA (apenas numeros resumidos, NAO e a lista completa):
 ${companyContext}${conversationSummary}${instrucoesPermanentes}
 
-Responda em portugues brasileiro de forma clara e objetiva.
-Se o usuario pedir para criar/alterar dados, use as acoes disponiveis.
+REGRAS FUNDAMENTAIS:
+1. RESPOSTAS EM LINGUAGEM NATURAL: Suas respostas serao FALADAS em voz alta pelo sistema (TTS). Use frases completas, pontuacao adequada e linguagem coloquial brasileira. Evite simbolos como |, [], {}, abreviacoes ou formato de tabela.
+2. SEMPRE USE ACAO JSON PARA CONSULTAS: Quando o usuario pedir para VER, LISTAR, MOSTRAR, CONSULTAR contas, clientes, maquinas ou dados financeiros, voce DEVE SEMPRE retornar a acao JSON correspondente. NUNCA responda com dados do resumo acima como se fossem os dados completos. O resumo acima e apenas um panorama geral. Os dados reais e completos estao no banco e so podem ser acessados via acao JSON.
+3. Perguntas genericas como "contas a receber", "meus clientes", "minhas maquinas" devem SEMPRE gerar a acao JSON correspondente.
+4. Apenas perguntas GERAIS ou CONVERSACIONAIS (como "oi", "como funciona", etc.) devem ser respondidas sem acao JSON.
 
 Acoes disponiveis:
-- "listar_contas": Listar contas com filtros (clienteId, tipo: 0=Pagar, 1=Receber, paga: true/false)
+- "listar_contas": Listar contas com filtros (clienteId, tipo: 0=Pagar, 1=Receber, paga: true/false). SEMPRE use esta acao quando o usuario perguntar sobre contas.
 - "criar_conta": Criar nova conta (campos: descricao, valor, data, tipo: 0=Pagar/1=Receber, clienteId)
 - "liquidar_conta": Marcar conta como liquidada (campo: id, dataPagamento opcional)
 - "excluir_conta": Excluir conta (campo: id)
-- "listar_clientes": Listar clientes
-- "listar_maquinas": Listar maquinas (por clienteId)
-- "resumo_financeiro": Obter resumo financeiro completo
+- "listar_clientes": Listar clientes. SEMPRE use esta acao quando o usuario perguntar sobre clientes.
+- "listar_maquinas": Listar maquinas (por clienteId). SEMPRE use esta acao quando o usuario perguntar sobre maquinas.
+- "resumo_financeiro": Obter resumo financeiro detalhado completo
 
-IMPORTANTE: Quando sugerir uma acao que modifica dados (criar, liquidar, excluir), sempre explique ao usuario o que sera feito de forma clara no campo "friendlyText". O sistema pedira confirmacao automaticamente ao usuario.
+FORMATO DA RESPOSTA:
+Quando uma acao JSON for necessaria, responda EXCLUSIVAMENTE com:
+{"acao": "nome_da_acao", "dados": {...}}
 
-Responda com JSON no formato (quando uma acao for necessaria):
-{"acao": "nome_da_acao", "dados": {...}, "friendlyText": "Mensagem amigavel descrevendo o que sera feito"}
+NAO inclua texto fora do JSON quando for executar uma acao. O sistema vai formatar os resultados em linguagem natural automaticamente.
+Se precisar explicar algo antes da acao, use o campo "friendlyText" dentro do JSON.
 
-Se a pergunta for apenas informativa, responda normalmente sem acao JSON.
+Para acoes que MODIFICAM dados (criar, liquidar, excluir), SEMPRE inclua "friendlyText" explicando o que sera feito. O sistema pedira confirmacao ao usuario.
+
+EXEMPLOS:
+- Usuario: "contas a receber" -> {"acao": "listar_contas", "dados": {"tipo": 1}}
+- Usuario: "contas a receber pendentes" -> {"acao": "listar_contas", "dados": {"tipo": 1, "paga": false}}
+- Usuario: "todas as contas" -> {"acao": "listar_contas", "dados": {}}
+- Usuario: "meus clientes" -> {"acao": "listar_clientes", "dados": {}}
+- Usuario: "receber de Joao" -> {"acao": "listar_contas", "dados": {"tipo": 1, "clienteId": "ID_DO_CLIENTE"}}
+- Usuario: "quanto tenho a receber pendente?" -> {"acao": "listar_contas", "dados": {"tipo": 1, "paga": false}}
+- Usuario: "minhas maquinas" -> {"acao": "listar_maquinas", "dados": {}}
+
 Use formato de moeda brasileiro (R$ X.XXX,XX) nos valores.`;
 
     // Historico de conversa (limitado as ultimas 10 mensagens)
@@ -641,12 +733,37 @@ Use formato de moeda brasileiro (R$ X.XXX,XX) nos valores.`;
         .replace(/```[\s\S]*?```/g, '')
         .trim();
     }
-    // 4) Se ainda for JSON puro, usar mensagem generica
+    // 4) Se ainda for JSON puro, usar friendlyText ou texto vazio (sera preenchido apos execucao)
     if (!finalText.trim() || (finalText.trim().startsWith('{') && finalText.trim().endsWith('}'))) {
-      finalText = parsed.action?.friendlyText || 'Acao executada com sucesso.';
+      finalText = parsed.action?.friendlyText || '';
     }
     // 5) Limpar linhas duplicadas
     finalText = finalText.replace(/\n{3,}/g, '\n\n').trim();
+
+    // ========== FALLBACK: detectar consultas de dados sem acao JSON ==========
+    if (!parsed.action?.acao) {
+      const msgLow = mensagem.toLowerCase().trim();
+      if (/^contas?\s*a\s*receber/.test(msgLow) || /^receber\b/.test(msgLow)) {
+        parsed.action = { acao: 'listar_contas', dados: { tipo: 1 } };
+      } else if (/^contas?\s*a\s*pagar/.test(msgLow) || /^pagar\b/.test(msgLow)) {
+        parsed.action = { acao: 'listar_contas', dados: { tipo: 0 } };
+      } else if (/contas?\s*a\s*receber.*pendentes?/.test(msgLow)) {
+        parsed.action = { acao: 'listar_contas', dados: { tipo: 1, paga: false } };
+      } else if (/contas?\s*a\s*pagar.*pendentes?/.test(msgLow)) {
+        parsed.action = { acao: 'listar_contas', dados: { tipo: 0, paga: false } };
+      } else if (/^todas?\s*as?\s*contas?$/.test(msgLow) || msgLow === 'contas') {
+        parsed.action = { acao: 'listar_contas', dados: {} };
+      } else if (/meus\s*clientes?|lista\s*(de\s*)?clientes?/.test(msgLow)) {
+        parsed.action = { acao: 'listar_clientes', dados: {} };
+      } else if (/minhas?\s*maquinas?|lista\s*(de\s*)?maquinas?/.test(msgLow)) {
+        parsed.action = { acao: 'listar_maquinas', dados: {} };
+      } else if (/resumo\s*financeiro|situac[\w]*\s*financeir/.test(msgLow)) {
+        parsed.action = { acao: 'resumo_financeiro', dados: {} };
+      }
+      if (parsed.action?.acao) {
+        finalText = '';
+      }
+    }
 
     // ========== ACAO DESTRUTIVA: pedir confirmacao ==========
     if (parsed.action?.acao && parsed.action.dados && DESTRUCTIVE_ACTIONS.has(parsed.action.acao)) {
@@ -666,7 +783,10 @@ Use formato de moeda brasileiro (R$ X.XXX,XX) nos valores.`;
     // ========== ACAO NAO-DESTRUTIVA: executar imediatamente ==========
     let resultadoAcao: unknown = null;
 
-    if (parsed.action?.acao && parsed.action.dados) {
+    if (parsed.action?.acao) {
+      if (!parsed.action.dados) {
+        parsed.action.dados = {};
+      }
       try {
         const result = await runAction(parsed.action, empresaId);
         resultadoAcao = result.resultadoAcao;

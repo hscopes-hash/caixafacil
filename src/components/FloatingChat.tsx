@@ -14,7 +14,14 @@ interface ChatMessage {
 function speak(text: string): void {
   if (typeof window === 'undefined' || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
-  const clean = text.replace(/[-•]\s/g, '').replace(/\n+/g, '. ').replace(/\s+/g, ' ').trim();
+  let clean = text
+    .replace(/^\d+\.\s/gm, '')
+    .replace(/\n{2,}/g, '. ')
+    .replace(/\n/g, ', ')
+    .replace(/\s+/g, ' ')
+    .replace(/[|[\]{}]/g, '')
+    .trim();
+  if (clean && !/[.!?]$/.test(clean)) clean += '.';
   if (!clean) return;
   const utterance = new SpeechSynthesisUtterance(clean);
   utterance.lang = 'pt-BR';
