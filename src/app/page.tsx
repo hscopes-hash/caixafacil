@@ -4444,7 +4444,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
           {/* Resumo */}
           <Card className="border-0 shadow-lg bg-card">
             <CardContent className="p-4">
-              <h3 className="font-semibold text-foreground mb-3">Resumo</h3>
+              <h3 className="font-semibold text-foreground mb-3">Total da Leitura</h3>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Entrada:</span>
