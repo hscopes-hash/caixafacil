@@ -257,20 +257,31 @@ Responda APENAS com JSON neste formato exato, sem nenhum texto adicional:
     }
 
     // Validar resultado
-    const total = typeof resultado.total === 'number' ? resultado.total : parseFloat(resultado.total);
+    const totalIA = typeof resultado.total === 'number' ? resultado.total : parseFloat(resultado.total);
     const tickets = Array.isArray(resultado.tickets) ? resultado.tickets.map((t: any) => typeof t.valor === 'number' ? t.valor : parseFloat(t.valor)).filter((v: number) => !isNaN(v) && v > 0) : [];
 
-    if (isNaN(total) || total <= 0) {
+    if (isNaN(totalIA) || totalIA <= 0) {
       return NextResponse.json(
         { error: 'Nenhum valor de cartao identificado na foto. Certifique-se de que os canhotos estejam visiveis.' },
         { status: 400 }
       );
     }
 
+    // Build 130: Soma calculada pelo codigo (confiavel), nao pela IA
+    const totalCalculado = tickets.reduce((soma: number, v: number) => soma + v, 0);
+    const somaConferida = Math.abs(totalCalculado - totalIA) < 0.01;
+
+    // Logar discrepancia para monitoramento
+    if (!somaConferida) {
+      console.log(`[EXTRAIR-CARTAO] DISCREPANCIA: IA disse ${totalIA} | Codigo calculou ${totalCalculado} | Diferenca: ${(totalCalculado - totalIA).toFixed(2)} | Provedor: ${result.provider}`);
+    }
+
     return NextResponse.json({
       success: true,
       tickets: tickets,
-      total: total,
+      total: totalCalculado,
+      totalIA: somaConferida ? undefined : totalIA,
+      totalConferido: somaConferida,
       quantidade: tickets.length,
       provider: result.provider,
       model,

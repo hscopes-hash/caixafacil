@@ -2231,7 +2231,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
   const [cartaoFotoCapturada, setCartaoFotoCapturada] = useState<string | null>(null);
   const [cartaoFotoProcessada, setCartaoFotoProcessada] = useState<string | null>(null);
   const [extraindoCartao, setExtraindoCartao] = useState(false);
-  const [cartaoResultado, setCartaoResultado] = useState<{ tickets: number[]; total: number; quantidade: number } | null>(null);
+  const [cartaoResultado, setCartaoResultado] = useState<{ tickets: number[]; total: number; totalIA?: number; totalConferido: boolean; quantidade: number } | null>(null);
 
   // Funções para gerenciar receitas
   const calcularTotalReceitas = () => {
@@ -2360,13 +2360,27 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
       if (!res.ok) {
         throw new Error(data.error || 'Erro ao extrair valores');
       }
+      // Build 130: Soma ja vem calculada pelo backend (confiavel)
+      const totalBackend = data.total || 0;
+      const tickets = (data.tickets || []).map((v: any) => typeof v === 'number' ? v : parseFloat(v)).filter((v: number) => !isNaN(v) && v > 0);
+      // Dupla validacao: frontend tambem soma para garantir
+      const totalFrontend = tickets.reduce((s: number, v: number) => s + v, 0);
+      const totalFinal = Math.abs(totalBackend - totalFrontend) < 0.01 ? totalBackend : totalFrontend;
+
       const resultado = {
-        tickets: data.tickets || [],
-        total: data.total || 0,
-        quantidade: data.quantidade || 0,
+        tickets: tickets,
+        total: totalFinal,
+        totalIA: data.totalConferido ? undefined : data.totalIA,
+        totalConferido: data.totalConferido ?? true,
+        quantidade: data.quantidade || tickets.length,
       };
       setCartaoResultado(resultado);
-      toast.success(`${resultado.quantidade} ticket(s) identificado(s) - Total: R$ ${resultado.total.toFixed(2)}`);
+
+      if (!resultado.totalConferido && resultado.totalIA !== undefined) {
+        toast.warning(`IA disse R$ ${resultado.totalIA.toFixed(2)} mas a soma correta e R$ ${totalFinal.toFixed(2)}. Usando valor conferido.`);
+      } else {
+        toast.success(`${resultado.quantidade} ticket(s) identificado(s) - Total: R$ ${totalFinal.toFixed(2)}`);
+      }
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Erro desconhecido';
       toast.error(msg);
@@ -5378,11 +5392,20 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                             <p className="text-xs text-success">TICKETS</p>
                             <p className="text-lg font-bold text-success">{cartaoResultado.quantidade}</p>
                           </div>
-                          <div className="text-center p-2 bg-blue-50 rounded border border-blue-300">
-                            <p className="text-xs text-blue-600">TOTAL</p>
-                            <p className="text-lg font-bold text-blue-600">R$ {cartaoResultado.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                          <div className={`text-center p-2 rounded border ${cartaoResultado.totalConferido ? 'bg-blue-50 border-blue-300' : 'bg-amber-50 border-amber-300'}`>
+                            <p className={`text-xs ${cartaoResultado.totalConferido ? 'text-blue-600' : 'text-amber-600'}`}>TOTAL {cartaoResultado.totalConferido ? '' : '(CORRIGIDO)'}</p>
+                            <p className={`text-lg font-bold ${cartaoResultado.totalConferido ? 'text-blue-600' : 'text-amber-600'}`}>R$ {cartaoResultado.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                           </div>
                         </div>
+                        {/* Build 130: Aviso de discrepancia na soma da IA */}
+                        {!cartaoResultado.totalConferido && cartaoResultado.totalIA !== undefined && (
+                          <div className="flex items-center gap-2 p-2 bg-amber-50 border border-amber-300 rounded-lg">
+                            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                            <p className="text-xs text-amber-700">
+                              A IA informou R$ {cartaoResultado.totalIA.toFixed(2)} mas a soma dos valores e R$ {cartaoResultado.total.toFixed(2)}. O total foi corrigido automaticamente.
+                            </p>
+                          </div>
+                        )}
                         {cartaoResultado.tickets.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {cartaoResultado.tickets.map((t, i) => (
