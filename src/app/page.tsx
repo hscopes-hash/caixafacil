@@ -3076,7 +3076,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
   };
 
   // ============================================
-  // LANCAMENTO DE LOTE
+  // LANÇAMENTO DE LOTE
   // ============================================
 
   // Função helper para processar arquivo de imagem e adicionar ao lote
@@ -4481,7 +4481,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
         className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700"
       >
         <Layers className="w-4 h-4 mr-2" />
-        LANCAMENTO DE LOTE
+        LANÇAMENTO DE LOTE
       </Button>
 
       {loading ? (
@@ -4868,7 +4868,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <Layers className="w-5 h-5" />
-                  Lancamento de Lote
+                  Lançamento de Lote
                 </DialogTitle>
                 <DialogDescription className="text-muted-foreground">
                   Tire as fotos das maquinas. Elas serao processadas automaticamente.
