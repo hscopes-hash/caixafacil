@@ -4013,6 +4013,20 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
         </CardContent>
       </Card>
 
+      {/* Botão Lançamento de Lote */}
+      <Button
+        onClick={() => {
+          setFotosLote([]);
+          setLoteProgresso(0);
+          setProcessandoLote(false);
+          setLoteModalOpen(true);
+        }}
+        className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700"
+      >
+        <Layers className="w-4 h-4 mr-2" />
+        LANCAMENTO DE LOTE
+      </Button>
+
       {loading ? (
         <div className="text-center py-8 text-muted-foreground">Carregando máquinas...</div>
       ) : clienteSelecionado && maquinas.length === 0 ? (
@@ -4134,20 +4148,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
               </Card>
             ))}
           </div>
-
-          {/* Botão Lançamento de Lote */}
-          <Button
-            onClick={() => {
-              setFotosLote([]);
-              setLoteProgresso(0);
-              setProcessandoLote(false);
-              setLoteModalOpen(true);
-            }}
-            className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700"
-          >
-            <Layers className="w-4 h-4 mr-2" />
-            LANCAMENTO DE LOTE
-          </Button>
 
           {/* Despesas */}
           <Card className="border-0 shadow-lg bg-card">
