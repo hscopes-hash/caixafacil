@@ -5395,7 +5395,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                           onClick={aplicarValoresCartao}
                         >
                           <CheckCircle className="w-4 h-4 mr-2" />
-                          APLICAR AO CARTÃO
+                          APLICAR AO CAMPO CARTÃO
                         </Button>
                       </div>
                     )}
