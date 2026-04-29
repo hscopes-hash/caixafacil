@@ -36,6 +36,7 @@ import GestaoPlanosSaaS from '@/components/GestaoPlanosSaaS';
 import PainelFinanceiroSaaS from '@/components/PainelFinanceiroSaaS';
 import { redirectToCheckout } from '@/components/MercadoPagoCheckout';
 import FloatingChat from '@/components/FloatingChat';
+import ChatIAPage from '@/components/ChatIAPage';
 
 // ============================================
 // TYPES
@@ -9301,6 +9302,9 @@ export default function App() {
         {activeTab === 'gestao-empresas' && usuario?.email === 'hscopes@gmail.com' && (
           <GestaoEmpresasPage adminEmail={usuario.email} />
         )}
+        {activeTab === 'chat-ia' && (
+          <ChatIAPage />
+        )}
         {activeTab === 'assinatura' && (
           <AssinaturaTab />
         )}
@@ -9329,7 +9333,7 @@ export default function App() {
             { id: 'clientes', icon: Users, label: 'Clientes' },
             { id: 'leituras', icon: ClipboardList, label: 'Cobrança' },
             { id: 'pagamentos', icon: DollarSign, label: 'Financeiro' },
-            { id: 'assinatura', icon: CreditCard, label: 'Assinatura' },
+            { id: 'chat-ia', icon: Sparkles, label: 'Chat IA' },
           ].map((item) => (
             <button
               key={item.id}
@@ -9344,7 +9348,7 @@ export default function App() {
           ))}
         </div>
       </nav>
-      <FloatingChat enabled={planoFeatures?.recIA ?? false} />
+      {activeTab !== 'chat-ia' && <FloatingChat enabled={planoFeatures?.recIA ?? false} />}
     </div>
   );
 }
