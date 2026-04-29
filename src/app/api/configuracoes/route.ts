@@ -30,6 +30,12 @@ export async function GET(request: NextRequest) {
         llmApiKeyOpenrouter: true,
         mercadopagoAccessToken: true,
         mercadopagoPublicKey: true,
+        impressoraTipo: true,
+        impressoraPreset: true,
+        impressoraConexao: true,
+        impressoraServicoUUID: true,
+        impressoraCharUUID: true,
+        impressoraChunkSize: true,
       },
     });
 
@@ -48,6 +54,12 @@ export async function GET(request: NextRequest) {
       mercadopagoAccessToken: empresa.mercadopagoAccessToken || '',
       mercadopagoPublicKey: empresa.mercadopagoPublicKey || '',
       modeloPadrao: process.env.LLM_MODEL || 'gemini-2.5-flash-lite',
+      impressoraTipo: empresa.impressoraTipo || null,
+      impressoraPreset: empresa.impressoraPreset || null,
+      impressoraConexao: empresa.impressoraConexao || null,
+      impressoraServicoUUID: empresa.impressoraServicoUUID || null,
+      impressoraCharUUID: empresa.impressoraCharUUID || null,
+      impressoraChunkSize: empresa.impressoraChunkSize || null,
     });
   } catch (error) {
     console.error('Erro ao buscar configurações:', error);
@@ -59,7 +71,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { empresaId, llmApiKey, llmModel, llmApiKeyGemini, llmApiKeyGlm, llmApiKeyOpenrouter, mercadopagoAccessToken, mercadopagoPublicKey } = body;
+    const { empresaId, llmApiKey, llmModel, llmApiKeyGemini, llmApiKeyGlm, llmApiKeyOpenrouter, mercadopagoAccessToken, mercadopagoPublicKey, impressoraTipo, impressoraPreset, impressoraConexao, impressoraServicoUUID, impressoraCharUUID, impressoraChunkSize } = body;
 
     if (!empresaId) {
       return NextResponse.json({ error: 'empresaId é obrigatório' }, { status: 400 });
@@ -106,6 +118,30 @@ export async function PUT(request: NextRequest) {
       const trimmed = mercadopagoPublicKey.trim();
       dadosAtualizacao.mercadopagoPublicKey = trimmed === '' ? null : trimmed;
     }
+    // Impressora
+    if (impressoraTipo !== undefined && impressoraTipo !== null) {
+      const trimmed = impressoraTipo.trim();
+      dadosAtualizacao.impressoraTipo = trimmed === '' ? null : trimmed;
+    }
+    if (impressoraPreset !== undefined && impressoraPreset !== null) {
+      const trimmed = impressoraPreset.trim();
+      dadosAtualizacao.impressoraPreset = trimmed === '' ? null : trimmed;
+    }
+    if (impressoraConexao !== undefined && impressoraConexao !== null) {
+      const trimmed = impressoraConexao.trim();
+      dadosAtualizacao.impressoraConexao = trimmed === '' ? null : trimmed;
+    }
+    if (impressoraServicoUUID !== undefined && impressoraServicoUUID !== null) {
+      const trimmed = impressoraServicoUUID.trim();
+      dadosAtualizacao.impressoraServicoUUID = trimmed === '' ? null : trimmed;
+    }
+    if (impressoraCharUUID !== undefined && impressoraCharUUID !== null) {
+      const trimmed = impressoraCharUUID.trim();
+      dadosAtualizacao.impressoraCharUUID = trimmed === '' ? null : trimmed;
+    }
+    if (impressoraChunkSize !== undefined && impressoraChunkSize !== null) {
+      dadosAtualizacao.impressoraChunkSize = typeof impressoraChunkSize === 'number' ? impressoraChunkSize : null;
+    }
 
     const empresaAtualizada = await prisma.empresa.update({
       where: { id: empresaId },
@@ -119,6 +155,12 @@ export async function PUT(request: NextRequest) {
         llmApiKeyOpenrouter: true,
         mercadopagoAccessToken: true,
         mercadopagoPublicKey: true,
+        impressoraTipo: true,
+        impressoraPreset: true,
+        impressoraConexao: true,
+        impressoraServicoUUID: true,
+        impressoraCharUUID: true,
+        impressoraChunkSize: true,
       },
     });
 
@@ -133,6 +175,12 @@ export async function PUT(request: NextRequest) {
       mercadopagoAccessToken: empresaAtualizada.mercadopagoAccessToken || '',
       mercadopagoPublicKey: empresaAtualizada.mercadopagoPublicKey || '',
       mensagem: 'Configurações salvas com sucesso',
+      impressoraTipo: empresaAtualizada.impressoraTipo || null,
+      impressoraPreset: empresaAtualizada.impressoraPreset || null,
+      impressoraConexao: empresaAtualizada.impressoraConexao || null,
+      impressoraServicoUUID: empresaAtualizada.impressoraServicoUUID || null,
+      impressoraCharUUID: empresaAtualizada.impressoraCharUUID || null,
+      impressoraChunkSize: empresaAtualizada.impressoraChunkSize || null,
     });
   } catch (error) {
     console.error('Erro ao salvar configurações:', error);

@@ -41,6 +41,13 @@ model Empresa {
   // Configurações MercadoPago
   mercadopagoAccessToken String?   // Access Token do MercadoPago (backend)
   mercadopagoPublicKey   String?   // Public Key do MercadoPago (frontend)
+  // Configurações de Impressora Térmica via Bluetooth
+  impressoraTipo         String?   // "58mm" | "80mm" | "generic"
+  impressoraPreset       String?   // "goojprt-58mm" | "goojprt-80mm" | "mtp-ii" | "generic-bt" | "none"
+  impressoraConexao      String?   // "bluetooth" | "none"
+  impressoraServicoUUID  String?   // UUID do serviço BLE personalizado
+  impressoraCharUUID     String?   // UUID da característica de escrita BLE personalizada
+  impressoraChunkSize    Int?      // Tamanho do chunk BLE (padrão 100)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

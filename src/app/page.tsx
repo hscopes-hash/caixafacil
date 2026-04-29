@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useTheme } from 'next-themes';
 import { useAuthStore, type Usuario, type Empresa, type NivelAcesso } from '@/stores/auth-store';
 import { Button } from '@/components/ui/button';
+import { PRINTER_PRESETS, connectPrinter, disconnectPrinter, isBluetoothAvailable, isPrinterConnected, getConnectedDeviceName, getActiveConfig, printReceipt, fallbackPrint, generateReceiptText, type PrinterConfig } from '@/lib/printer-bluetooth';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -4108,8 +4109,142 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
   };
 
   // Imprimir resumo
-  const imprimirResumo = () => {
-    window.print();
+  const imprimirResumo = async () => {
+    const config = getActiveConfig() || PRINTER_PRESETS['generic-bt'];
+    if (isPrinterConnected()) {
+      // Imprimir via Bluetooth
+      try {
+        const result = await printReceipt({
+          empresaNome: empresa?.nome || 'CaixaFacil',
+          clienteNome: clienteSelecionado?.nome?.toUpperCase() || 'CLIENTE',
+          dataHora: dataFormatada,
+          usuario: usuarioNome,
+          maquinas: maquinasSalvas.map(m => ({
+            codigo: m.codigo || '???',
+            tipo: m.tipo?.descricao || 'Tipo',
+            entradaAnterior: m.entradaAtual || 0,
+            entradaNova: m.novaEntrada || m.entradaAtual || 0,
+            saidaAnterior: m.saidaAtual || 0,
+            saidaNova: m.novaSaida || m.saidaAtual || 0,
+            diferencaEntrada: m.diferencaEntrada || 0,
+            diferencaSaida: m.diferencaSaida || 0,
+            saldo: m.saldoMaquina || 0,
+            moeda: m.moeda || 'M010',
+          })),
+          totais: {
+            entradas: calcularTotaisSalvos().entradas,
+            saidas: calcularTotaisSalvos().saidas,
+            jogado: calcularTotaisSalvos().jogado,
+            cliente: calcularTotaisSalvos().cliente,
+            acertoPct: clienteSelecionado?.acertoPercentual ?? 50,
+          },
+          receitas: receitasSalvas.length > 0 ? receitasSalvas : undefined,
+          despesas: despesasSalvas.length > 0 ? despesasSalvas : undefined,
+          debitosVencidos: calcularTotaisSalvos().debitoSaldo || undefined,
+          liquido: calcularTotaisSalvos().liquido,
+          width: config.type === '80mm' ? 80 : 58,
+        }, config);
+        
+        if (result.success) {
+          toast.success('Extrato enviado para a impressora!');
+        } else {
+          toast.error(`Erro ao imprimir: ${result.error}`);
+          // Fallback to native print
+          fallbackPrint(generateReceiptText({
+            empresaNome: empresa?.nome || 'CaixaFacil',
+            clienteNome: clienteSelecionado?.nome?.toUpperCase() || 'CLIENTE',
+            dataHora: dataFormatada,
+            usuario: usuarioNome,
+            maquinas: maquinasSalvas.map(m => ({
+              codigo: m.codigo || '???',
+              tipo: m.tipo?.descricao || 'Tipo',
+              entradaAnterior: m.entradaAtual || 0,
+              entradaNova: m.novaEntrada || m.entradaAtual || 0,
+              saidaAnterior: m.saidaAtual || 0,
+              saidaNova: m.novaSaida || m.saidaAtual || 0,
+              diferencaEntrada: m.diferencaEntrada || 0,
+              diferencaSaida: m.diferencaSaida || 0,
+              saldo: m.saldoMaquina || 0,
+              moeda: m.moeda || 'M010',
+            })),
+            totais: {
+              entradas: calcularTotaisSalvos().entradas,
+              saidas: calcularTotaisSalvos().saidas,
+              jogado: calcularTotaisSalvos().jogado,
+              cliente: calcularTotaisSalvos().cliente,
+              acertoPct: clienteSelecionado?.acertoPercentual ?? 50,
+            },
+            receitas: receitasSalvas.length > 0 ? receitasSalvas : undefined,
+            despesas: despesasSalvas.length > 0 ? despesasSalvas : undefined,
+            debitosVencidos: calcularTotaisSalvos().debitoSaldo || undefined,
+            liquido: calcularTotaisSalvos().liquido,
+          }));
+        }
+      } catch (err) {
+        toast.error('Erro ao enviar para impressora');
+        fallbackPrint(generateReceiptText({
+          empresaNome: empresa?.nome || 'CaixaFacil',
+          clienteNome: clienteSelecionado?.nome?.toUpperCase() || 'CLIENTE',
+          dataHora: dataFormatada,
+          usuario: usuarioNome,
+          maquinas: maquinasSalvas.map(m => ({
+            codigo: m.codigo || '???',
+            tipo: m.tipo?.descricao || 'Tipo',
+            entradaAnterior: m.entradaAtual || 0,
+            entradaNova: m.novaEntrada || m.entradaAtual || 0,
+            saidaAnterior: m.saidaAtual || 0,
+            saidaNova: m.novaSaida || m.saidaAtual || 0,
+            diferencaEntrada: m.diferencaEntrada || 0,
+            diferencaSaida: m.diferencaSaida || 0,
+            saldo: m.saldoMaquina || 0,
+            moeda: m.moeda || 'M010',
+          })),
+          totais: {
+            entradas: calcularTotaisSalvos().entradas,
+            saidas: calcularTotaisSalvos().saidas,
+            jogado: calcularTotaisSalvos().jogado,
+            cliente: calcularTotaisSalvos().cliente,
+            acertoPct: clienteSelecionado?.acertoPercentual ?? 50,
+          },
+          receitas: receitasSalvas.length > 0 ? receitasSalvas : undefined,
+          despesas: despesasSalvas.length > 0 ? despesasSalvas : undefined,
+          debitosVencidos: calcularTotaisSalvos().debitoSaldo || undefined,
+          liquido: calcularTotaisSalvos().liquido,
+        }));
+      }
+    } else {
+      // Fallback: native print / share
+      const text = generateReceiptText({
+        empresaNome: empresa?.nome || 'CaixaFacil',
+        clienteNome: clienteSelecionado?.nome?.toUpperCase() || 'CLIENTE',
+        dataHora: dataFormatada,
+        usuario: usuarioNome,
+        maquinas: maquinasSalvas.map(m => ({
+          codigo: m.codigo || '???',
+          tipo: m.tipo?.descricao || 'Tipo',
+          entradaAnterior: m.entradaAtual || 0,
+          entradaNova: m.novaEntrada || m.entradaAtual || 0,
+          saidaAnterior: m.saidaAtual || 0,
+          saidaNova: m.novaSaida || m.saidaAtual || 0,
+          diferencaEntrada: m.diferencaEntrada || 0,
+          diferencaSaida: m.diferencaSaida || 0,
+          saldo: m.saldoMaquina || 0,
+          moeda: m.moeda || 'M010',
+        })),
+        totais: {
+          entradas: calcularTotaisSalvos().entradas,
+          saidas: calcularTotaisSalvos().saidas,
+          jogado: calcularTotaisSalvos().jogado,
+          cliente: calcularTotaisSalvos().cliente,
+          acertoPct: clienteSelecionado?.acertoPercentual ?? 50,
+        },
+        receitas: receitasSalvas.length > 0 ? receitasSalvas : undefined,
+        despesas: despesasSalvas.length > 0 ? despesasSalvas : undefined,
+        debitosVencidos: calcularTotaisSalvos().debitoSaldo || undefined,
+        liquido: calcularTotaisSalvos().liquido,
+      });
+      fallbackPrint(text);
+    }
   };
 
   // Fechar modal de resumo
@@ -6676,6 +6811,11 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
   const [testando, setTestando] = useState(false);
   const [resultadoTeste, setResultadoTeste] = useState<{ sucesso: boolean; mensagem: string; detalhe?: string; tempoMs?: number } | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
+  // Estados para impressora Bluetooth
+  const [impressoraPreset, setImpressoraPreset] = useState('none');
+  const [impressoraConectada, setImpressoraConectada] = useState(false);
+  const [impressoraNome, setImpressoraNome] = useState<string | null>(null);
+  const [impressoraConectando, setImpressoraConectando] = useState(false);
 
   // Funções auxiliares
   const getProviderLocal = (m: string) => m.includes('/') ? 'openrouter' : m.startsWith('glm-') ? 'glm' : 'gemini';
@@ -6736,6 +6876,7 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
         setSavedKeyOpenrouter(data.llmApiKeyOpenrouter || '');
         setMpAccessToken(data.mercadopagoAccessToken || '');
         setMpPublicKey(data.mercadopagoPublicKey || '');
+        setImpressoraPreset(data.impressoraPreset || 'none');
       })
       .catch((err) => {
         console.error('Erro ao carregar configurações:', err);
@@ -6759,7 +6900,7 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
       const res = await fetch('/api/configuracoes', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empresaId, llmApiKey, llmModel, llmApiKeyGemini: newKeyGemini, llmApiKeyGlm: newKeyGlm, llmApiKeyOpenrouter: newKeyOpenrouter, mercadopagoAccessToken: mpAccessToken, mercadopagoPublicKey: mpPublicKey }),
+        body: JSON.stringify({ empresaId, llmApiKey, llmModel, llmApiKeyGemini: newKeyGemini, llmApiKeyGlm: newKeyGlm, llmApiKeyOpenrouter: newKeyOpenrouter, mercadopagoAccessToken: mpAccessToken, mercadopagoPublicKey: mpPublicKey, impressoraPreset }),
       });
       const data = await res.json();
       console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
@@ -6775,6 +6916,39 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
     } finally {
       setSalvando(false);
     }
+  };
+
+  const handleConectarImpressora = async () => {
+    setImpressoraConectando(true);
+    try {
+      const config = PRINTER_PRESETS[impressoraPreset] || PRINTER_PRESETS['none'];
+      if (impressoraPreset === 'none') {
+        toast.error('Selecione um modelo de impressora');
+        setImpressoraConectando(false);
+        return;
+      }
+      const result = await connectPrinter(config);
+      if (result.success) {
+        setImpressoraConectada(true);
+        setImpressoraNome(result.deviceName || null);
+        toast.success(`Impressora conectada: ${result.deviceName}`);
+      } else {
+        setImpressoraConectada(false);
+        toast.error(`Erro: ${result.error}`);
+      }
+    } catch {
+      setImpressoraConectada(false);
+      toast.error('Falha ao conectar impressora');
+    } finally {
+      setImpressoraConectando(false);
+    }
+  };
+
+  const handleDesconectarImpressora = async () => {
+    await disconnectPrinter();
+    setImpressoraConectada(false);
+    setImpressoraNome(null);
+    toast.success('Impressora desconectada');
   };
 
   const handleTestarConexao = async () => {
@@ -6820,6 +6994,77 @@ function ConfiguracoesPage({ empresaId }: { empresaId: string }) {
         <h2 className="text-xl font-bold text-foreground">Configurações</h2>
         <p className="text-sm text-muted-foreground mt-1">Configuração da IA Vision para extração de leituras</p>
       </div>
+
+      {/* Card - Impressora Térmica */}
+      <Card className="border-border">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Printer className="w-5 h-5 text-amber-500" />
+            Impressora Térmica
+          </CardTitle>
+          <CardDescription className="text-sm">
+            Configure a impressora de ticket via Bluetooth para extratos (ESC/POS)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-muted-foreground">Modelo da Impressora</Label>
+            <Select value={impressoraPreset} onValueChange={(v) => { setImpressoraPreset(v); setImpressoraConectada(false); setImpressoraNome(null); }}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Selecione..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Nenhuma (impressão nativa)</SelectItem>
+                <SelectItem value="goojprt-58mm">Goojprt 58mm</SelectItem>
+                <SelectItem value="goojprt-80mm">Goojprt 80mm</SelectItem>
+                <SelectItem value="mtp-ii">MTP-II / MTP-III</SelectItem>
+                <SelectItem value="generic-bt">Genérica Bluetooth</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {impressoraPreset !== 'none' && (
+            <>
+              <div className="flex items-center gap-2 text-sm">
+                {impressoraConectada ? (
+                  <Badge className="bg-green-500/20 text-green-400">
+                    Conectada{impressoraNome ? `: ${impressoraNome}` : ''}
+                  </Badge>
+                ) : (
+                  <Badge className="bg-muted text-muted-foreground">
+                    Desconectada
+                  </Badge>
+                )}
+                {!isBluetoothAvailable() && (
+                  <span className="text-xs text-amber-400">Bluetooth indisponível (use Chrome/Android)</span>
+                )}
+              </div>
+              
+              <Button
+                type="button"
+                variant="outline"
+                onClick={impressoraConectada ? handleDesconectarImpressora : handleConectarImpressora}
+                disabled={impressoraConectando || !isBluetoothAvailable()}
+                className="w-full"
+              >
+                {impressoraConectando ? (
+                  <><div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mr-2" /> Conectando...</>
+                ) : impressoraConectada ? (
+                  'Desconectar Impressora'
+                ) : (
+                  'Conectar Impressora Bluetooth'
+                )}
+              </Button>
+            </>
+          )}
+          
+          {impressoraPreset === 'none' && (
+            <p className="text-xs text-muted-foreground">
+              Sem impressora configurada, será usada a impressão nativa do navegador.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Card - Modelo de IA */}
       <Card className="border-border">
