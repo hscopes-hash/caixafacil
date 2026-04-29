@@ -1108,7 +1108,6 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
         toast.success('Cliente cadastrado com sucesso!');
       }
       setDialogOpen(false);
-      resetForm();
       loadClientes();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Erro ao salvar cliente';
@@ -1189,7 +1188,7 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-foreground">Clientes</h2>
         {isSupervisor && (
-          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
+          <Dialog open={dialogOpen} onOpenChange={(open) => { if (open) resetForm(); setDialogOpen(open); if (!open) setTimeout(resetForm, 300); }}>
             <DialogTrigger asChild>
               <Button size="sm" className="bg-gradient-to-r from-amber-500 to-orange-600">
                 <Plus className="w-4 h-4 mr-1" /> Novo
