@@ -453,6 +453,19 @@ export async function GET() {
       `);
     } catch (e) { /* indice ja existe */ }
 
+    // Adicionar colunas de impressora térmica Bluetooth (v2.25.10.118)
+    try {
+      await db.$executeRawUnsafe(`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS "impressoraTipo" TEXT`);
+      await db.$executeRawUnsafe(`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS "impressoraPreset" TEXT`);
+      await db.$executeRawUnsafe(`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS "impressoraConexao" TEXT`);
+      await db.$executeRawUnsafe(`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS "impressoraServicoUUID" TEXT`);
+      await db.$executeRawUnsafe(`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS "impressoraCharUUID" TEXT`);
+      await db.$executeRawUnsafe(`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS "impressoraChunkSize" INTEGER`);
+      results.push('✓ Colunas de impressora térmica adicionadas');
+    } catch (e) {
+      results.push('  (colunas de impressora ja existem ou erro: ' + (e instanceof Error ? e.message : 'desconhecido') + ')');
+    }
+
     results.push('✓ Todas as tabelas foram criadas/verificadas com sucesso!');
 
     return NextResponse.json({
