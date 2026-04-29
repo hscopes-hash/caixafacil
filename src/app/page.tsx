@@ -2214,6 +2214,28 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     }, 0);
   };
 
+  const formatarValorDespesa = (id: string, valor: string) => {
+    if (!valor || valor.trim() === '') return;
+    const limpo = valor.replace(/[^\d]/g, '');
+    if (!limpo) return;
+    const num = parseInt(limpo, 10);
+    if (isNaN(num)) return;
+    // Se o valor original nao tem virgula nem ponto, e' inteiro -> adicionar ,00
+    if (!valor.includes(',') && !valor.includes('.')) {
+      setDespesasItens(prev => prev.map(item =>
+        item.id === id ? { ...item, valor: limpo + ',00' } : item
+      ));
+    } else if (valor.includes(',') && !valor.includes('.')) {
+      // Tem virgula: garantir 2 casas decimais
+      const partes = valor.split(',');
+      const decimais = (partes[1] || '').replace(/[^\d]/g, '');
+      const formatado = partes[0] + ',' + decimais.padEnd(2, '0').substring(0, 2);
+      setDespesasItens(prev => prev.map(item =>
+        item.id === id ? { ...item, valor: formatado } : item
+      ));
+    }
+  };
+
   const atualizarDespesa = (id: string, campo: 'descricao' | 'valor', valor: string) => {
     setDespesasItens(prev => prev.map(item =>
       item.id === id ? { ...item, [campo]: campo === 'valor' ? valor.replace(/[^\d.,]/g, '') : valor } : item
@@ -4180,6 +4202,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                       inputMode="decimal"
                       value={item.valor}
                       onChange={(e) => atualizarDespesa(item.id, 'valor', e.target.value)}
+                      onBlur={(e) => formatarValorDespesa(item.id, e.target.value)}
                       placeholder="0,00"
                       className="bg-muted border-border text-foreground text-sm h-8 text-right"
                     />
