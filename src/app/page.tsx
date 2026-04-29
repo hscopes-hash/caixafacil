@@ -5392,17 +5392,24 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                             <p className="text-xs text-success">TICKETS</p>
                             <p className="text-lg font-bold text-success">{cartaoResultado.quantidade}</p>
                           </div>
-                          <div className={`text-center p-2 rounded border ${cartaoResultado.totalConferido ? 'bg-blue-50 border-blue-300' : 'bg-amber-50 border-amber-300'}`>
-                            <p className={`text-xs ${cartaoResultado.totalConferido ? 'text-blue-600' : 'text-amber-600'}`}>TOTAL {cartaoResultado.totalConferido ? '' : '(CORRIGIDO)'}</p>
-                            <p className={`text-lg font-bold ${cartaoResultado.totalConferido ? 'text-blue-600' : 'text-amber-600'}`}>R$ {cartaoResultado.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                          </div>
+                          {cartaoResultado.totalConferido ? (
+                            <div className="text-center p-2 bg-blue-50 rounded border border-blue-300">
+                              <p className="text-xs text-blue-600">TOTAL</p>
+                              <p className="text-lg font-bold text-blue-600">R$ {cartaoResultado.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                            </div>
+                          ) : (
+                            <div className="text-center p-2 bg-amber-50 rounded border border-amber-300">
+                              <p className="text-xs text-amber-600">TOTAL (CORRIGIDO)</p>
+                              <p className="text-lg font-bold text-amber-600">R$ {cartaoResultado.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                            </div>
+                          )}
                         </div>
                         {/* Build 130: Aviso de discrepancia na soma da IA */}
                         {!cartaoResultado.totalConferido && cartaoResultado.totalIA !== undefined && (
                           <div className="flex items-center gap-2 p-2 bg-amber-50 border border-amber-300 rounded-lg">
                             <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
                             <p className="text-xs text-amber-700">
-                              A IA informou R$ {cartaoResultado.totalIA.toFixed(2)} mas a soma dos valores e R$ {cartaoResultado.total.toFixed(2)}. O total foi corrigido automaticamente.
+                              A IA informou R$ {cartaoResultado.totalIA!.toFixed(2)} mas a soma dos valores e R$ {cartaoResultado.total.toFixed(2)}. O total foi corrigido automaticamente.
                             </p>
                           </div>
                         )}
