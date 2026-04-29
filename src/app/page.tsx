@@ -2349,9 +2349,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     setExtraindoCartao(true);
     setCartaoResultado(null);
     try {
+      const token = useAuthStore.getState().token;
       const res = await fetch('/api/leituras/extrair-cartao', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ imagem: cartaoFotoCapturada, empresaId: empresaId }),
       });
       const data = await res.json();
@@ -2953,9 +2954,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
 
     setExtraindoLeitura(true);
     try {
+      const token = useAuthStore.getState().token;
       const res = await fetch('/api/leituras/extrair', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
           imagem: fotoCapturada,
           nomeEntrada: maquinaFoto.tipo?.nomeEntrada || 'E',
