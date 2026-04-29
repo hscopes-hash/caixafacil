@@ -47,7 +47,7 @@ async function callAI(prompt: string, imagem: string, apiKey: string, model: str
             },
           ],
           temperature: 0.1,
-          max_tokens: 1000,
+          max_tokens: 4000,
         }),
       });
     } finally {
@@ -77,7 +77,7 @@ async function callAI(prompt: string, imagem: string, apiKey: string, model: str
             },
           ],
           temperature: 0.1,
-          max_tokens: 1000,
+          max_tokens: 4000,
         }),
       });
     } finally {
@@ -103,7 +103,7 @@ async function callAI(prompt: string, imagem: string, apiKey: string, model: str
           ],
           generationConfig: {
             temperature: 0.1,
-            maxOutputTokens: 1000,
+            maxOutputTokens: 4000,
           },
         }),
       });
@@ -192,18 +192,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const prompt = `Esta e uma foto de canhotos de vendas por cartao (credit/debit card receipts). Analise TODOS os tickets/recebos visiveis na imagem.
+    const prompt = `Voce e um especialista em leitura de canhotos de cartao de credito/debito brasileiros. Esta foto contem VARIOS canhotos empilhados.
 
-Para cada ticket individual, identifique o VALOR da transacao. Ignore taxas de servico se houver.
+INSTRUCOES CRITICAS:
+1. ESCANEIE A IMAGEM INTEIRA, de cima para baixo, da esquerda para a direita, em cada area visivel.
+2. CONTE quantos canhotos existem na foto. NAO PARE ate encontrar TODOS.
+3. Cada canhoto e um ticket/receibo individual, mesmo que parcialmente coberto por outro.
+4. Canhotos geralmente mostram: nome da operadora (Visa, Master, Elo, etc), bandeira, e o VALOR TOTAL da transacao.
+5. Cuidado para nao confundir TAXA DE SERVICO com o VALOR DA VENDA. O valor principal e sempre o MAIOR.
+6. Se houver dois valores (ex: venda + taxa), pegue APENAS o valor da venda.
+7. Para canhotos parciais ou dobrados, tente identificar o valor pela parte visivel.
+8. Formatos comuns: "R$ 100,00", "TOTAL: 150.00", "VL.TOTAL", "VALOR TOTAL R$"
 
-Regras:
-- Some TODOS os valores encontrados
-- Se um valor estiver como "100,00" retorne 100.00 (formato decimal com ponto)
+Regras de saida:
+- Formato decimal com ponto: 100.00 (nao 100,00)
 - Retorne apenas numeros positivos
-- Nao inclua centavos de taxa ou servico adicional
+- Nao duplique valores - cada canhoto = um valor
+- Se nao conseguir ler um valor especifico, pule-o mas CONTINUE procurando os outros
+- O total deve ser a soma EXATA de todos os valores encontrados
 
-Responda APENAS com JSON neste formato exato, sem texto adicional:
-{"tickets": [{"valor": 100.00}, {"valor": 30.00}],"total": 130.00}`;
+PRIMEIRO conte quantos canhotos voce ve na imagem e certifique-se de que extraiu cada um.
+
+Responda APENAS com JSON neste formato exato, sem nenhum texto adicional:
+{"tickets": [{"valor": 100.00}, {"valor": 30.00}, {"valor": 45.50}],"total": 175.50}`;
 
     console.log(`[EXTRAIR-CARTAO] Modelo: ${model} | Provedor: ${detectProvider(model)}`);
 
