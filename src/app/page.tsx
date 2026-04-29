@@ -4149,43 +4149,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
             LANCAMENTO DE LOTE
           </Button>
 
-          {/* Resumo */}
-          <Card className="border-0 shadow-lg bg-card">
-            <CardContent className="p-4">
-              <h3 className="font-semibold text-foreground mb-3">Resumo</h3>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Entrada:</span>
-                  <span className="text-success">R$ {formatNumber(totais.entradas)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Jogado:</span>
-                  <span className="text-foreground">R$ {formatNumber(totais.jogado)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Saída:</span>
-                  <span className="text-danger">R$ {formatNumber(totais.saidas)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Cliente ({clienteSelecionado?.acertoPercentual ?? 50}%):</span>
-                  <span className="text-warning">R$ {formatNumber(totais.cliente)}</span>
-                </div>
-                <div className="flex justify-between col-span-2">
-                  <span className="text-muted-foreground">Débito(Saldo):</span>
-                  <span className={debitosVencidos > 0 ? 'text-red-400 font-bold' : 'text-muted-foreground'}>R$ {formatNumber(debitosVencidos)}</span>
-                </div>
-                <div className="flex justify-between col-span-2">
-                  <span className="text-muted-foreground">Total das Despesas:</span>
-                  <span className={totais.totalDespesas > 0 ? 'text-red-400 font-bold' : 'text-muted-foreground'}>R$ {formatNumber(totais.totalDespesas)}</span>
-                </div>
-                <div className="flex justify-between col-span-2 border-t border-border pt-2 mt-1">
-                  <span className="text-foreground font-semibold">Líquido:</span>
-                  <span className={`font-bold ${totais.liquido >= 0 ? 'text-success' : 'text-danger'}`}>R$ {formatNumber(totais.liquido)}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Despesas */}
           <Card className="border-0 shadow-lg bg-card">
             <CardContent className="p-4">
@@ -4241,6 +4204,43 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                 <span className="text-sm font-bold text-red-400">
                   R$ {formatNumber(calcularTotalDespesas())}
                 </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Resumo */}
+          <Card className="border-0 shadow-lg bg-card">
+            <CardContent className="p-4">
+              <h3 className="font-semibold text-foreground mb-3">Resumo</h3>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Entrada:</span>
+                  <span className="text-success">R$ {formatNumber(totais.entradas)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Jogado:</span>
+                  <span className="text-foreground">R$ {formatNumber(totais.jogado)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Saída:</span>
+                  <span className="text-danger">R$ {formatNumber(totais.saidas)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Cliente ({clienteSelecionado?.acertoPercentual ?? 50}%):</span>
+                  <span className="text-warning">R$ {formatNumber(totais.cliente)}</span>
+                </div>
+                <div className="flex justify-between col-span-2">
+                  <span className="text-muted-foreground">Débito(Saldo):</span>
+                  <span className={debitosVencidos > 0 ? 'text-red-400 font-bold' : 'text-muted-foreground'}>R$ {formatNumber(debitosVencidos)}</span>
+                </div>
+                <div className="flex justify-between col-span-2">
+                  <span className="text-muted-foreground">Total das Despesas:</span>
+                  <span className={totais.totalDespesas > 0 ? 'text-red-400 font-bold' : 'text-muted-foreground'}>R$ {formatNumber(totais.totalDespesas)}</span>
+                </div>
+                <div className="flex justify-between col-span-2 border-t border-border pt-2 mt-1">
+                  <span className="text-foreground font-semibold">Líquido:</span>
+                  <span className={`font-bold ${totais.liquido >= 0 ? 'text-success' : 'text-danger'}`}>R$ {formatNumber(totais.liquido)}</span>
+                </div>
               </div>
             </CardContent>
           </Card>
