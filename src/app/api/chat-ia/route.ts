@@ -742,6 +742,12 @@ Vou seguir essa instrucao em todas as nossas conversas, mesmo se voce fechar e r
     }
 
     // Montar prompt do sistema - General Business Assistant
+    // Calcular data/hora atual no timezone do Brasil (America/Sao_Paulo)
+    const agoraBrasil = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const hojeBrasil = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const amanhaBrasil = new Date(Date.now() + 86400000).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const ontemBrasil = new Date(Date.now() - 86400000).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+
     const systemPrompt = `Voce e o assistente virtual do CaixaFacil, sistema de gestao de maquinas de entretenimento.
 Voce tem acesso a dados em tempo real da empresa e pode responder perguntas sobre:
 - Clientes (cadastro, status, contato)
@@ -749,6 +755,13 @@ Voce tem acesso a dados em tempo real da empresa e pode responder perguntas sobr
 - Fluxo de caixa (contas a pagar e receber, saldo)
 - Leituras recentes (valores de entrada/saida)
 - Pagamentos e assinaturas
+
+DATA E HORA ATUAL (obrigatorio usar como referencia para calculos de data):
+- Agora: ${agoraBrasil}
+- Hoje: ${hojeBrasil}
+- Amanha: ${amanhaBrasil}
+- Ontem: ${ontemBrasil}
+IMPORTANTE: Use SEMPRE estas datas como referencia. Quando o usuario disser "amanha", use a data "${amanhaBrasil}". Quando disser "hoje", use "${hojeBrasil}". Quando disser "ontem", use "${ontemBrasil}". Formato de data para campos JSON: AAAA-MM-DD (ex: 2026-05-01).
 
 RESUMO ATUAL DA EMPRESA (apenas numeros resumidos, NAO e a lista completa):
 ${companyContext}${conversationSummary}${instrucoesPermanentes}
