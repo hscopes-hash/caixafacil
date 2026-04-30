@@ -138,15 +138,23 @@ async function resolveContaId(empresaId: string, dados: Record<string, unknown>)
 
     // Filtrar por valor se fornecido (mas nao se for novoValor - nesse caso valor e o antigo para busca)
     if (dados.valor !== undefined && dados.novoValor === undefined) {
-      where.valor = parseFloat(String(dados.valor));
+      const valorNum = parseFloat(String(dados.valor));
+      // Usar faixa de tolerancia para evitar problemas de precisao de ponto flutuante
+      where.valor = { gte: valorNum - 0.01, lte: valorNum + 0.01 };
     }
 
-    // Filtrar por data se fornecida
+    // Filtrar por data se fornecida (comparar apenas a parte da data, ignorando horas)
     if (dados.data) {
       const dataStr = String(dados.data);
       const dataObj = new Date(dataStr);
       if (!isNaN(dataObj.getTime())) {
-        where.data = dataObj;
+        const dia = dataObj.getDate();
+        const mes = dataObj.getMonth();
+        const ano = dataObj.getFullYear();
+        // Gerar range do dia inteiro no fuso do servidor
+        const inicioDia = new Date(ano, mes, dia, 0, 0, 0);
+        const fimDia = new Date(ano, mes, dia, 23, 59, 59, 999);
+        where.data = { gte: inicioDia, lte: fimDia };
       }
     }
 
@@ -167,7 +175,30 @@ async function resolveContaId(empresaId: string, dados: Record<string, unknown>)
     });
 
     if (conta) return { id: conta.id, conta };
-    return { id: '', error: 'Nenhuma conta encontrada com esses criterios. Verifique o nome do cliente, valor e data.' };
+
+    // Fallback: tentar busca mais ampla (apenas por clienteId + valor, sem data)
+    // Isso cobre casos onde o LLM nao envia a data ou envia errada
+    if (where.clienteId && (dados.valor !== undefined && dados.novoValor === undefined)) {
+      const whereAmplo: Record<string, unknown> = { empresaId, clienteId: where.clienteId, valor: where.valor };
+      // Buscar contas pendentes por padrao na liquidacao
+      if (!dados.paga) whereAmplo.paga = false;
+      const contaAmplo = await db.conta.findFirst({
+        where: whereAmplo,
+        include: { cliente: { select: { id: true, nome: true } } },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (contaAmplo) return { id: contaAmplo.id, conta: contaAmplo };
+    }
+
+    // Montar detalhes do que foi buscado para mensagem de erro mais clara
+    const detalhes: string[] = [];
+    if (dados.clienteId) detalhes.push(`cliente: ${String(dados.clienteId)}`);
+    if (dados.valor !== undefined) detalhes.push(`valor: R$ ${parseFloat(String(dados.valor)).toFixed(2)}`);
+    if (dados.data) detalhes.push(`data: ${String(dados.data)}`);
+    if (dados.tipo !== undefined) detalhes.push(`tipo: ${parseInt(String(dados.tipo), 10) === 0 ? 'pagar' : 'receber'}`);
+    if (dados.paga !== undefined) detalhes.push(`status: ${dados.paga ? 'paga' : 'pendente'}`);
+
+    return { id: '', error: `Nenhuma conta encontrada com os criterios informados (${detalhes.join(', ')}). Verifique o nome do cliente, valor e data.` };
   } catch {
     return { id: '', error: 'Erro ao buscar conta.' };
   }
