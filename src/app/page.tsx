@@ -8048,12 +8048,6 @@ function ConfiguracoesPage({ empresaId, onShowGestao }: { empresaId: string; onS
         </Button>
       </div>
 
-      {/* Painel Financeiro SaaS */}
-      <div className="pt-4">
-        <Separator className="bg-border mb-6" />
-        <PainelFinanceiroSaaS />
-      </div>
-
       {/* Gestao de Planos SaaS */}
       <div className="pt-4">
         <Separator className="bg-border mb-6" />
@@ -8653,6 +8647,9 @@ function AssinaturaTab() {
           </Card>
         )}
       </div>
+
+      {/* Painel Financeiro SaaS */}
+      <PainelFinanceiroSaaS />
 
       {/* Payment Return Banner */}
       {paymentReturn && (
