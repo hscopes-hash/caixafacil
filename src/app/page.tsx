@@ -4464,6 +4464,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
       }
     }
 
+    // Adicionar foto do mercado com tarja (se houver)
+    if (mercadoFotoProcessada) {
+      try {
+        const response = await fetch(mercadoFotoProcessada);
+        const blob = await response.blob();
+        fotosProcessadas.push(new File([blob], `mercado_${Date.now()}.jpg`, { type: 'image/jpeg' }));
+      } catch (err) {
+        console.error('Erro ao processar foto do mercado:', err);
+      }
+    }
+
     // Gerar extrato como imagem e adicionar ao array
     try {
       const extratoBase64 = await gerarExtratoImagem();
