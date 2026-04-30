@@ -145,6 +145,46 @@ async function callAI(prompt: string, imagem: string, apiKey: string, model: str
   return { content, provider };
 }
 
+// ============================================
+// VALIDACAO DE TROCO
+// Detecta e remove valores que sao claramente troco de um cupom.
+// Logica: se um ticket X e a diferenca entre uma nota comum e outro
+// ticket Y, entao X e troco do cupom Y e deve ser removido.
+// ============================================
+function removerTrocoSuspeito(tickets: number[]): number[] {
+  if (tickets.length <= 1) return tickets;
+
+  const notasComuns = [2, 5, 10, 20, 50, 100, 200];
+
+  // Encontrar tickets que sao troco de outro ticket
+  const indicesParaRemover = new Set<number>();
+
+  for (let i = 0; i < tickets.length; i++) {
+    if (indicesParaRemover.has(i)) continue;
+    const candidatoTroco = tickets[i];
+
+    for (let j = 0; j < tickets.length; j++) {
+      if (i === j || indicesParaRemover.has(j)) continue;
+      const cupom = tickets[j];
+
+      // Se existe uma nota comum tal que: nota - cupom = candidatoTroco
+      // Entao candidatoTroco e provavelmente troco
+      for (const nota of notasComuns) {
+        const trocoCalculado = Math.round((nota - cupom) * 100) / 100;
+        if (trocoCalculado > 0 && Math.abs(trocoCalculado - candidatoTroco) < 0.02) {
+          indicesParaRemover.add(i);
+          break;
+        }
+      }
+      if (indicesParaRemover.has(i)) break;
+    }
+  }
+
+  if (indicesParaRemover.size === 0) return tickets;
+
+  return tickets.filter((_, idx) => !indicesParaRemover.has(idx));
+}
+
 // Extrair valores de canhotos de cartao de uma imagem usando IA
 export async function POST(request: NextRequest) {
   try {
@@ -277,8 +317,20 @@ Responda APENAS com JSON neste formato exato, sem nenhum texto adicional:
       );
     }
 
+    // ============================================================
+    // VALIDACAO: Remover valores que sao claramente TROCO
+    // Troco = valor pago - total do cupom. Se o valor pago e uma nota
+    // comum (2, 5, 10, 20, 50, 100, 200) e a diferenca bate com um
+    // ticket, esse ticket e troco e deve ser removido.
+    // ============================================================
+    const ticketsFiltrados = removerTrocoSuspeito(tickets);
+    if (ticketsFiltrados.length < tickets.length) {
+      const removidos = tickets.length - ticketsFiltrados.length;
+      console.log(`[EXTRAIR-CARTAO] TROCO DETECTADO: ${removidos} valor(es) removido(s) como troco suspeito | Antes: [${tickets.join(', ')}] | Depois: [${ticketsFiltrados.join(', ')}]`);
+    }
+
     // Build 130: Soma calculada pelo codigo (confiavel), nao pela IA
-    const totalCalculado = tickets.reduce((soma: number, v: number) => soma + v, 0);
+    const totalCalculado = ticketsFiltrados.reduce((soma: number, v: number) => soma + v, 0);
     const somaConferida = Math.abs(totalCalculado - totalIA) < 0.01;
 
     // Logar discrepancia para monitoramento
@@ -288,11 +340,11 @@ Responda APENAS com JSON neste formato exato, sem nenhum texto adicional:
 
     return NextResponse.json({
       success: true,
-      tickets: tickets,
+      tickets: ticketsFiltrados,
       total: totalCalculado,
       totalIA: somaConferida ? undefined : totalIA,
       totalConferido: somaConferida,
-      quantidade: tickets.length,
+      quantidade: ticketsFiltrados.length,
       provider: result.provider,
       model,
     });
