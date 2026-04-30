@@ -58,7 +58,7 @@ function generateSessionId(): string {
 }
 
 export default function ChatIAPage() {
-  const { empresa } = useAuthStore();
+  const { empresa, token: authToken } = useAuthStore();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -124,7 +124,9 @@ export default function ChatIAPage() {
     if (!empresa?.id) return;
     setLoadingInstrucoes(true);
     try {
-      const res = await fetch(`/api/chat-ia/instrucoes?empresaId=${empresa.id}`);
+      const res = await fetch(`/api/chat-ia/instrucoes?empresaId=${empresa.id}`, {
+        headers: { 'Authorization': `Bearer ${authToken}` },
+      });
       const data = await res.json();
       setInstrucoes(data.instrucoes || []);
     } catch {
@@ -148,7 +150,7 @@ export default function ChatIAPage() {
     try {
       const res = await fetch('/api/chat-ia/instrucoes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
         body: JSON.stringify({
           empresaId: empresa.id,
           instrucao: novaInstrucao.trim(),
@@ -174,6 +176,7 @@ export default function ChatIAPage() {
     try {
       const res = await fetch(`/api/chat-ia/instrucoes?id=${id}`, {
         method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${authToken}` },
       });
       if (res.ok) {
         toast.success('Instrucao removida');
@@ -264,7 +267,7 @@ export default function ChatIAPage() {
     try {
       const res = await fetch('/api/chat-ia', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
         body: JSON.stringify({
           empresaId: empresa.id,
           confirmAction: confirmingAction,
@@ -357,7 +360,7 @@ export default function ChatIAPage() {
 
       const res = await fetch('/api/chat-ia', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
         body: JSON.stringify({
           mensagem: userMsg,
           empresaId: empresa.id,
