@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  turbopack: {
+    root: '/home/z/my-project/caixafacil',
+  },
   // Otimizações para reduzir uso de memória e processos
   experimental: {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
