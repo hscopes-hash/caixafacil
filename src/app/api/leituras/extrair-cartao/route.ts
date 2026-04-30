@@ -232,36 +232,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const prompt = `Voce e um especialista em leitura de cupons fiscais e canhotos de cartao de credito/debito brasileiros. Esta foto contem VARIOS cupons/canhotos empilhados.
+    const prompt = `Esta foto contem VARIOS cupons fiscais empilhados.
 
-REGRA PRINCIPAL - O UNICO valor que interessa de cada cupom e o que aparece EM NEGRITO.
-TODOS os outros valores do cupom (itens, subtotal, formas de pagamento, troco, desconto) devem ser IGNORADOS.
-Foque APENAS nos valores em negrito. Se um valor NAO esta em negrito, ele NAO e o total do cupom.
+Sua unica tarefa: de cada cupom, extraia APENAS o valor que aparece ao lado dos textos "VALOR A PAGAR" ou "TOTAL", seguido de "R$".
+Sao os unicos dois campos que importam. Ignore TODOS os outros valores do cupom (itens, troco, desconto, subtotal, formas de pagamento, etc).
 
-INSTRUCOES CRITICAS:
-1. ESCANEIE A IMAGEM INTEIRA, de cima para baixo, da esquerda para a direita, em cada area visivel.
-2. CONTE quantos cupons/canhotos existem na foto. NAO PARE ate encontrar TODOS.
-3. Cada cupom/canhoto e um ticket/receibo individual, mesmo que parcialmente coberto por outro.
-4. Para cada cupom fiscal: identifique o UNICO valor que esta em NEGRITO - esse e o TOTAL GERAL.
-5. Para canhotos de cartao: identifique o valor TOTAL da transacao (em negrito ou fonte maior).
-6. Se houver dois valores em negrito (ex: venda + taxa), pegue APENAS o MAIOR (valor da venda).
-7. Para cupons parciais ou dobrados, tente identificar o valor em negrito pela parte visivel.
-8. Formatos comuns: "R$ 100,00", "TOTAL: 150.00", "VL.TOTAL", "VALOR TOTAL R$", "TOTAL R$"
-
-ATENCAO - NAO confundir com campos internos do cupom (geralmente NAO estao em negrito):
-- NUNCA considere "TROCO" como um cupom separado. Troco pertence ao cupom em que aparece.
-- NUNCA considere "DINHEIRO", "CARTAO DEBITO", "CARTAO CREDITO" como cupom separado. Esses sao formas de pagamento dentro de um unico cupom.
-- NUNCA considere "DESCONTO", "ACRESCIMO", "SUBTOTAL", "ITENS" como cupom separado. Apenas o TOTAL GERAL do cupom.
-- Cada cupom fiscal tem UM UNICO valor em negrito. Identifique apenas esse valor.
+Cada cupom fiscal tem exatamente UM desses campos. Encontre todos os cupons na imagem e extraia o valor de cada um.
 
 Regras de saida:
 - Formato decimal com ponto: 100.00 (nao 100,00)
 - Retorne apenas numeros positivos
 - Nao duplique valores - cada cupom = um valor
-- Se nao conseguir ler um valor especifico, pule-o mas CONTINUE procurando os outros
+- Se nao conseguir ler um valor, pule-o mas CONTINUE procurando os outros
 - O total deve ser a soma EXATA de todos os valores encontrados
-
-PRIMEIRO conte quantos cupons/canhotos voce ve na imagem e certifique-se de que extraiu cada um.
 
 Responda APENAS com JSON neste formato exato, sem nenhum texto adicional:
 {"tickets": [{"valor": 100.00}, {"valor": 30.00}, {"valor": 45.50}],"total": 175.50}`;
