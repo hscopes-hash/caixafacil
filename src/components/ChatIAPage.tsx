@@ -69,6 +69,7 @@ export default function ChatIAPage() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
   const voiceTriggeredRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Estado para confirmacao de acoes destrutivas
   const [confirmingMsgIndex, setConfirmingMsgIndex] = useState<number | null>(null);
@@ -351,6 +352,10 @@ export default function ChatIAPage() {
     setMessages(newMessages);
     setLoading(true);
 
+    // Criar AbortController para permitir cancelamento
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
@@ -361,6 +366,7 @@ export default function ChatIAPage() {
       const res = await fetch('/api/chat-ia', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        signal: controller.signal,
         body: JSON.stringify({
           mensagem: userMsg,
           empresaId: empresa.id,
@@ -386,10 +392,26 @@ export default function ChatIAPage() {
           setConfirmingAction(data.pendingAction);
         }
       }
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Erro de conexao. Tente novamente.' }]);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setMessages(prev => [...prev, { role: 'assistant', content: 'Comando cancelado.' }]);
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: 'Erro de conexao. Tente novamente.' }]);
+      }
     } finally {
       setLoading(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const cancelRequest = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    // Tambem parar TTS se estiver falando
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
     }
   };
 
@@ -606,10 +628,19 @@ export default function ChatIAPage() {
           {loading && (
             <div className="flex justify-start">
               <div className="bg-muted px-4 py-3 rounded-2xl rounded-bl-md border border-border">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                  <button
+                    onClick={cancelRequest}
+                    className="text-xs text-muted-foreground hover:text-red-400 transition-colors flex items-center gap-1"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    Cancelar
+                  </button>
                 </div>
               </div>
             </div>
