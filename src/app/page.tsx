@@ -9543,13 +9543,7 @@ export default function App() {
                     <ClipboardList className="w-5 h-5" />
                     <span>Cobrança</span>
                   </button>
-                  <button
-                    onClick={() => { setActiveTab('pagamentos'); setMenuOpen(false); }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'pagamentos' ? 'bg-amber-500/20 text-amber-400' : 'text-muted-foreground hover:bg-card'}`}
-                  >
-                    <DollarSign className="w-5 h-5" />
-                    <span>Pagamentos</span>
-                  </button>
+
                   <button
                     onClick={() => { setActiveTab('fluxo-caixa'); setMenuOpen(false); }}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'fluxo-caixa' ? 'bg-amber-500/20 text-amber-400' : 'text-muted-foreground hover:bg-card'}`}
