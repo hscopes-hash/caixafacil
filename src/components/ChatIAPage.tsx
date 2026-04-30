@@ -403,7 +403,7 @@ export default function ChatIAPage() {
   const hasSpeechRecognition = typeof window !== 'undefined' && !!getSpeechRecognition();
 
   return (
-    <div className="flex flex-col h-full -m-4 border border-amber-500/20 shadow-lg shadow-amber-500/5">
+    <div className="flex flex-col h-full -m-3 border-2 border-orange-400/40 shadow-lg shadow-orange-400/10 rounded-lg overflow-hidden bg-card">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-amber-500 to-orange-600 text-white shrink-0">
         <div className="flex items-center gap-2">
