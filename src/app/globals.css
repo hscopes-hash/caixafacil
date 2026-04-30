@@ -157,3 +157,8 @@
 .no-spinners {
   -moz-appearance: textfield;
 }
+
+/* Safe area para dispositivos com notch/home indicator (iOS) */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

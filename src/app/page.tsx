@@ -9186,7 +9186,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className={`${activeTab === 'chat-ia' ? 'h-[100dvh] overflow-hidden' : 'min-h-screen'} bg-background flex flex-col`}>
       <PWAInstallBanner />
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur border-b border-border">
@@ -9336,7 +9336,7 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 p-4">
+      <main className={`flex-1 p-4 ${activeTab === 'chat-ia' ? 'min-h-0 overflow-hidden' : ''}`}>
         {activeTab === 'dashboard' && (
           loadingDashboard ? (
             <div className="text-center py-8 text-muted-foreground">Carregando...</div>
