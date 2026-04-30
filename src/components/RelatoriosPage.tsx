@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAuthStore } from '@/stores/auth-store';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -185,7 +186,10 @@ export default function RelatoriosPage({ empresaId }: { empresaId: string }) {
 
   const loadClientes = async () => {
     try {
-      const res = await fetch(`/api/clientes?empresaId=${empresaId}`);
+      const token = useAuthStore.getState().token;
+      const res = await fetch(`/api/clientes?empresaId=${empresaId}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
       const data = await res.json();
       if (Array.isArray(data)) setClientes(data);
     } catch { /* silent */ }
@@ -193,7 +197,10 @@ export default function RelatoriosPage({ empresaId }: { empresaId: string }) {
 
   const loadTiposMaquina = async () => {
     try {
-      const res = await fetch(`/api/tipos-maquina?empresaId=${empresaId}`);
+      const token = useAuthStore.getState().token;
+      const res = await fetch(`/api/tipos-maquina?empresaId=${empresaId}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
       const data = await res.json();
       if (Array.isArray(data)) setTiposMaquina(data);
     } catch { /* silent */ }
@@ -235,7 +242,10 @@ export default function RelatoriosPage({ empresaId }: { empresaId: string }) {
       if (statusFilter !== 'todos') params.set('status', statusFilter);
       if (tipoMaquinaId !== 'todos') params.set('tipoMaquinaId', tipoMaquinaId);
 
-      const res = await fetch(`/api/relatorios/gerar?${params.toString()}`);
+      const token = useAuthStore.getState().token;
+      const res = await fetch(`/api/relatorios/gerar?${params.toString()}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
       const data = await res.json();
 
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar relatório');
