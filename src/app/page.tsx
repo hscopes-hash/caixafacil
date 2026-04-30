@@ -2540,6 +2540,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     }
     setExtraindoMercado(true);
     setMercadoResultado(null);
+    setMercadoFotoProcessada(null);
     try {
       const token = useAuthStore.getState().token;
       const res = await fetch('/api/leituras/extrair-cartao', {
@@ -2553,19 +2554,34 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
       }
       const totalBackend = data.total || 0;
       const tickets = (data.tickets || []).map((v: any) => typeof v === 'number' ? v : parseFloat(v)).filter((v: number) => !isNaN(v) && v > 0);
-      const totalFrontend = tickets.reduce((s: number, v: number) => s + v, 0);
+
+      // Remover valores duplicados (IA pode repetir o mesmo valor)
+      const ticketsUnicos = [...new Set(tickets.map(v => Math.round(v * 100) / 100))];
+      const temDuplicatas = ticketsUnicos.length < tickets.length;
+
+      const totalFrontend = ticketsUnicos.reduce((s: number, v: number) => s + v, 0);
       const totalFinal = Math.abs(totalBackend - totalFrontend) < 0.01 ? totalBackend : totalFrontend;
 
       const resultado = {
-        tickets: tickets,
+        tickets: ticketsUnicos,
         total: totalFinal,
         totalIA: data.totalConferido ? undefined : data.totalIA,
         totalConferido: data.totalConferido ?? true,
-        quantidade: data.quantidade || tickets.length,
+        quantidade: ticketsUnicos.length,
       };
       setMercadoResultado(resultado);
 
-      if (!resultado.totalConferido && resultado.totalIA !== undefined) {
+      // Gerar tarja vermelha automaticamente com os valores extraidos
+      try {
+        const fotoComTarja = await adicionarTarjaMercado(mercadoFotoCapturada, resultado.total, resultado.quantidade);
+        setMercadoFotoProcessada(fotoComTarja);
+      } catch {
+        // Falha na tarja nao impede o fluxo
+      }
+
+      if (temDuplicatas) {
+        toast.warning(`Duplicata(s) removida(s). ${resultado.quantidade} cupom(ns) - Total: R$ ${totalFinal.toFixed(2)}`);
+      } else if (!resultado.totalConferido && resultado.totalIA !== undefined) {
         toast.warning(`IA disse R$ ${resultado.totalIA.toFixed(2)} mas a soma correta e R$ ${totalFinal.toFixed(2)}. Usando valor conferido.`);
       } else {
         toast.success(`${resultado.quantidade} cupom(ns) identificado(s) - Total: R$ ${totalFinal.toFixed(2)}`);
@@ -4464,7 +4480,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
       }
     }
 
-    // Adicionar foto do mercado com tarja (se houver)
+    // Adicionar foto dos cupons de mercado com tarja vermelha (se houver)
     if (mercadoFotoProcessada) {
       try {
         const response = await fetch(mercadoFotoProcessada);
