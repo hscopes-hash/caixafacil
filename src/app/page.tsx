@@ -2214,6 +2214,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
     { id: 'gasolina', descricao: 'GASOLINA', valor: '', fixo: true },
     { id: 'vales', descricao: 'VALES', valor: '', fixo: true },
     { id: 'bonus', descricao: 'BONUS', valor: '', fixo: true },
+    { id: 'diaria', descricao: 'DIÁRIA', valor: '', fixo: true },
+    { id: 'horas_extras', descricao: 'HORAS EXTRAS', valor: '', fixo: true },
   ]);
   // Estado para o valor total das despesas salvas (para exibir no resumo)
   const [valorDespesaSalva, setValorDespesaSalva] = useState<number>(0);
@@ -2518,6 +2520,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
       { id: 'gasolina', descricao: 'GASOLINA', valor: '', fixo: true },
       { id: 'vales', descricao: 'VALES', valor: '', fixo: true },
       { id: 'bonus', descricao: 'BONUS', valor: '', fixo: true },
+      { id: 'diaria', descricao: 'DIÁRIA', valor: '', fixo: true },
+      { id: 'horas_extras', descricao: 'HORAS EXTRAS', valor: '', fixo: true },
     ]);
   };
 
@@ -4668,24 +4672,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                   <div className="space-y-2">
                     {receitasItens.map((item) => (
                       <div key={item.id} className="grid grid-cols-[1fr_100px_28px] gap-2 items-center">
-                        <Input
-                          type="text"
-                          value={item.descricao}
-                          onChange={(e) => atualizarReceita(item.id, 'descricao', e.target.value)}
-                          placeholder={item.fixo ? item.descricao : 'DESCRIÇÃO...'}
-                          disabled={item.fixo}
-                          className={`bg-muted border-border text-foreground text-sm h-8 ${item.fixo ? 'font-semibold text-muted-foreground' : ''}`}
-                          style={{ textTransform: 'uppercase' }}
-                        />
                         <div className="flex items-center gap-1">
                           <Input
                             type="text"
-                            inputMode="decimal"
-                            value={item.valor}
-                            onChange={(e) => atualizarReceita(item.id, 'valor', e.target.value)}
-                            onBlur={(e) => formatarValorReceita(item.id, e.target.value)}
-                            placeholder="0,00"
-                            className="bg-muted border-border text-foreground text-sm h-8 text-right flex-1 min-w-0"
+                            value={item.descricao}
+                            onChange={(e) => atualizarReceita(item.id, 'descricao', e.target.value)}
+                            placeholder={item.fixo ? item.descricao : 'DESCRIÇÃO...'}
+                            disabled={item.fixo}
+                            className={`bg-muted border-border text-foreground text-sm h-8 flex-1 min-w-0 ${item.fixo ? 'font-semibold text-muted-foreground' : ''}`}
+                            style={{ textTransform: 'uppercase' }}
                           />
                           {item.id === 'cartao' && (
                             <Button
@@ -4700,6 +4695,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
                             </Button>
                           )}
                         </div>
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          value={item.valor}
+                          onChange={(e) => atualizarReceita(item.id, 'valor', e.target.value)}
+                          onBlur={(e) => formatarValorReceita(item.id, e.target.value)}
+                          placeholder="0,00"
+                          className="bg-muted border-border text-foreground text-sm h-8 text-right"
+                        />
                         {!item.fixo ? (
                           <Button
                             type="button"
