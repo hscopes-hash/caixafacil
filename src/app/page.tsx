@@ -9316,7 +9316,7 @@ export default function App() {
             <div>
               <h1 className="font-bold text-foreground flex items-center gap-1.5">
                 Caixa Fácil
-                <span className="text-[10px] font-normal text-muted-foreground">{VERSION_DISPLAY}</span>
+                <span className="text-[10px] font-normal text-muted-foreground" dangerouslySetInnerHTML={{ __html: VERSION_DISPLAY.replace(/(\.\d+)$/, '.<strong>$1</strong>') }} />
               </h1>
               <p className="text-xs text-muted-foreground">EMPRESA: {empresa?.nome}</p>
             </div>
