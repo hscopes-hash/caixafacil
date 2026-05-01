@@ -9314,7 +9314,10 @@ export default function App() {
               </SheetContent>
             </Sheet>
             <div>
-              <h1 className="font-bold text-foreground">Caixa Fácil</h1>
+              <h1 className="font-bold text-foreground flex items-center gap-1.5">
+                Caixa Fácil
+                <span className="text-[10px] font-normal text-muted-foreground">{VERSION_DISPLAY}</span>
+              </h1>
               <p className="text-xs text-muted-foreground">EMPRESA: {empresa?.nome}</p>
             </div>
           </div>
