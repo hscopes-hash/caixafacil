@@ -1259,16 +1259,16 @@ export default function RelatoriosPage({ empresaId }: { empresaId: string }) {
               </div>
             </CardHeader>
             {showPreview && (
-              <CardContent className="pt-0">
+              <CardContent className="pt-0 overflow-hidden">
                 {dados.totalRegistros === 0 ? (
                   <div className="py-12 text-center">
                     <FileText className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
                     <p className="text-muted-foreground">Nenhum registro encontrado</p>
                   </div>
                 ) : (
-                  <ScrollArea className="max-h-[40vh]">
+                  <div className="max-h-[40vh] overflow-y-auto overscroll-contain">
                     {renderTabelaDados()}
-                  </ScrollArea>
+                  </div>
                 )}
               </CardContent>
             )}
