@@ -1266,7 +1266,7 @@ export default function RelatoriosPage({ empresaId }: { empresaId: string }) {
                     <p className="text-muted-foreground">Nenhum registro encontrado</p>
                   </div>
                 ) : (
-                  <ScrollArea className="max-h-[500px]">
+                  <ScrollArea className="max-h-[40vh]">
                     {renderTabelaDados()}
                   </ScrollArea>
                 )}
