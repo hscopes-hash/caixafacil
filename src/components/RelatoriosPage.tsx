@@ -1239,7 +1239,7 @@ export default function RelatoriosPage({ empresaId }: { empresaId: string }) {
           {renderTotais()}
 
           {/* Tabela de Dados */}
-          <Card className="border-0 shadow-lg bg-card">
+          <Card className="border-0 shadow-lg bg-card overflow-hidden">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -1259,16 +1259,16 @@ export default function RelatoriosPage({ empresaId }: { empresaId: string }) {
               </div>
             </CardHeader>
             {showPreview && (
-              <CardContent className="pt-0 overflow-hidden">
+              <CardContent className="pt-0">
                 {dados.totalRegistros === 0 ? (
                   <div className="py-12 text-center">
                     <FileText className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
                     <p className="text-muted-foreground">Nenhum registro encontrado</p>
                   </div>
                 ) : (
-                  <div className="max-h-[40vh] overflow-y-auto overscroll-contain">
+                  <ScrollArea className="max-h-[40vh]">
                     {renderTabelaDados()}
-                  </div>
+                  </ScrollArea>
                 )}
               </CardContent>
             )}
