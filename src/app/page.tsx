@@ -31,7 +31,7 @@ import {
   Key, Wifi, EyeOff, CreditCard, ExternalLink, ChevronDown, RotateCcw, Crown, Check, CheckCircle2, XCircle, Sparkles, Zap, Shield, Info,
   Receipt, Mic, MicOff, Send, Volume2, ShoppingCart
 } from 'lucide-react';
-import { VERSION_DISPLAY, VERSION_WITH_DATE } from '@/lib/version';
+import { VERSION_DISPLAY, VERSION_STRING, VERSION_WITH_DATE } from '@/lib/version';
 import GestaoPlanosSaaS from '@/components/GestaoPlanosSaaS';
 import RelatoriosPage from '@/components/RelatoriosPage';
 import PainelFinanceiroSaaS from '@/components/PainelFinanceiroSaaS';
@@ -9316,8 +9316,8 @@ export default function App() {
             <div>
               <h1 className="font-bold text-foreground flex items-center gap-1.5">
                 Caixa Fácil
-                <span className="text-[10px] font-normal text-muted-foreground">
-                  {VERSION_DISPLAY}
+                <span className="text-[10px] text-muted-foreground">
+                  {`v${VERSION_STRING.split('.').slice(0, 3).join('.')}.`}<span className="font-bold text-foreground">{VERSION_STRING.split('.')[3]}</span>
                 </span>
               </h1>
               <p className="text-xs text-muted-foreground">EMPRESA: {empresa?.nome}</p>
