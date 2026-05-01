@@ -988,6 +988,47 @@ Use formato de moeda brasileiro (R$ X.XXX,XX) nos valores.`;
 
     // ========== ACAO DESTRUTIVA: pedir confirmacao ==========
     if (parsed.action?.acao && parsed.action.dados && DESTRUCTIVE_ACTIONS.has(parsed.action.acao)) {
+      // Se o LLM nao forneceu friendlyText, gerar um texto descritivo automaticamente
+      if (!finalText.trim()) {
+        const dados = parsed.action.dados;
+        const acaoNome = parsed.action.acao;
+        const valor = dados.valor ? `R$ ${parseFloat(String(dados.valor)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '';
+        const cliente = dados.clienteId ? String(dados.clienteId) : '';
+        const descricao = dados.descricao ? String(dados.descricao) : '';
+        const data = dados.data ? new Date(String(dados.data)).toLocaleDateString('pt-BR') : '';
+
+        if (acaoNome === 'criar_conta') {
+          const tipoStr = parseInt(String(dados.tipo), 10) === 0 ? 'a pagar' : 'a receber';
+          const partes = [`Deseja criar uma conta ${tipoStr}`];
+          if (cliente) partes.push(`do cliente ${cliente}`);
+          if (descricao) partes.push(`"${descricao}"`);
+          if (valor) partes.push(`no valor de ${valor}`);
+          if (data) partes.push(`para ${data}`);
+          finalText = partes.join(', ') + '?';
+        } else if (acaoNome === 'liquidar_conta') {
+          const partes = ['Deseja liquidar (marcar como paga) a conta'];
+          if (cliente) partes.push(`do cliente ${cliente}`);
+          if (descricao) partes.push(`"${descricao}"`);
+          if (valor) partes.push(`no valor de ${valor}`);
+          finalText = partes.join(', ') + '?';
+        } else if (acaoNome === 'excluir_conta') {
+          const partes = ['Deseja EXCLUIR permanentemente a conta'];
+          if (cliente) partes.push(`do cliente ${cliente}`);
+          if (descricao) partes.push(`"${descricao}"`);
+          if (valor) partes.push(`no valor de ${valor}`);
+          finalText = partes.join(', ') + '?';
+        } else if (acaoNome === 'editar_conta') {
+          const partes = ['Deseja alterar a conta'];
+          if (cliente) partes.push(`do cliente ${cliente}`);
+          const mudancas: string[] = [];
+          if (dados.descricao) mudancas.push(`descricao para "${dados.descricao}"`);
+          if (dados.novoValor) mudancas.push(`valor para R$ ${parseFloat(String(dados.novoValor)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+          if (dados.data) mudancas.push(`data para ${new Date(String(dados.data)).toLocaleDateString('pt-BR')}`);
+          if (mudancas.length > 0) partes.push(`(${mudancas.join(', ')})`);
+          finalText = partes.join(', ') + '?';
+        }
+      }
+
       // Salvar a resposta pendente de confirmacao no historico
       if (sessaoId) {
         saveToHistory(empresaId, sessaoId, 'assistant', finalText, parsed.action.acao, JSON.stringify(parsed.action.dados));

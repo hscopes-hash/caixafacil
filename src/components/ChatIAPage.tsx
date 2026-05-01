@@ -599,28 +599,40 @@ export default function ChatIAPage() {
           {/* Botoes de confirmacao para acoes destrutivas */}
           {confirmingMsgIndex !== null && confirmingMsgIndex < messages.length && (
             <div className="flex justify-start">
-              <div className="flex gap-2 mt-1 ml-1">
-                <button
-                  onClick={handleConfirm}
-                  disabled={confirmingLoading}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-xl flex items-center gap-2 disabled:opacity-50 transition-colors shadow-sm"
-                >
-                  {confirmingLoading ? (
-                    <>
-                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Executando...
-                    </>
-                  ) : (
-                    'Confirmar'
-                  )}
-                </button>
-                <button
-                  onClick={handleCancel}
-                  disabled={confirmingLoading}
-                  className="px-4 py-2 bg-red-500/80 hover:bg-red-600 text-white text-sm rounded-xl disabled:opacity-50 transition-colors shadow-sm"
-                >
-                  Cancelar
-                </button>
+              <div className="flex flex-col gap-2 mt-1 ml-1 max-w-[85%]">
+                <div className="flex items-start gap-2 px-3 py-2 bg-orange-500/10 border border-orange-500/30 rounded-xl">
+                  <div className="w-5 h-5 rounded-full bg-orange-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <span className="text-orange-500 text-xs font-bold">?</span>
+                  </div>
+                  <span className="text-sm text-orange-200">
+                    {messages[confirmingMsgIndex]?.content
+                      ? messages[confirmingMsgIndex].content
+                      : 'Deseja confirmar esta acao?'}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleConfirm}
+                    disabled={confirmingLoading}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-xl flex items-center gap-2 disabled:opacity-50 transition-colors shadow-sm"
+                  >
+                    {confirmingLoading ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Executando...
+                      </>
+                    ) : (
+                      'Confirmar'
+                    )}
+                  </button>
+                  <button
+                    onClick={handleCancel}
+                    disabled={confirmingLoading}
+                    className="px-4 py-2 bg-red-500/80 hover:bg-red-600 text-white text-sm rounded-xl disabled:opacity-50 transition-colors shadow-sm"
+                  >
+                    Cancelar
+                  </button>
+                </div>
               </div>
             </div>
           )}
