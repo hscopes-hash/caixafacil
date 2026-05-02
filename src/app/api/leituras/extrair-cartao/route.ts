@@ -16,6 +16,12 @@ function extractContent(data: any, provider: string): string | null {
 
 async function callAI(prompt: string, imagem: string, apiKey: string, model: string): Promise<{ content: string; provider: string }> {
   const provider = detectProvider(model);
+
+  // MiMo não suporta visão (imagem) - apenas texto
+  if (provider === 'mimo') {
+    throw new Error('Os modelos Xiaomi MiMo não suportam análise de imagem (Vision). Selecione um modelo Gemini ou Zhipu AI (GLM) no Config SaaS para usar IA Vision.');
+  }
+
   const base64Data = imagem.split(',')[1];
   const mimeType = imagem.split(';')[0].split(':')[1];
 

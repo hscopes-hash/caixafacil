@@ -63,6 +63,14 @@ export async function POST(req: NextRequest) {
     // Detectar provider e montar requisição (CONFIG SAAS)
     const provider = detectProvider(llmModel);
 
+    // MiMo não suporta visão (imagem) - apenas texto
+    if (provider === 'mimo') {
+      return NextResponse.json(
+        { error: 'Os modelos Xiaomi MiMo não suportam análise de imagem (Vision). Selecione um modelo Gemini ou Zhipu AI (GLM) no Config SaaS para usar IA Vision.' },
+        { status: 400 }
+      );
+    }
+
     const textPrompt = `Imagem 1 (${nomeEntrada || 'Entrada'}): extraia o número visível no display${imageBase64Saida ? `\nImagem 2 (${nomeSaida || 'Saída'}): extraia o número visível no display` : ''}
 Responda no formato: {"entrada":"NNNN","saida":"NNNN"}`;
 
