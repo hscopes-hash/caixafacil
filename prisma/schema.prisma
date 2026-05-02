@@ -38,7 +38,6 @@ model Empresa {
   llmApiKeyGemini       String?   // API Key do Google Gemini
   llmApiKeyGlm          String?   // API Key do Zhipu AI (GLM)
   llmApiKeyOpenrouter   String?   // API Key do OpenRouter
-  llmApiKeyMimo         String?   // API Key do Xiaomi MiMo
   // Configurações MercadoPago
   mercadopagoAccessToken String?   // Access Token do MercadoPago (backend)
   mercadopagoPublicKey   String?   // Public Key do MercadoPago (frontend)

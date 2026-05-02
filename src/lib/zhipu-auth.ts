@@ -4,19 +4,17 @@ import crypto from 'node:crypto';
 // DETECÇÃO DE PROVEDOR
 // ============================================
 
-export type Provider = 'gemini' | 'glm' | 'openrouter' | 'mimo';
+export type Provider = 'gemini' | 'glm' | 'openrouter';
 
 /**
  * Detecta o provedor baseado no nome do modelo.
  * OpenRouter: contém "/" (ex: google/gemini-2.0-flash-exp:free)
  * GLM: começa com "glm-"
- * MiMo: começa com "mimo-"
  * Gemini: demais casos
  */
 export function detectProvider(model: string): Provider {
   if (model.includes('/')) return 'openrouter';
   if (model.startsWith('glm-')) return 'glm';
-  if (model.startsWith('mimo-')) return 'mimo';
   return 'gemini';
 }
 
@@ -24,16 +22,13 @@ export function detectProvider(model: string): Provider {
  * Retorna a API Key do banco de dados (Config. IA).
  * Sem variáveis de ambiente - a key deve ser configurada pelo super admin no app.
  */
-export function getApiKeyForModel(model: string, empresaApiKey?: string | null, empresaApiKeyGemini?: string | null, empresaApiKeyGlm?: string | null, empresaApiKeyOpenrouter?: string | null, empresaApiKeyMimo?: string | null): string | null {
+export function getApiKeyForModel(model: string, empresaApiKey?: string | null, empresaApiKeyGemini?: string | null, empresaApiKeyGlm?: string | null, empresaApiKeyOpenrouter?: string | null): string | null {
   const provider = detectProvider(model);
   if (provider === 'glm') {
     return empresaApiKey?.trim() || empresaApiKeyGlm?.trim() || null;
   }
   if (provider === 'openrouter') {
     return empresaApiKey?.trim() || empresaApiKeyOpenrouter?.trim() || null;
-  }
-  if (provider === 'mimo') {
-    return empresaApiKey?.trim() || empresaApiKeyMimo?.trim() || null;
   }
   return empresaApiKey?.trim() || empresaApiKeyGemini?.trim() || null;
 }

@@ -475,6 +475,14 @@ export async function GET() {
       results.push('  (coluna recChatIA ja existe ou erro: ' + (e instanceof Error ? e.message : 'desconhecido') + ')');
     }
 
+    // Remover coluna llmApiKeyMimo (Xiaomi MiMo removido v2.29.0.169)
+    try {
+      await db.$executeRawUnsafe(`ALTER TABLE empresas DROP COLUMN IF EXISTS "llmApiKeyMimo"`);
+      results.push('Coluna llmApiKeyMimo removida (Xiaomi MiMo descontinuado)');
+    } catch (e) {
+      results.push('  (coluna llmApiKeyMimo ja removida ou erro: ' + (e instanceof Error ? e.message : 'desconhecido') + ')');
+    }
+
     // Atualizar recChatIA=true para planos Starter ou superiores (v2.28.0.136)
     try {
       const updated = await db.$executeRawUnsafe(`

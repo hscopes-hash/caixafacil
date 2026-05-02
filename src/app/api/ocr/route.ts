@@ -15,7 +15,7 @@ Regras:
 - NÃO retorne nada além do JSON, sem explicação`;
 
 function extractContent(data: any, provider: string): string | null {
-  if (provider === 'glm' || provider === 'openrouter' || provider === 'mimo') {
+  if (provider === 'glm' || provider === 'openrouter') {
     return data?.choices?.[0]?.message?.content || null;
   }
   return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
@@ -43,11 +43,11 @@ export async function POST(req: NextRequest) {
     try {
       const empresa = await db.empresa.findUnique({
         where: { id: empresaId },
-        select: { llmApiKey: true, llmModel: true, llmApiKeyGemini: true, llmApiKeyGlm: true, llmApiKeyOpenrouter: true, llmApiKeyMimo: true },
+        select: { llmApiKey: true, llmModel: true, llmApiKeyGemini: true, llmApiKeyGlm: true, llmApiKeyOpenrouter: true },
       });
       if (empresa) {
         llmModel = empresa.llmModel?.trim() || llmModel;
-        llmApiKey = getApiKeyForModel(llmModel, empresa.llmApiKey, empresa.llmApiKeyGemini, empresa.llmApiKeyGlm, empresa.llmApiKeyOpenrouter, empresa.llmApiKeyMimo) || '';
+        llmApiKey = getApiKeyForModel(llmModel, empresa.llmApiKey, empresa.llmApiKeyGemini, empresa.llmApiKeyGlm, empresa.llmApiKeyOpenrouter) || '';
       }
     } catch {
       // Usa valores padrão
@@ -62,14 +62,6 @@ export async function POST(req: NextRequest) {
 
     // Detectar provider e montar requisição (CONFIG SAAS)
     const provider = detectProvider(llmModel);
-
-    // MiMo não suporta visão (imagem) - apenas texto
-    if (provider === 'mimo') {
-      return NextResponse.json(
-        { error: 'Os modelos Xiaomi MiMo não suportam análise de imagem (Vision). Selecione um modelo Gemini ou Zhipu AI (GLM) no Config SaaS para usar IA Vision.' },
-        { status: 400 }
-      );
-    }
 
     const textPrompt = `Imagem 1 (${nomeEntrada || 'Entrada'}): extraia o número visível no display${imageBase64Saida ? `\nImagem 2 (${nomeSaida || 'Saída'}): extraia o número visível no display` : ''}
 Responda no formato: {"entrada":"NNNN","saida":"NNNN"}`;
@@ -116,33 +108,6 @@ Responda no formato: {"entrada":"NNNN","saida":"NNNN"}`;
       }
 
       response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${llmApiKey}`,
-        },
-        body: JSON.stringify({
-          model: llmModel,
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: imageContent as any },
-          ],
-          max_tokens: 30,
-          temperature: 0,
-        }),
-      });
-    } else if (provider === 'mimo') {
-      const imageContent: { type: string; text?: string; image_url?: { url: string } }[] = [
-        { type: 'text', text: textPrompt },
-      ];
-      if (imageBase64Entrada) {
-        imageContent.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64Entrada}` } });
-      }
-      if (imageBase64Saida) {
-        imageContent.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64Saida}` } });
-      }
-
-      response = await fetch('https://api.xiaomimimo.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

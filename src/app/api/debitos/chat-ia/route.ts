@@ -89,11 +89,11 @@ export async function POST(request: NextRequest) {
     try {
       const empresa = await db.empresa.findUnique({
         where: { id: empresaId },
-        select: { llmApiKey: true, llmModel: true, llmApiKeyGemini: true, llmApiKeyGlm: true, llmApiKeyOpenrouter: true, llmApiKeyMimo: true },
+        select: { llmApiKey: true, llmModel: true, llmApiKeyGemini: true, llmApiKeyGlm: true, llmApiKeyOpenrouter: true },
       });
       if (empresa) {
         llmModel = empresa.llmModel?.trim() || llmModel;
-        llmApiKey = getApiKeyForModel(llmModel, empresa.llmApiKey, empresa.llmApiKeyGemini, empresa.llmApiKeyGlm, empresa.llmApiKeyOpenrouter, empresa.llmApiKeyMimo) || '';
+        llmApiKey = getApiKeyForModel(llmModel, empresa.llmApiKey, empresa.llmApiKeyGemini, empresa.llmApiKeyGlm, empresa.llmApiKeyOpenrouter) || '';
       }
     } catch {
       // Usa valores padrão
@@ -147,13 +147,6 @@ ${debitosContext}`;
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${llmApiKey}` },
           body: JSON.stringify({ model: llmModel, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: mensagem }], temperature: 0.3, max_tokens: 1024 }),
         });
-      } else if (provider === 'mimo') {
-        llmResponse = await fetch('https://api.xiaomimimo.com/v1/chat/completions', {
-          method: 'POST',
-          signal: controller.signal,
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${llmApiKey}` },
-          body: JSON.stringify({ model: llmModel, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: mensagem }], temperature: 0.3, max_tokens: 1024 }),
-        });
       } else {
         llmResponse = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${llmModel}:generateContent?key=${llmApiKey}`,
@@ -202,11 +195,8 @@ ${debitosContext}`;
         } else if (provider === 'openrouter') {
           if (llmResponse.status === 429) mensagemErro = 'Limite de uso do OpenRouter atingido. Aguarde ou troque o modelo.';
           else if (errMsg) mensagemErro = 'Erro OpenRouter: ' + errMsg.substring(0, 120);
-        } else if (provider === 'mimo') {
-          if (llmResponse.status === 429) mensagemErro = 'Limite de uso do Xiaomi MiMo atingido. Aguarde ou troque o modelo.';
-          else if (errMsg) mensagemErro = 'Erro Xiaomi MiMo: ' + errMsg.substring(0, 120);
         }
-        if (!mensagemErro.includes('Gemini') && !mensagemErro.includes('GLM') && !mensagemErro.includes('OpenRouter') && !mensagemErro.includes('MiMo') && !mensagemErro.includes('Limite')) {
+        if (!mensagemErro.includes('Gemini') && !mensagemErro.includes('GLM') && !mensagemErro.includes('OpenRouter') && !mensagemErro.includes('Limite')) {
           mensagemErro = 'Erro ' + llmResponse.status + ': ' + (errMsg || errText).substring(0, 120);
         }
       } catch {}
