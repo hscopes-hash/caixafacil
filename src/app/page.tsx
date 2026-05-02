@@ -9371,20 +9371,20 @@ export default function App() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => logout()}
-              className="text-muted-foreground hover:text-foreground"
-              title="Sair"
-            >
-              <LogOut className="w-5 h-5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
               onClick={toggleFullscreen}
               className="text-muted-foreground hover:text-foreground"
               title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
             >
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => logout()}
+              className="text-muted-foreground hover:text-foreground"
+              title="Sair"
+            >
+              <LogOut className="w-5 h-5" />
             </Button>
           </div>
         </div>
