@@ -9368,24 +9368,26 @@ export default function App() {
               <p className="text-sm font-medium text-foreground">{usuario?.nome}</p>
               <p className="text-xs text-muted-foreground">{usuario?.nivelAcesso}</p>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleFullscreen}
-              className="text-muted-foreground hover:text-foreground"
-              title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
-            >
-              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => logout()}
-              className="text-muted-foreground hover:text-foreground"
-              title="Sair"
-            >
-              <LogOut className="w-5 h-5" />
-            </Button>
+            <div className="flex flex-col">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleFullscreen}
+                className="text-muted-foreground hover:text-foreground h-8 w-8"
+                title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+              >
+                {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => logout()}
+                className="text-muted-foreground hover:text-foreground h-8 w-8"
+                title="Sair"
+              >
+                <LogOut className="w-5 h-5" />
+              </Button>
+            </div>
           </div>
         </div>
       </header>
