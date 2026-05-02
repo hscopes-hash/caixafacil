@@ -29,7 +29,7 @@ import {
   ClipboardList, Printer, Camera, X, Image as ImageIcon, Layers, MessageCircle, LogIn,
   CalendarDays, ShieldAlert, FileText, Sun, Moon, DatabaseBackup, Download, Upload, HardDrive, SlidersHorizontal,
   Key, Wifi, EyeOff, CreditCard, ExternalLink, ChevronDown, RotateCcw, Crown, Check, CheckCircle2, XCircle, Sparkles, Zap, Shield, Info,
-  Receipt, Mic, MicOff, Send, Volume2, ShoppingCart
+  Receipt, Mic, MicOff, Send, Volume2, ShoppingCart, Maximize2, Minimize2, Monitor
 } from 'lucide-react';
 import { VERSION_DISPLAY, VERSION_STRING, VERSION_WITH_DATE } from '@/lib/version';
 import GestaoPlanosSaaS from '@/components/GestaoPlanosSaaS';
@@ -7281,7 +7281,7 @@ function ConfiguracoesPage({ empresaId, onShowGestao }: { empresaId: string; onS
       .then((res) => res.json())
       .then((data) => {
         setLlmApiKey(data.llmApiKey || '');
-        setLlmModel(data.llmModel || '');
+        setLlmModel(data.llmModel || data.modeloPadrao || 'gemini-2.5-flash-lite');
         setSavedKeyGemini(data.llmApiKeyGemini || '');
         setSavedKeyGlm(data.llmApiKeyGlm || '');
         setSavedKeyOpenrouter(data.llmApiKeyOpenrouter || '');
@@ -9132,6 +9132,30 @@ export default function App() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Sincronizar estado de fullscreen com a API do navegador
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
+    };
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen?.() || await (document.documentElement as any).webkitRequestFullscreen?.();
+      } else {
+        await document.exitFullscreen?.() || await (document as any).webkitExitFullscreen?.();
+      }
+    } catch {}
+  };
   const [planoFeatures, setPlanoFeatures] = useState<{ recIA: boolean; recChatIA: boolean } | null>(null);
 
   // Carregar info do plano SaaS (features)
@@ -9326,8 +9350,17 @@ export default function App() {
               <p className="text-xs text-muted-foreground">EMPRESA: {empresa?.nome}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="text-right mr-2">
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleFullscreen}
+              className="text-muted-foreground hover:text-foreground"
+              title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+            >
+              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </Button>
+            <div className="text-right mr-1 ml-1">
               <p className="text-sm font-medium text-foreground">{usuario?.nome}</p>
               <p className="text-xs text-muted-foreground">{usuario?.nivelAcesso}</p>
             </div>
