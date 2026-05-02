@@ -8,7 +8,7 @@ import { enforcePlan } from '@/lib/plan-enforcement';
 // ============================================
 
 function extractContent(data: any, provider: string): string | null {
-  if (provider === 'glm' || provider === 'openrouter') {
+  if (provider === 'glm' || provider === 'openrouter' || provider === 'mimo') {
     return data?.choices?.[0]?.message?.content || null;
   }
   return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
@@ -56,6 +56,36 @@ async function callAI(prompt: string, imagem: string, apiKey: string, model: str
     }
   } else if (provider === 'openrouter') {
     const url = 'https://openrouter.ai/api/v1/chat/completions';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), AI_TIMEOUT);
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: prompt },
+                { type: 'image_url', image_url: { url: imagem } },
+              ],
+            },
+          ],
+          temperature,
+          max_tokens: maxTokens,
+        }),
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  } else if (provider === 'mimo') {
+    const url = 'https://api.xiaomimimo.com/v1/chat/completions';
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), AI_TIMEOUT);
     try {
@@ -189,11 +219,11 @@ export async function POST(request: NextRequest) {
     try {
       const empresa = await db.empresa.findUnique({
         where: { id: empresaId },
-        select: { llmApiKey: true, llmModel: true, llmApiKeyGemini: true, llmApiKeyGlm: true, llmApiKeyOpenrouter: true },
+        select: { llmApiKey: true, llmModel: true, llmApiKeyGemini: true, llmApiKeyGlm: true, llmApiKeyOpenrouter: true, llmApiKeyMimo: true },
       });
       if (empresa) {
         llmModel = empresa.llmModel?.trim() || llmModel;
-        llmApiKey = getApiKeyForModel(llmModel, empresa.llmApiKey, empresa.llmApiKeyGemini, empresa.llmApiKeyGlm, empresa.llmApiKeyOpenrouter) || '';
+        llmApiKey = getApiKeyForModel(llmModel, empresa.llmApiKey, empresa.llmApiKeyGemini, empresa.llmApiKeyGlm, empresa.llmApiKeyOpenrouter, empresa.llmApiKeyMimo) || '';
       }
     } catch {
       // Usa valores padrão

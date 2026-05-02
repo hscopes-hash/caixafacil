@@ -15,7 +15,7 @@ Regras:
 - NÃO retorne nada além do JSON, sem explicação`;
 
 function extractContent(data: any, provider: string): string | null {
-  if (provider === 'glm' || provider === 'openrouter') {
+  if (provider === 'glm' || provider === 'openrouter' || provider === 'mimo') {
     return data?.choices?.[0]?.message?.content || null;
   }
   return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
@@ -43,11 +43,11 @@ export async function POST(req: NextRequest) {
     try {
       const empresa = await db.empresa.findUnique({
         where: { id: empresaId },
-        select: { llmApiKey: true, llmModel: true, llmApiKeyGemini: true, llmApiKeyGlm: true, llmApiKeyOpenrouter: true },
+        select: { llmApiKey: true, llmModel: true, llmApiKeyGemini: true, llmApiKeyGlm: true, llmApiKeyOpenrouter: true, llmApiKeyMimo: true },
       });
       if (empresa) {
         llmModel = empresa.llmModel?.trim() || llmModel;
-        llmApiKey = getApiKeyForModel(llmModel, empresa.llmApiKey, empresa.llmApiKeyGemini, empresa.llmApiKeyGlm, empresa.llmApiKeyOpenrouter) || '';
+        llmApiKey = getApiKeyForModel(llmModel, empresa.llmApiKey, empresa.llmApiKeyGemini, empresa.llmApiKeyGlm, empresa.llmApiKeyOpenrouter, empresa.llmApiKeyMimo) || '';
       }
     } catch {
       // Usa valores padrão
@@ -108,6 +108,33 @@ Responda no formato: {"entrada":"NNNN","saida":"NNNN"}`;
       }
 
       response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${llmApiKey}`,
+        },
+        body: JSON.stringify({
+          model: llmModel,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: imageContent as any },
+          ],
+          max_tokens: 30,
+          temperature: 0,
+        }),
+      });
+    } else if (provider === 'mimo') {
+      const imageContent: { type: string; text?: string; image_url?: { url: string } }[] = [
+        { type: 'text', text: textPrompt },
+      ];
+      if (imageBase64Entrada) {
+        imageContent.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64Entrada}` } });
+      }
+      if (imageBase64Saida) {
+        imageContent.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64Saida}` } });
+      }
+
+      response = await fetch('https://api.xiaomimimo.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

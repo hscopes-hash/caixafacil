@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
         llmApiKeyGemini: true,
         llmApiKeyGlm: true,
         llmApiKeyOpenrouter: true,
+        llmApiKeyMimo: true,
         mercadopagoAccessToken: true,
         mercadopagoPublicKey: true,
         impressoraTipo: true,
@@ -50,6 +51,7 @@ export async function GET(request: NextRequest) {
       llmApiKeyGemini: empresa.llmApiKeyGemini || '',
       llmApiKeyGlm: empresa.llmApiKeyGlm || '',
       llmApiKeyOpenrouter: empresa.llmApiKeyOpenrouter || '',
+      llmApiKeyMimo: empresa.llmApiKeyMimo || '',
       llmApiKeyMasked: maskApiKey(empresa.llmApiKey),
       mercadopagoAccessToken: empresa.mercadopagoAccessToken || '',
       mercadopagoPublicKey: empresa.mercadopagoPublicKey || '',
@@ -71,7 +73,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { empresaId, llmApiKey, llmModel, llmApiKeyGemini, llmApiKeyGlm, llmApiKeyOpenrouter, mercadopagoAccessToken, mercadopagoPublicKey, impressoraTipo, impressoraPreset, impressoraConexao, impressoraServicoUUID, impressoraCharUUID, impressoraChunkSize } = body;
+    const { empresaId, llmApiKey, llmModel, llmApiKeyGemini, llmApiKeyGlm, llmApiKeyOpenrouter, llmApiKeyMimo, mercadopagoAccessToken, mercadopagoPublicKey, impressoraTipo, impressoraPreset, impressoraConexao, impressoraServicoUUID, impressoraCharUUID, impressoraChunkSize } = body;
 
     if (!empresaId) {
       return NextResponse.json({ error: 'empresaId é obrigatório' }, { status: 400 });
@@ -108,6 +110,10 @@ export async function PUT(request: NextRequest) {
     if (llmApiKeyOpenrouter !== undefined && llmApiKeyOpenrouter !== null) {
       const trimmed = llmApiKeyOpenrouter.trim();
       dadosAtualizacao.llmApiKeyOpenrouter = trimmed === '' ? null : trimmed;
+    }
+    if (llmApiKeyMimo !== undefined && llmApiKeyMimo !== null) {
+      const trimmed = llmApiKeyMimo.trim();
+      dadosAtualizacao.llmApiKeyMimo = trimmed === '' ? null : trimmed;
     }
     // MercadoPago
     if (mercadopagoAccessToken !== undefined && mercadopagoAccessToken !== null) {
@@ -153,6 +159,7 @@ export async function PUT(request: NextRequest) {
         llmApiKeyGemini: true,
         llmApiKeyGlm: true,
         llmApiKeyOpenrouter: true,
+        llmApiKeyMimo: true,
         mercadopagoAccessToken: true,
         mercadopagoPublicKey: true,
         impressoraTipo: true,
@@ -171,6 +178,7 @@ export async function PUT(request: NextRequest) {
       llmApiKeyGemini: empresaAtualizada.llmApiKeyGemini || '',
       llmApiKeyGlm: empresaAtualizada.llmApiKeyGlm || '',
       llmApiKeyOpenrouter: empresaAtualizada.llmApiKeyOpenrouter || '',
+      llmApiKeyMimo: empresaAtualizada.llmApiKeyMimo || '',
       llmApiKeyMasked: maskApiKey(empresaAtualizada.llmApiKey),
       mercadopagoAccessToken: empresaAtualizada.mercadopagoAccessToken || '',
       mercadopagoPublicKey: empresaAtualizada.mercadopagoPublicKey || '',

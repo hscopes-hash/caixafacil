@@ -7210,6 +7210,7 @@ function ConfiguracoesPage({ empresaId, onShowGestao }: { empresaId: string; onS
   const [savedKeyGemini, setSavedKeyGemini] = useState('');
   const [savedKeyGlm, setSavedKeyGlm] = useState('');
   const [savedKeyOpenrouter, setSavedKeyOpenrouter] = useState('');
+  const [savedKeyMimo, setSavedKeyMimo] = useState('');
   const [mpAccessToken, setMpAccessToken] = useState('');
   const [mpPublicKey, setMpPublicKey] = useState('');
   const [showMpAccessToken, setShowMpAccessToken] = useState(false);
@@ -7226,7 +7227,7 @@ function ConfiguracoesPage({ empresaId, onShowGestao }: { empresaId: string; onS
   const [impressoraConectando, setImpressoraConectando] = useState(false);
 
   // Funções auxiliares
-  const getProviderLocal = (m: string) => m.includes('/') ? 'openrouter' : m.startsWith('glm-') ? 'glm' : 'gemini';
+  const getProviderLocal = (m: string) => m.includes('/') ? 'openrouter' : m.startsWith('glm-') ? 'glm' : m.startsWith('mimo-') ? 'mimo' : 'gemini';
 
   // Função para trocar modelo e avisar se API Key precisa ser atualizada
   const handleModelChange = (novoModelo: string) => {
@@ -7236,12 +7237,12 @@ function ConfiguracoesPage({ empresaId, onShowGestao }: { empresaId: string; onS
 
     setLlmModel(novoModelo);
     if (providerMudou) {
-      const keySalva = providerNovo === 'gemini' ? savedKeyGemini : providerNovo === 'glm' ? savedKeyGlm : providerNovo === 'openrouter' ? savedKeyOpenrouter : '';
+      const keySalva = providerNovo === 'gemini' ? savedKeyGemini : providerNovo === 'glm' ? savedKeyGlm : providerNovo === 'openrouter' ? savedKeyOpenrouter : providerNovo === 'mimo' ? savedKeyMimo : '';
       setLlmApiKey(keySalva);
       if (keySalva) {
         toast.success('API Key do provedor restaurada automaticamente.');
       } else {
-        toast.info(`Provedor alterado para ${providerNovo === 'gemini' ? 'Google Gemini' : providerNovo === 'glm' ? 'Zhipu AI' : 'OpenRouter'}. Insira a API Key correspondente.`);
+        toast.info(`Provedor alterado para ${providerNovo === 'gemini' ? 'Google Gemini' : providerNovo === 'glm' ? 'Zhipu AI' : providerNovo === 'openrouter' ? 'OpenRouter' : 'Xiaomi MiMo'}. Insira a API Key correspondente.`);
       }
     }
   };
@@ -7258,17 +7259,25 @@ function ConfiguracoesPage({ empresaId, onShowGestao }: { empresaId: string; onS
     { value: 'google/gemma-4-31b-it:free', label: 'Gemma 4 31B (OpenRouter - Gratuito)', provider: 'openrouter' },
     { value: 'google/gemma-3-27b-it:free', label: 'Gemma 3 27B (OpenRouter - Gratuito)', provider: 'openrouter' },
     { value: 'nvidia/nemotron-nano-12b-v2-vl:free', label: 'Nemotron 12B VL (OpenRouter - Gratuito)', provider: 'openrouter' },
+    { value: 'mimo-v2.5-pro', label: 'MiMo V2.5 Pro (Xiaomi - Flagship)', provider: 'mimo' },
+    { value: 'mimo-v2-pro', label: 'MiMo V2 Pro (Xiaomi - Agentes)', provider: 'mimo' },
+    { value: 'mimo-v2-flash', label: 'MiMo V2 Flash (Xiaomi - Rápido)', provider: 'mimo' },
+    { value: 'mimo-v2-omni', label: 'MiMo V2 Omni (Xiaomi - Multimodal)', provider: 'mimo' },
   ];
 
   const getKeyLink = (provider: string) => provider === 'glm'
     ? 'https://z.ai/manage-apikey/apikey-list'
     : provider === 'openrouter'
     ? 'https://openrouter.ai/settings/keys'
+    : provider === 'mimo'
+    ? 'https://platform.xiaomimimo.com/console'
     : 'https://aistudio.google.com/apikey';
   const getKeyLabel = (provider: string) => provider === 'glm'
     ? 'Obter API Key Zhipu AI'
     : provider === 'openrouter'
     ? 'Obter API Key OpenRouter'
+    : provider === 'mimo'
+    ? 'Obter API Key Xiaomi MiMo'
     : 'Obter API Key Google Gemini';
 
   useEffect(() => {
@@ -7282,6 +7291,7 @@ function ConfiguracoesPage({ empresaId, onShowGestao }: { empresaId: string; onS
         setSavedKeyGemini(data.llmApiKeyGemini || '');
         setSavedKeyGlm(data.llmApiKeyGlm || '');
         setSavedKeyOpenrouter(data.llmApiKeyOpenrouter || '');
+        setSavedKeyMimo(data.llmApiKeyMimo || '');
         setMpAccessToken(data.mercadopagoAccessToken || '');
         setMpPublicKey(data.mercadopagoPublicKey || '');
         setImpressoraPreset(data.impressoraPreset || 'none');
@@ -7301,22 +7311,25 @@ function ConfiguracoesPage({ empresaId, onShowGestao }: { empresaId: string; onS
       let newKeyGemini = savedKeyGemini;
       let newKeyGlm = savedKeyGlm;
       let newKeyOpenrouter = savedKeyOpenrouter;
+      let newKeyMimo = savedKeyMimo;
       if (llmApiKey && providerPrincipal === 'gemini') newKeyGemini = llmApiKey;
       if (llmApiKey && providerPrincipal === 'glm') newKeyGlm = llmApiKey;
       if (llmApiKey && providerPrincipal === 'openrouter') newKeyOpenrouter = llmApiKey;
+      if (llmApiKey && providerPrincipal === 'mimo') newKeyMimo = llmApiKey;
 
       const res = await fetch('/api/configuracoes', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empresaId, llmApiKey, llmModel, llmApiKeyGemini: newKeyGemini, llmApiKeyGlm: newKeyGlm, llmApiKeyOpenrouter: newKeyOpenrouter, mercadopagoAccessToken: mpAccessToken, mercadopagoPublicKey: mpPublicKey, impressoraPreset }),
+        body: JSON.stringify({ empresaId, llmApiKey, llmModel, llmApiKeyGemini: newKeyGemini, llmApiKeyGlm: newKeyGlm, llmApiKeyOpenrouter: newKeyOpenrouter, llmApiKeyMimo: newKeyMimo, mercadopagoAccessToken: mpAccessToken, mercadopagoPublicKey: mpPublicKey, impressoraPreset }),
       });
       const data = await res.json();
       console.log("[CHAT-IA] Response:", res.status, JSON.stringify(data).substring(0, 300));
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar configurações');
-      updateEmpresa({ llmApiKey, llmModel, llmApiKeyGemini: newKeyGemini, llmApiKeyGlm: newKeyGlm, llmApiKeyOpenrouter: newKeyOpenrouter });
+      updateEmpresa({ llmApiKey, llmModel, llmApiKeyGemini: newKeyGemini, llmApiKeyGlm: newKeyGlm, llmApiKeyOpenrouter: newKeyOpenrouter, llmApiKeyMimo: newKeyMimo });
       setSavedKeyGemini(newKeyGemini);
       setSavedKeyGlm(newKeyGlm);
       setSavedKeyOpenrouter(newKeyOpenrouter);
+      setSavedKeyMimo(newKeyMimo);
       toast.success('Configurações salvas com sucesso!');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao salvar configurações';

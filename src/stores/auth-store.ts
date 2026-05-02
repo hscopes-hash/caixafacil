@@ -31,6 +31,7 @@ export interface Empresa {
   llmApiKeyGemini?: string;
   llmApiKeyGlm?: string;
   llmApiKeyOpenrouter?: string;
+  llmApiKeyMimo?: string;
 }
 
 interface AuthState {

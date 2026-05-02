@@ -724,11 +724,11 @@ Vou seguir essa instrucao em todas as nossas conversas, mesmo se voce fechar e r
     try {
       const empresa = await db.empresa.findUnique({
         where: { id: empresaId },
-        select: { llmApiKey: true, llmModel: true, llmApiKeyGemini: true, llmApiKeyGlm: true, llmApiKeyOpenrouter: true },
+        select: { llmApiKey: true, llmModel: true, llmApiKeyGemini: true, llmApiKeyGlm: true, llmApiKeyOpenrouter: true, llmApiKeyMimo: true },
       });
       if (empresa) {
         llmModel = empresa.llmModel?.trim() || llmModel;
-        llmApiKey = getApiKeyForModel(llmModel, empresa.llmApiKey, empresa.llmApiKeyGemini, empresa.llmApiKeyGlm, empresa.llmApiKeyOpenrouter) || '';
+        llmApiKey = getApiKeyForModel(llmModel, empresa.llmApiKey, empresa.llmApiKeyGemini, empresa.llmApiKeyGlm, empresa.llmApiKeyOpenrouter, empresa.llmApiKeyMimo) || '';
       }
     } catch {
       // Usa valores padrao
@@ -861,6 +861,22 @@ Use formato de moeda brasileiro (R$ X.XXX,XX) nos valores.`;
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${llmApiKey}` },
           body: JSON.stringify({ model: llmModel, messages: chatMessages, temperature: 0.3, max_tokens: 2048 }),
         });
+      } else if (provider === 'mimo') {
+        const chatMessages = [
+          { role: 'system', content: systemPrompt },
+          ...recentHistory.map(m => ({
+            role: m.role === 'assistant' ? 'assistant' : 'user' as const,
+            content: m.content,
+          })),
+          { role: 'user' as const, content: mensagem },
+        ];
+
+        llmResponse = await fetch('https://api.xiaomimimo.com/v1/chat/completions', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${llmApiKey}` },
+          body: JSON.stringify({ model: llmModel, messages: chatMessages, temperature: 0.3, max_tokens: 2048 }),
+        });
       } else {
         // Gemini format
         const contents = [
@@ -915,8 +931,11 @@ Use formato de moeda brasileiro (R$ X.XXX,XX) nos valores.`;
         } else if (provider === 'openrouter') {
           if (llmResponse.status === 429) mensagemErro = 'Limite de uso do OpenRouter atingido. Aguarde ou troque o modelo.';
           else if (errMsg) mensagemErro = 'Erro OpenRouter: ' + errMsg.substring(0, 120);
+        } else if (provider === 'mimo') {
+          if (llmResponse.status === 429) mensagemErro = 'Limite de uso do Xiaomi MiMo atingido. Aguarde ou troque o modelo.';
+          else if (errMsg) mensagemErro = 'Erro Xiaomi MiMo: ' + errMsg.substring(0, 120);
         }
-        if (!mensagemErro.includes('Gemini') && !mensagemErro.includes('GLM') && !mensagemErro.includes('OpenRouter') && !mensagemErro.includes('Limite')) {
+        if (!mensagemErro.includes('Gemini') && !mensagemErro.includes('GLM') && !mensagemErro.includes('OpenRouter') && !mensagemErro.includes('MiMo') && !mensagemErro.includes('Limite')) {
           mensagemErro = 'Erro ' + llmResponse.status + ': ' + (errMsg || errText).substring(0, 120);
         }
       } catch {}

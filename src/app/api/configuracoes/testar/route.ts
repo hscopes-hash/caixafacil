@@ -4,7 +4,7 @@ import { generateZhipuToken, getApiKeyForModel, detectProvider } from '@/lib/zhi
 
 const prisma = new PrismaClient();
 
-function getProvider(model: string): 'gemini' | 'glm' | 'openrouter' {
+function getProvider(model: string): 'gemini' | 'glm' | 'openrouter' | 'mimo' {
   return detectProvider(model);
 }
 
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     // Buscar modelo configurado no banco
     const empresa = await prisma.empresa.findUnique({
       where: { id: empresaId },
-      select: { llmModel: true, llmApiKey: true, llmApiKeyGemini: true, llmApiKeyGlm: true, llmApiKeyOpenrouter: true },
+      select: { llmModel: true, llmApiKey: true, llmApiKeyGemini: true, llmApiKeyGlm: true, llmApiKeyOpenrouter: true, llmApiKeyMimo: true },
     });
 
     if (!empresa) {
@@ -34,9 +34,10 @@ export async function POST(request: NextRequest) {
 
     // API Key: do banco de dados (Config. IA)
     const empresaKey = bodyApiKey?.trim() || empresa.llmApiKey?.trim() || null;
-    const apiKey = getApiKeyForModel(model, empresaKey, empresa.llmApiKeyGemini, empresa.llmApiKeyGlm, empresa.llmApiKeyOpenrouter);
+    const apiKey = getApiKeyForModel(model, empresaKey, empresa.llmApiKeyGemini, empresa.llmApiKeyGlm, empresa.llmApiKeyOpenrouter, empresa.llmApiKeyMimo);
     if (!apiKey) {
-      const providerName = getProvider(model) === 'glm' ? 'Zhipu AI' : getProvider(model) === 'openrouter' ? 'OpenRouter' : 'Google Gemini';
+      const provider = getProvider(model);
+      const providerName = provider === 'glm' ? 'Zhipu AI' : provider === 'openrouter' ? 'OpenRouter' : provider === 'mimo' ? 'Xiaomi MiMo' : 'Google Gemini';
       return NextResponse.json(
         { error: `Nenhuma API Key configurada para ${providerName}. Informe sua API Key nas Configurações.` },
         { status: 400 }
@@ -81,6 +82,22 @@ export async function POST(request: NextRequest) {
         });
       } else if (provider === 'openrouter') {
         const url = 'https://openrouter.ai/api/v1/chat/completions';
+        response = await fetch(url, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: [{ role: 'user', content: 'Responda APENAS com a palavra "OK".' }],
+            temperature: 0,
+            max_tokens: 10,
+          }),
+        });
+      } else if (provider === 'mimo') {
+        const url = 'https://api.xiaomimimo.com/v1/chat/completions';
         response = await fetch(url, {
           method: 'POST',
           signal: controller.signal,
@@ -147,6 +164,14 @@ export async function POST(request: NextRequest) {
           else if (response.status === 429) errorMsg = `Limite de requisições do OpenRouter atingido.`;
           else if (response.status === 404) errorMsg = `Modelo "${model}" não encontrado no OpenRouter.`;
           else errorMsg = `Erro ${response.status}: ${orMsg || responseText.substring(0, 200)}`;
+        } else if (provider === 'mimo') {
+          const mimoMsg = errorJson?.error?.message || errorJson?.message || '';
+          errorDetalhe = mimoMsg;
+          if (response.status === 401 || response.status === 403) errorMsg = `API Key inválida para Xiaomi MiMo.`;
+          else if (response.status === 400) errorMsg = `Requisição inválida: ${mimoMsg || responseText.substring(0, 200)}`;
+          else if (response.status === 429) errorMsg = `Limite de requisições do Xiaomi MiMo atingido.`;
+          else if (response.status === 404) errorMsg = `Modelo "${model}" não encontrado no Xiaomi MiMo.`;
+          else errorMsg = `Erro ${response.status}: ${mimoMsg || responseText.substring(0, 200)}`;
         } else {
           const geminiMsg = errorJson?.error?.message || '';
           errorDetalhe = geminiMsg;
@@ -167,13 +192,13 @@ export async function POST(request: NextRequest) {
     const data = JSON.parse(responseText);
     let content: string | null;
 
-    if (provider === 'glm' || provider === 'openrouter') {
+    if (provider === 'glm' || provider === 'openrouter' || provider === 'mimo') {
       content = data?.choices?.[0]?.message?.content || null;
     } else {
       content = data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
     }
 
-    const provedorLabel = provider === 'glm' ? 'Zhipu AI (GLM)' : provider === 'openrouter' ? 'OpenRouter' : 'Google Gemini';
+    const provedorLabel = provider === 'glm' ? 'Zhipu AI (GLM)' : provider === 'openrouter' ? 'OpenRouter' : provider === 'mimo' ? 'Xiaomi MiMo' : 'Google Gemini';
 
     return NextResponse.json({
       success: true,
