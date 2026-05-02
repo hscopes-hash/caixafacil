@@ -106,6 +106,7 @@ async function callAI(prompt: string, imagem: string, apiKey: string, model: str
           generationConfig: {
             temperature,
             maxOutputTokens: maxTokens,
+            responseMimeType: 'application/json',
           },
         }),
       });

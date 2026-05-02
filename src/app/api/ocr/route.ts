@@ -67,9 +67,13 @@ export async function POST(req: NextRequest) {
 Responda no formato: {"entrada":"NNNN","saida":"NNNN"}`;
 
     let response: Response;
+    const AI_TIMEOUT = 30000; // 30s (OCR é rápido, não precisa de 55s)
 
     if (provider === 'glm') {
       const authToken = generateZhipuToken(llmApiKey);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), AI_TIMEOUT);
+      try {
       const imageContent: { type: string; text?: string; image_url?: { url: string } }[] = [
         { type: 'text', text: textPrompt },
       ];
@@ -82,6 +86,7 @@ Responda no formato: {"entrada":"NNNN","saida":"NNNN"}`;
 
       response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`,
@@ -94,9 +99,16 @@ Responda no formato: {"entrada":"NNNN","saida":"NNNN"}`;
           ],
           max_tokens: 30,
           temperature: 0,
+          response_format: { type: 'json_object' },
         }),
       });
+      } finally {
+        clearTimeout(timeoutId);
+      }
     } else if (provider === 'openrouter') {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), AI_TIMEOUT);
+      try {
       const imageContent: { type: string; text?: string; image_url?: { url: string } }[] = [
         { type: 'text', text: textPrompt },
       ];
@@ -109,6 +121,7 @@ Responda no formato: {"entrada":"NNNN","saida":"NNNN"}`;
 
       response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${llmApiKey}`,
@@ -121,10 +134,17 @@ Responda no formato: {"entrada":"NNNN","saida":"NNNN"}`;
           ],
           max_tokens: 30,
           temperature: 0,
+          response_format: { type: 'json_object' },
         }),
       });
+      } finally {
+        clearTimeout(timeoutId);
+      }
     } else {
-      // Gemini
+      // Gemini - com timeout e responseMimeType para JSON estruturado
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), AI_TIMEOUT);
+      try {
       const parts: any[] = [{ text: SYSTEM_PROMPT + '\n\n' + textPrompt }];
       if (imageBase64Entrada) {
         parts.push({ inline_data: { mime_type: 'image/jpeg', data: imageBase64Entrada } });
@@ -137,13 +157,17 @@ Responda no formato: {"entrada":"NNNN","saida":"NNNN"}`;
         `https://generativelanguage.googleapis.com/v1beta/models/${llmModel}:generateContent?key=${llmApiKey}`,
         {
           method: 'POST',
+          signal: controller.signal,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts }],
-            generationConfig: { temperature: 0, maxOutputTokens: 30 },
+            generationConfig: { temperature: 0, maxOutputTokens: 30, responseMimeType: 'application/json' },
           }),
         }
       );
+      } finally {
+        clearTimeout(timeoutId);
+      }
     }
 
     const responseText = await response.text();
