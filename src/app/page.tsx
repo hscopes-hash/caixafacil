@@ -442,7 +442,20 @@ function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4 relative">
+      {/* Botão encerrar - topo direito */}
+      <button
+        onClick={() => {
+          if (confirm('Deseja encerrar o aplicativo?')) {
+            window.close();
+          }
+        }}
+        className="absolute top-4 right-4 p-2 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
+        title="Encerrar"
+      >
+        <X className="w-6 h-6" />
+      </button>
+
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <img src="/icon-192.png" alt="Caixa Fácil" className="w-48 h-48 rounded-2xl mb-4 shadow-lg mx-auto" />
@@ -9351,16 +9364,7 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleFullscreen}
-              className="text-muted-foreground hover:text-foreground"
-              title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
-            >
-              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-            </Button>
-            <div className="text-right mr-1 ml-1">
+            <div className="text-right mr-1">
               <p className="text-sm font-medium text-foreground">{usuario?.nome}</p>
               <p className="text-xs text-muted-foreground">{usuario?.nivelAcesso}</p>
             </div>
@@ -9369,8 +9373,18 @@ export default function App() {
               size="icon"
               onClick={() => logout()}
               className="text-muted-foreground hover:text-foreground"
+              title="Sair"
             >
               <LogOut className="w-5 h-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleFullscreen}
+              className="text-muted-foreground hover:text-foreground"
+              title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+            >
+              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </Button>
           </div>
         </div>
