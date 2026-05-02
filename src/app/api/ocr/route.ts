@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { generateZhipuToken, getApiKeyForModel, detectProvider } from '@/lib/zhipu-auth';
+import { callAIMultiImage, loadEmpresaAIConfig, extractContent } from '@/lib/ai-vision';
 import { enforcePlan } from '@/lib/plan-enforcement';
 
 const SYSTEM_PROMPT = `Você é OCR de displays eletrônicos de máquinas de arcade.
@@ -13,13 +12,6 @@ Regras:
 - Displays de 7 segmentos: o "1" não tem barra esquerda, o "7" pode ter traço inferior
 - Se não conseguir ler um dos valores, coloque "" (vazio)
 - NÃO retorne nada além do JSON, sem explicação`;
-
-function extractContent(data: any, provider: string): string | null {
-  if (provider === 'glm' || provider === 'openrouter') {
-    return data?.choices?.[0]?.message?.content || null;
-  }
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -36,22 +28,8 @@ export async function POST(req: NextRequest) {
     const planCheck = await enforcePlan(empresaId, { feature: 'recIA' }, req);
     if (planCheck.error) return NextResponse.json({ error: planCheck.error }, { status: 403 });
 
-    // Buscar configurações de IA da empresa (CONFIG SAAS)
-    let llmApiKey = '';
-    let llmModel = 'gemini-2.5-flash-lite';
-
-    try {
-      const empresa = await db.empresa.findUnique({
-        where: { id: empresaId },
-        select: { llmApiKey: true, llmModel: true, llmApiKeyGemini: true, llmApiKeyGlm: true, llmApiKeyOpenrouter: true },
-      });
-      if (empresa) {
-        llmModel = empresa.llmModel?.trim() || llmModel;
-        llmApiKey = getApiKeyForModel(llmModel, empresa.llmApiKey, empresa.llmApiKeyGemini, empresa.llmApiKeyGlm, empresa.llmApiKeyOpenrouter) || '';
-      }
-    } catch {
-      // Usa valores padrão
-    }
+    // Buscar configurações de IA da empresa
+    const { llmModel, llmApiKey } = await loadEmpresaAIConfig(empresaId);
 
     if (!llmApiKey) {
       return NextResponse.json(
@@ -60,125 +38,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Detectar provider e montar requisição (CONFIG SAAS)
-    const provider = detectProvider(llmModel);
-
     const textPrompt = `Imagem 1 (${nomeEntrada || 'Entrada'}): extraia o número visível no display${imageBase64Saida ? `\nImagem 2 (${nomeSaida || 'Saída'}): extraia o número visível no display` : ''}
 Responda no formato: {"entrada":"NNNN","saida":"NNNN"}`;
 
-    let response: Response;
-    const AI_TIMEOUT = 30000; // 30s (OCR é rápido, não precisa de 55s)
-
-    if (provider === 'glm') {
-      const authToken = generateZhipuToken(llmApiKey);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), AI_TIMEOUT);
-      try {
-      const imageContent: { type: string; text?: string; image_url?: { url: string } }[] = [
-        { type: 'text', text: textPrompt },
-      ];
-      if (imageBase64Entrada) {
-        imageContent.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64Entrada}` } });
-      }
-      if (imageBase64Saida) {
-        imageContent.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64Saida}` } });
-      }
-
-      response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          model: llmModel,
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: imageContent as any },
-          ],
-          max_tokens: 30,
-          temperature: 0,
-          response_format: { type: 'json_object' },
-        }),
-      });
-      } finally {
-        clearTimeout(timeoutId);
-      }
-    } else if (provider === 'openrouter') {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), AI_TIMEOUT);
-      try {
-      const imageContent: { type: string; text?: string; image_url?: { url: string } }[] = [
-        { type: 'text', text: textPrompt },
-      ];
-      if (imageBase64Entrada) {
-        imageContent.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64Entrada}` } });
-      }
-      if (imageBase64Saida) {
-        imageContent.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64Saida}` } });
-      }
-
-      response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${llmApiKey}`,
-        },
-        body: JSON.stringify({
-          model: llmModel,
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: imageContent as any },
-          ],
-          max_tokens: 30,
-          temperature: 0,
-          response_format: { type: 'json_object' },
-        }),
-      });
-      } finally {
-        clearTimeout(timeoutId);
-      }
-    } else {
-      // Gemini - com timeout e responseMimeType para JSON estruturado
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), AI_TIMEOUT);
-      try {
-      const parts: any[] = [{ text: SYSTEM_PROMPT + '\n\n' + textPrompt }];
-      if (imageBase64Entrada) {
-        parts.push({ inline_data: { mime_type: 'image/jpeg', data: imageBase64Entrada } });
-      }
-      if (imageBase64Saida) {
-        parts.push({ inline_data: { mime_type: 'image/jpeg', data: imageBase64Saida } });
-      }
-
-      response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${llmModel}:generateContent?key=${llmApiKey}`,
-        {
-          method: 'POST',
-          signal: controller.signal,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts }],
-            generationConfig: { temperature: 0, maxOutputTokens: 30, responseMimeType: 'application/json' },
-          }),
-        }
-      );
-      } finally {
-        clearTimeout(timeoutId);
-      }
+    // Montar array de imagens
+    const images: Array<{ base64: string; mimeType?: string }> = [];
+    if (imageBase64Entrada) {
+      images.push({ base64: imageBase64Entrada, mimeType: 'image/jpeg' });
+    }
+    if (imageBase64Saida) {
+      images.push({ base64: imageBase64Saida, mimeType: 'image/jpeg' });
     }
 
-    const responseText = await response.text();
+    // Usar módulo compartilhado (com timeout 30s + responseMimeType + response_format)
+    const result = await callAIMultiImage(SYSTEM_PROMPT, textPrompt, images, llmApiKey, llmModel, {
+      temperature: 0,
+      maxTokens: 30,
+      timeout: 30000, // 30s (OCR é rápido)
+      jsonMode: true,
+      responseFormat: true,
+    });
 
-    if (!response.ok) {
-      console.error('Erro OCR:', response.status, responseText.substring(0, 300));
-      return NextResponse.json({ entrada: '', saida: '' }, { status: 500 });
-    }
-
-    const data = JSON.parse(responseText);
-    const texto = extractContent(data, provider)?.trim() || '{}';
+    const texto = result.content.trim() || '{}';
 
     // Extrair JSON da resposta
     const match = texto.match(/\{[^}]+\}/);
@@ -190,6 +71,7 @@ Responda no formato: {"entrada":"NNNN","saida":"NNNN"}`;
     });
   } catch (error) {
     console.error('Erro OCR:', error);
+    // OCR retorna vazio em caso de erro (degradação graciosa)
     return NextResponse.json({ entrada: '', saida: '' }, { status: 500 });
   }
 }

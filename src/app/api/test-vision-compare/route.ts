@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateZhipuToken, getApiKeyForModel } from '@/lib/zhipu-auth';
+import { getApiKeyForModel } from '@/lib/zhipu-auth';
+import { callAI } from '@/lib/ai-vision';
 import { db } from '@/lib/db';
 
 export const maxDuration = 60;
 
+// Modelos atualizados para benchmark
+const GEMINI_MODEL = 'gemini-2.5-flash-lite';
+const GLM_MODEL = 'glm-4v-flash';
+
 // POST /api/test-vision-compare
 // Compara Gemini vs GLM no OCR de canhotos com a mesma imagem
-// Aceita empresaId (busca keys do banco) OU geminiKey + glmKey diretamente (teste sem DB)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -15,9 +19,6 @@ export async function POST(request: NextRequest) {
     if (!imagem) {
       return NextResponse.json({ error: 'imagem obrigatoria' }, { status: 400 });
     }
-
-    const base64Data = imagem.split(',')[1];
-    const mimeType = imagem.split(';')[0].split(':')[1];
 
     let geminiApiKey = geminiKey || null;
     let glmApiKey = glmKeyParam || null;
@@ -31,91 +32,61 @@ export async function POST(request: NextRequest) {
         );
         if (empresas?.length > 0) {
           const empresa = empresas[0];
-          geminiApiKey = getApiKeyForModel('gemini-2.0-flash', empresa.llmApiKey, empresa.llmApiKeyGemini, empresa.llmApiKeyGlm);
-          glmApiKey = getApiKeyForModel('glm-4v-flash', empresa.llmApiKey, empresa.llmApiKeyGemini, empresa.llmApiKeyGlm);
+          geminiApiKey = getApiKeyForModel(GEMINI_MODEL, empresa.llmApiKey, empresa.llmApiKeyGemini, empresa.llmApiKeyGlm);
+          glmApiKey = getApiKeyForModel(GLM_MODEL, empresa.llmApiKey, empresa.llmApiKeyGemini, empresa.llmApiKeyGlm);
         }
       } catch {}
     }
 
-    const PROMPT = `Voce e um especialista em OCR de cupons fiscais brasileiros de cartao de credito/debito.
+    const PROMPT = `Você é um especialista em OCR de cupons fiscais brasileiros de cartão de crédito/débito.
 
-INSTRUCOES CRITICAS:
-1. Conte TODOS os cupons/canhotos visiveis na foto
-2. Para cada cupon, extraia SOMENTE o valor total (campo "VALOR TOTAL")
-3. IGNORE taxas de servico ("TAXA DE SERVICO")
-4. Cada cupon pode estar parcialmente visivel
+INSTRUÇÕES CRÍTICAS:
+1. Conte TODOS os cupons/canhotos visíveis na foto
+2. Para cada cupom, extraia SOMENTE o valor total (campo "VALOR TOTAL")
+3. IGNORE taxas de serviço ("TAXA DE SERVIÇO")
+4. Cada cupom pode estar parcialmente visível
 
-RETORNE EXCLUSIVAMENTE neste formato JSON (sem nenhum texto adicional):
+RETORNE EXCLUSIVAMENTE neste formato JSON:
 {"quantidade":N,"cupons":[{"numero":1,"valor":0.00}],"total":0.00}
 
-IMPORTANTE: O campo "total" deve ser a SOMA MATEMATICA CORRETA de todos os valores listados.`;
+IMPORTANTE: O campo "total" deve ser a SOMA MATEMÁTICA CORRETA de todos os valores listados.`;
 
     const results: Record<string, any> = {};
 
-    // Testar Gemini
+    // Testar Gemini (usando modelo atualizado)
     if (geminiApiKey) {
       try {
         const start = Date.now();
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{
-                parts: [
-                  { text: PROMPT },
-                  { inline_data: { mime_type: mimeType, data: base64Data } },
-                ],
-              }],
-              generationConfig: { temperature: 0.1, maxOutputTokens: 4000 },
-            }),
-          }
-        );
+        const result = await callAI(PROMPT, imagem, geminiApiKey, GEMINI_MODEL, {
+          temperature: 0.1,
+          maxTokens: 4000,
+          jsonMode: true,
+        });
         const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-        const data = await response.json();
-        const content = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        results.gemini = { elapsed: elapsed + 's', raw: content, parsed: parseCanhoto(content) };
+        results.gemini = { elapsed: elapsed + 's', model: GEMINI_MODEL, raw: result.content, parsed: parseCanhoto(result.content) };
       } catch (e: any) {
         results.gemini = { erro: e.message };
       }
     } else {
-      results.gemini = { erro: 'API Key do Gemini nao fornecida' };
+      results.gemini = { erro: 'API Key do Gemini não fornecida' };
     }
 
     // Testar GLM
     if (glmApiKey) {
       try {
-        const authToken = generateZhipuToken(glmKey);
         const start = Date.now();
-        const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`,
-          },
-          body: JSON.stringify({
-            model: 'glm-4v-flash',
-            messages: [{
-              role: 'user',
-              content: [
-                { type: 'text', text: PROMPT },
-                { type: 'image_url', image_url: { url: imagem } },
-              ],
-            }],
-            temperature: 0.1,
-            max_tokens: 4000,
-          }),
+        const result = await callAI(PROMPT, imagem, glmApiKey, GLM_MODEL, {
+          temperature: 0.1,
+          maxTokens: 4000,
+          jsonMode: false, // GLM usa response_format, não responseMimeType
         });
         const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-        const data = await response.json();
-        const content = data?.choices?.[0]?.message?.content || '';
-        results.glm = { elapsed: elapsed + 's', raw: content, parsed: parseCanhoto(content) };
+        results.glm = { elapsed: elapsed + 's', model: GLM_MODEL, raw: result.content, parsed: parseCanhoto(result.content) };
       } catch (e: any) {
         results.glm = { erro: e.message };
       }
     } else {
-      results.glm = { erro: 'API Key do GLM nao fornecida' };
+      results.glm = { erro: 'API Key do GLM não fornecida' };
     }
 
     // Comparativo
