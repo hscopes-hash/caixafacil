@@ -7522,6 +7522,12 @@ function ConfiguracoesPage({ empresaId, onShowGestao }: { empresaId: string; onS
                   {modelo.label}
                 </SelectItem>
               ))}
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t border-border mt-1 pt-2">Xiaomi MiMo</div>
+              {modelosIA.filter(m => m.provider === 'mimo').map((modelo) => (
+                <SelectItem key={modelo.value} value={modelo.value}>
+                  {modelo.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -7547,7 +7553,7 @@ function ConfiguracoesPage({ empresaId, onShowGestao }: { empresaId: string; onS
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Provedor: <span className="font-medium text-foreground">{providerPrincipal === 'glm' ? 'Zhipu AI (GLM)' : providerPrincipal === 'openrouter' ? 'OpenRouter' : 'Google Gemini'}</span>
+              Provedor: <span className="font-medium text-foreground">{providerPrincipal === 'glm' ? 'Zhipu AI (GLM)' : providerPrincipal === 'openrouter' ? 'OpenRouter' : providerPrincipal === 'mimo' ? 'Xiaomi MiMo' : 'Google Gemini'}</span>
               {providerPrincipal === 'glm' && !llmApiKey && (
                 <span className="text-amber-400 ml-1"> - Formato: id.secret</span>
               )}
