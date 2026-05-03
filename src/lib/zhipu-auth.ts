@@ -21,16 +21,19 @@ export function detectProvider(model: string): Provider {
 /**
  * Retorna a API Key do banco de dados (Config. IA).
  * Sem variáveis de ambiente - a key deve ser configurada pelo super admin no app.
+ *
+ * Prioridade: chave específica do provedor > chave genérica (llmApiKey).
+ * Isso evita enviar uma chave de outro provedor (ex: GLM) para o Gemini.
  */
 export function getApiKeyForModel(model: string, empresaApiKey?: string | null, empresaApiKeyGemini?: string | null, empresaApiKeyGlm?: string | null, empresaApiKeyOpenrouter?: string | null): string | null {
   const provider = detectProvider(model);
   if (provider === 'glm') {
-    return empresaApiKey?.trim() || empresaApiKeyGlm?.trim() || null;
+    return empresaApiKeyGlm?.trim() || empresaApiKey?.trim() || null;
   }
   if (provider === 'openrouter') {
-    return empresaApiKey?.trim() || empresaApiKeyOpenrouter?.trim() || null;
+    return empresaApiKeyOpenrouter?.trim() || empresaApiKey?.trim() || null;
   }
-  return empresaApiKey?.trim() || empresaApiKeyGemini?.trim() || null;
+  return empresaApiKeyGemini?.trim() || empresaApiKey?.trim() || null;
 }
 
 /**

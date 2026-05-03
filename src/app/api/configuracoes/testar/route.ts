@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
-import { generateZhipuToken, getApiKeyForModel, detectProvider } from '@/lib/zhipu-auth';
+import { generateZhipuToken, detectProvider } from '@/lib/zhipu-auth';
 
 const prisma = new PrismaClient();
 
@@ -32,19 +32,28 @@ export async function POST(request: NextRequest) {
     const defaultModel = 'gemini-2.5-flash-lite';
     const model = bodyModel?.trim() || empresa.llmModel?.trim() || defaultModel;
 
-    // API Key: do banco de dados (Config. IA)
-    const empresaKey = bodyApiKey?.trim() || empresa.llmApiKey?.trim() || null;
-    const apiKey = getApiKeyForModel(model, empresaKey, empresa.llmApiKeyGemini, empresa.llmApiKeyGlm, empresa.llmApiKeyOpenrouter);
+    // Determinar provedor
+    const provider = getProvider(model);
+
+    // API Key: input do usuario > chave especifica do provedor > chave generica
+    const bodyKey = bodyApiKey?.trim() || null;
+    let apiKey: string | null = null;
+
+    if (provider === 'gemini') {
+      apiKey = bodyKey || empresa.llmApiKeyGemini?.trim() || empresa.llmApiKey?.trim() || null;
+    } else if (provider === 'glm') {
+      apiKey = bodyKey || empresa.llmApiKeyGlm?.trim() || empresa.llmApiKey?.trim() || null;
+    } else {
+      apiKey = bodyKey || empresa.llmApiKeyOpenrouter?.trim() || empresa.llmApiKey?.trim() || null;
+    }
+
     if (!apiKey) {
-      const provider = getProvider(model);
       const providerName = provider === 'glm' ? 'Zhipu AI' : provider === 'openrouter' ? 'OpenRouter' : 'Google Gemini';
       return NextResponse.json(
         { error: `Nenhuma API Key configurada para ${providerName}. Informe sua API Key nas Configurações.` },
         { status: 400 }
       );
     }
-
-    const provider = getProvider(model);
 
     console.log('=== TESTE CONEXÃO ===');
     console.log('Modelo:', model, '| Provedor:', provider, '| Key env:', apiKey.substring(0, 8) + '...');
