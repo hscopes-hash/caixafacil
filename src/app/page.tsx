@@ -3193,6 +3193,60 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome }: { emp
 
     setExtraindoLeitura(true);
     try {
+      // =============================================
+      // PASSO 1: Verificar etiqueta da máquina na foto
+      // =============================================
+      const codigosMaquinas = maquinas.map(m => m.codigo).filter(Boolean);
+      if (codigosMaquinas.length > 0 && maquinaFoto.codigo) {
+        try {
+          const token = useAuthStore.getState().token;
+          const idRes = await fetch('/api/leituras/identificar-lote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({
+              imagem: fotoCapturada,
+              codigosMaquinas,
+              empresaId: empresa?.id,
+            }),
+          });
+
+          if (idRes.ok) {
+            const idData = await idRes.json();
+            console.log('[ETIQUETA] Identificação:', JSON.stringify(idData).substring(0, 200));
+
+            if (idData.codigoReconhecido && idData.codigoMaquina) {
+              const codigoIdentificado = idData.codigoMaquina.toUpperCase();
+              const codigoEsperado = maquinaFoto.codigo.toUpperCase();
+
+              if (codigoIdentificado !== codigoEsperado) {
+                // Encontrou etiqueta de OUTRA máquina
+                const maquinaIdentificada = maquinas.find(m => m.codigo?.toUpperCase() === codigoIdentificado);
+                const nomeMaquina = maquinaIdentificada
+                  ? `${maquinaIdentificada.codigo} - ${maquinaIdentificada.tipo?.descricao || ''}`
+                  : codigoIdentificado;
+                const nomeEsperada = `${maquinaFoto.codigo} - ${maquinaFoto.tipo?.descricao || ''}`;
+
+                const msg = `Essa foto parece ser da máquina ${nomeMaquina.trim()}, mas você selecionou ${nomeEsperada.trim()}. Deseja continuar assim mesmo?`;
+                const continuar = window.confirm(msg);
+                if (!continuar) {
+                  setExtraindoLeitura(false);
+                  return;
+                }
+              } else {
+                toast.success(`Etiqueta verificada: ${maquinaFoto.codigo}`);
+              }
+            }
+            // Se não reconheceu etiqueta, segue sem verificação (foto pode não ter etiqueta visível)
+          }
+        } catch (err) {
+          console.error('Erro ao verificar etiqueta (segue sem verificação):', err);
+          // Se falhar a verificação, segue com extração normalmente
+        }
+      }
+
+      // =============================================
+      // PASSO 2: Extrair leitura da foto
+      // =============================================
       const token = useAuthStore.getState().token;
       const res = await fetch('/api/leituras/extrair', {
         method: 'POST',
