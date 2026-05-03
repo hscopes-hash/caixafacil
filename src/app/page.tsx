@@ -9381,7 +9381,13 @@ export default function App() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => logout()}
+                onClick={() => {
+                  logout();
+                  // PWA: tentar fechar a janela/app
+                  setTimeout(() => {
+                    try { window.close(); } catch {}
+                  }, 300);
+                }}
                 className="text-muted-foreground hover:text-foreground h-8 w-8"
                 title="Sair"
               >
