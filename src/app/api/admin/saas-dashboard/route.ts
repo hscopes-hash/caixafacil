@@ -175,8 +175,9 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Erro ao carregar dashboard SaaS:', error);
+    const msg = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: 'Erro ao carregar dashboard' },
+      { error: 'Erro ao carregar dashboard', detail: msg },
       { status: 500 }
     );
   }
