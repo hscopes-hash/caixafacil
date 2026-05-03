@@ -447,7 +447,12 @@ function LoginPage() {
       <button
         onClick={() => {
           if (confirm('Deseja encerrar o aplicativo?')) {
-            window.close();
+            try { window.close(); } catch {}
+            try { (window as any).history.back(); } catch {}
+            // Se nada funcionou, redireciona para blank (fecha o app em alguns dispositivos)
+            setTimeout(() => {
+              try { (window as any).location.replace('about:blank'); } catch {}
+            }, 300);
           }
         }}
         className="absolute top-4 right-4 p-2 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
@@ -9383,9 +9388,13 @@ export default function App() {
                 size="icon"
                 onClick={() => {
                   logout();
-                  // PWA: tentar fechar a janela/app
+                  // PWA: tentar fechar a janela/app com múltiplos métodos
                   setTimeout(() => {
                     try { window.close(); } catch {}
+                    try { (window as any).history.back(); } catch {}
+                    setTimeout(() => {
+                      try { (window as any).location.replace('about:blank'); } catch {}
+                    }, 300);
                   }, 300);
                 }}
                 className="text-muted-foreground hover:text-foreground h-8 w-8"
