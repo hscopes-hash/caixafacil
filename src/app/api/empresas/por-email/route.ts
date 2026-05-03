@@ -62,8 +62,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(unique);
   } catch (error) {
     console.error('Erro ao buscar empresas por email:', error);
+    const msg = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: 'Erro ao buscar empresas' },
+      { error: 'Erro ao buscar empresas', detail: msg },
       { status: 500 }
     );
   }
