@@ -29,7 +29,7 @@ import {
   ClipboardList, Printer, Camera, X, Image as ImageIcon, Layers, MessageCircle, LogIn,
   CalendarDays, ShieldAlert, FileText, Sun, Moon, DatabaseBackup, Download, Upload, HardDrive, SlidersHorizontal,
   Key, Wifi, EyeOff, CreditCard, ExternalLink, ChevronDown, RotateCcw, Crown, Check, CheckCircle2, XCircle, Sparkles, Zap, Shield, Info,
-  Receipt, Mic, MicOff, Send, Volume2, ShoppingCart, Maximize2, Minimize2, Monitor
+  Receipt, Mic, MicOff, Send, Volume2, ShoppingCart, Maximize2, Minimize2, Monitor, User
 } from 'lucide-react';
 import { VERSION_DISPLAY, VERSION_STRING, VERSION_WITH_DATE } from '@/lib/version';
 import GestaoPlanosSaaS from '@/components/GestaoPlanosSaaS';
@@ -182,6 +182,30 @@ function LoginPage() {
   // Email do super admin
   const SUPER_ADMIN_EMAIL = 'hscopes@gmail.com';
 
+  // Persistência do último email usado
+  const [ultimoEmail, setUltimoEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('cf-last-email');
+      if (saved) setUltimoEmail(saved);
+    } catch {}
+  }, []);
+
+  const salvarUltimoEmail = (e: string) => {
+    if (e && e.includes('@')) {
+      setUltimoEmail(e);
+      try { localStorage.setItem('cf-last-email', e); } catch {}
+    }
+  };
+
+  const preencherUltimoEmail = (campo: 'login' | 'busca') => {
+    if (ultimoEmail) {
+      if (campo === 'login') setEmail(ultimoEmail);
+      else setBuscarEmail(ultimoEmail);
+    }
+  };
+
   // Helper: save company to localStorage
   const saveEmpresaToDevice = (empresa: Empresa) => {
     try {
@@ -308,6 +332,7 @@ function LoginPage() {
       if (data.empresa) {
         saveEmpresaToDevice(data.empresa);
       }
+      salvarUltimoEmail(email);
       toast.success('Login realizado com sucesso!');
     } catch {
       toast.error('Erro ao conectar com o servidor');
@@ -420,6 +445,7 @@ function LoginPage() {
       if (data.empresa) {
         saveEmpresaToDevice(data.empresa);
       }
+      salvarUltimoEmail(buscarEmail);
       toast.success('Login realizado com sucesso!');
     } catch {
       toast.error('Erro ao conectar com o servidor');
@@ -663,6 +689,17 @@ function LoginPage() {
                     className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
                     onKeyDown={(e) => { if (e.key === 'Enter') handleBuscarEmpresa(); }}
                   />
+                  {ultimoEmail && !buscarEmail && (
+                    <button
+                      type="button"
+                      onClick={() => preencherUltimoEmail('busca')}
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-colors"
+                    >
+                      <User className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      <span className="text-sm text-amber-400 truncate">{ultimoEmail}</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-amber-500/50 ml-auto shrink-0" />
+                    </button>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -771,6 +808,17 @@ function LoginPage() {
                     placeholder="seu@email.com"
                     className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
                   />
+                  {ultimoEmail && !email && (
+                    <button
+                      type="button"
+                      onClick={() => preencherUltimoEmail('login')}
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-colors"
+                    >
+                      <User className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      <span className="text-sm text-amber-400 truncate">{ultimoEmail}</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-amber-500/50 ml-auto shrink-0" />
+                    </button>
+                  )}
                 </div>
 
                 <div className="space-y-2">
