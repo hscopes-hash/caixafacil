@@ -1,0 +1,278 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  /* Cores semânticas para tema claro/escuro */
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-success-bg: var(--success-bg);
+  --color-danger-bg: var(--danger-bg);
+  --color-warning-bg: var(--warning-bg);
+  --color-field-bg: var(--field-bg);
+  --color-field-border: var(--field-border);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+  /* Cores semânticas - tema CLARO (textos escuros) */
+  --success: oklch(0.527 0.154 142.5);
+  --danger: oklch(0.577 0.245 27.3);
+  --warning: oklch(0.675 0.17 62.5);
+  --success-bg: oklch(0.96 0.03 142);
+  --danger-bg: oklch(0.96 0.02 25);
+  --warning-bg: oklch(0.96 0.03 62);
+  --field-bg: oklch(0.92 0.005 260);
+  --field-border: oklch(0.87 0.005 260);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+  /* Cores semânticas - tema ESCURO (textos claros) */
+  --success: oklch(0.723 0.219 149.5);
+  --danger: oklch(0.7 0.191 22);
+  --warning: oklch(0.828 0.189 84);
+  --success-bg: oklch(0.3 0.08 150);
+  --danger-bg: oklch(0.3 0.08 25);
+  --warning-bg: oklch(0.3 0.08 60);
+  --field-bg: oklch(0.33 0.02 260);
+  --field-border: oklch(0.38 0.02 260);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Remove spinners de inputs numéricos */
+.no-spinners::-webkit-inner-spin-button,
+.no-spinners::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-spinners {
+  -moz-appearance: textfield;
+}
+
+/* ============================================
+   Safe Areas — iOS (notch/Dynamic Island/Home Indicator)
+   ============================================ */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.safe-area-left {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+.safe-area-right {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* ============================================
+   Tab Bar Flutuante — Glassmorphism leve
+   ============================================ */
+.floating-tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  /* Espaço para home indicator no iPhone */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.floating-tab-bar-inner {
+  max-width: 480px;
+  margin: 0 auto;
+  /* Margem lateral e inferior para efeito "flutuante" */
+  margin-bottom: 8px;
+  margin-left: 12px;
+  margin-right: 12px;
+  border-radius: 20px;
+  /* Glassmorphism leve — backdrop-blur funciona em Android 7+ */
+  background: oklch(0.205 0 0 / 85%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  /* Borda sutil */
+  border: 1px solid oklch(1 0 0 / 10%);
+  /* Sombra para destaque */
+  box-shadow: 0 -4px 30px oklch(0 0 0 / 30%);
+  /* Padding interno */
+  padding: 8px 4px;
+}
+
+/* Light theme: tab bar com fundo claro */
+:root:not(.dark) .floating-tab-bar-inner {
+  background: oklch(1 0 0 / 85%);
+  border: 1px solid oklch(0 0 0 / 8%);
+  box-shadow: 0 -4px 30px oklch(0 0 0 / 10%);
+}
+
+/* Espaço no fundo da página para a tab bar não cobrir conteúdo */
+.main-content-with-tab-bar {
+  padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px) + 16px);
+}
+
+/* Botão central da tab bar (câmera/OCR) */
+.tab-center-button {
+  position: relative;
+  margin-top: -20px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, oklch(0.75 0.18 85), oklch(0.7 0.2 55));
+  color: white;
+  box-shadow: 0 4px 15px oklch(0.75 0.18 85 / 50%);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.tab-center-button:active {
+  transform: scale(0.92);
+  box-shadow: 0 2px 8px oklch(0.75 0.18 85 / 30%);
+}
+
+/* Active pill indicator na tab bar */
+.tab-item-active {
+  background: oklch(0.75 0.18 85 / 15%);
+  border-radius: 12px;
+}
+
+:root:not(.dark) .tab-item-active {
+  background: oklch(0.75 0.18 85 / 12%);
+}
+
+/* ============================================
+   Tab Bar Dot Indicator — animação suave
+   ============================================ */
+.tab-dot-indicator {
+  position: relative;
+  height: 3px;
+  margin-bottom: 4px;
+  border-radius: 2px;
+  background: oklch(1 0 0 / 8%);
+  overflow: hidden;
+}
+
+.tab-dot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20%;
+  height: 100%;
+  background: oklch(0.75 0.18 85);
+  border-radius: 2px;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 6px oklch(0.75 0.18 85 / 60%);
+}
+
+:root:not(.dark) .tab-dot-indicator {
+  background: oklch(0 0 0 / 6%);
+}

@@ -1,0 +1,712 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("POSTGRES_PRISMA_URL")
+  directUrl  = env("POSTGRES_URL_NON_POOLING")
+}
+
+// ============================================
+// EMPRESA (Tenant) - Multi-tenant SaaS
+// ============================================
+model Empresa {
+  id              String   @id @default(cuid())
+  nome            String
+  cnpj            String?  @unique
+  email           String?
+  telefone        String?
+  endereco        String?
+  cidade          String?
+  estado          String?
+  logo            String?
+  ativa           Boolean  @default(true)
+  plano           Plano    @default(BASICO)
+  dataVencimento  DateTime?
+  isDemo          Boolean  @default(false)
+  diasDemo        Int      @default(7)
+  bloqueada       Boolean  @default(false)
+  motivoBloqueio  String?
+  // Configurações de IA Vision por empresa
+  llmApiKey       String?   // Token de IA personalizado (substitui LLM_API_KEY do env)
+  llmModel        String?   // Modelo de IA personalizado (substitui LLM_MODEL do env)
+  // API Keys salvas por provedor (para preenchimento automático ao trocar modelo)
+  llmApiKeyGemini       String?   // API Key do Google Gemini
+  llmApiKeyGlm          String?   // API Key do Zhipu AI (GLM)
+  llmApiKeyOpenrouter   String?   // API Key do OpenRouter
+  // Configurações MercadoPago
+  mercadopagoAccessToken String?   // Access Token do MercadoPago (backend)
+  mercadopagoPublicKey   String?   // Public Key do MercadoPago (frontend)
+  // Configurações PIX Banco (QR Code estático EMV COB — sem intermediário)
+  pixChaveTipo    String?   // "CPF" | "CNPJ" | "TELEFONE" | "EMAIL" | "ALEATORIA"
+  pixChave        String?   // Chave PIX (valor)
+  pixMerchantNome  String?   // Nome do recebedor para QR Code (max 25 chars, ASCII)
+  pixMerchantCidade String?  // Cidade do recebedor para QR Code (max 15 chars, ASCII)
+  pixBancoNome    String?   // Nome do banco (ex: "Nubank", "Itaú") — exibição apenas
+  // Configurações de Impressora Térmica via Bluetooth
+  impressoraTipo         String?   // "58mm" | "80mm" | "generic"
+  impressoraPreset       String?   // "goojprt-58mm" | "goojprt-80mm" | "mtp-ii" | "generic-bt" | "none"
+  impressoraConexao      String?   // "bluetooth" | "none"
+  impressoraServicoUUID  String?   // UUID do serviço BLE personalizado
+  impressoraCharUUID     String?   // UUID da característica de escrita BLE personalizada
+  impressoraChunkSize    Int?      // Tamanho do chunk BLE (padrão 100)
+  // Acessibilidade — Escala de UI (fontes, ícones, espaçamentos)
+  uiScale         Float?    // Escala proporcional da interface (0.8 a 1.5, padrão 1.0)
+  // Permissões especiais
+  permiteEditarLeituraAnterior Boolean @default(false) // Autoriza edição de leitura anterior na cobrança
+  // Integração Cielo (API E-commerce 3.0)
+  cieloMerchantId       String?   // Merchant ID Cielo
+  cieloMerchantKey      String?   // Merchant Key Cielo (criptografado no app)
+  cieloAmbiente         String?   // "sandbox" | "production" (padrão sandbox)
+  cieloClientId         String?   // OAuth Client ID (produção)
+  cieloClientSecret     String?   // OAuth Client Secret (produção, criptografado)
+  cieloMcc              String?   // MCC - Category Code
+  cieloEstabelecimento  String?   // Nome do estabelecimento para fatura
+  // Configurações Telegram Bot
+  telegramBotToken String?   // Token do bot Telegram para envio de fotos/extrato
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  usuarios        Usuario[]
+  clientes        Cliente[]
+  tiposMaquina    TipoMaquina[]
+  assinaturasSaaS AssinaturaSaaS[]
+  pagamentosSaaS  PagamentoSaaS[]
+  contas          Conta[]
+  gruas           Grua[]
+  vendasGrua      VendaGrua[]
+  telemetriaGrua  TelemetriaGrua[]
+
+  @@map("empresas")
+}
+
+// ============================================
+// USUÁRIO - Usuários do sistema
+// ============================================
+model Usuario {
+  id           String      @id @default(cuid())
+  nome         String
+  email        String
+  senha        String
+  telefone     String?
+  foto         String?
+  ativo        Boolean     @default(true)
+  nivelAcesso  NivelAcesso @default(OPERADOR)
+  empresaId    String
+  ultimoAcesso DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  empresa      Empresa     @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  logs         LogAcesso[]
+  leituras     Leitura[]
+
+  @@unique([email, empresaId])
+  @@map("usuarios")
+}
+
+// ============================================
+// CLIENTE - Clientes que possuem máquinas
+// ============================================
+model Cliente {
+  id              String          @id @default(cuid())
+  nome            String
+  cpfCnpj         String?
+  email           String?
+  telefone        String?
+  telefone2       String?
+  endereco        String?
+  cidade          String?
+  estado          String?
+  cep             String?
+  observacoes     String?
+  whatsapp        String?         // Link do grupo WhatsApp para envio de foto de leitura
+  telegramGroupId String?         // ID do grupo Telegram para envio silencioso de foto/extrato (ex: -1001234567890)
+  acertoPercentual Int             @default(50)  // Percentual do acerto do cliente (padrão 50%)
+  formaCobranca   String?                       // "COBRANCA" ou "LEITURA" — define o modo padrão na tela de cobranças
+  ativo           Boolean         @default(true)
+  bloqueado       Boolean         @default(false)
+  motivoBloqueio  String?
+  empresaId       String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  empresa         Empresa         @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  maquinas        Maquina[]
+  assinaturas     Assinatura[]
+  pagamentos      Pagamento[]
+  leituras        Leitura[]
+  contas          Conta[]
+  gruas           Grua[]
+
+  @@map("clientes")
+}
+
+// ============================================
+// TIPO DE MÁQUINA - Cadastro de tipos de máquina
+// ============================================
+model TipoMaquina {
+  id               String   @id @default(cuid())
+  descricao        String
+  nomeEntrada      String   @default("E")
+  nomeSaida        String   @default("S")
+  ativo            Boolean  @default(true)
+  classe           Int      @default(0) // 0=primária, 1=secundária
+  empresaId        String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  empresa          Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  maquinas         Maquina[]
+
+  @@unique([descricao, empresaId])
+  @@map("tipos_maquina")
+}
+
+// ============================================
+// MÁQUINA - Máquinas dos clientes
+// ============================================
+model Maquina {
+  id              String        @id @default(cuid())
+  codigo          String
+  tipoId          String
+  descricao       String?
+  marca           String?
+  modelo          String?
+  numeroSerie     String?
+  dataAquisicao   DateTime?
+  valorAquisicao  Float?
+  valorMensal     Float?
+  localizacao     String?
+  status          StatusMaquina @default(ATIVA)
+  observacoes     String?
+  // Campos de controle de moedas
+  moeda           TipoMoeda     @default(M001)
+  entradaAtual    Float         @default(0)
+  saidaAtual      Float         @default(0)
+  clienteId       String
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  cliente         Cliente       @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  tipo            TipoMaquina   @relation(fields: [tipoId], references: [id], onDelete: Restrict)
+  faturamentos    Faturamento[]
+  leituras        Leitura[]
+
+  @@unique([codigo, clienteId])
+  @@map("maquinas")
+}
+
+// ============================================
+// ASSINATURA - Planos de cobrança
+// ============================================
+model Assinatura {
+  id              String            @id @default(cuid())
+  plano           String
+  descricao       String?
+  valorMensal     Float
+  diaVencimento   Int              @default(10)
+  dataInicio      DateTime
+  dataFim         DateTime?
+  status          StatusAssinatura @default(ATIVA)
+  clienteId       String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  cliente         Cliente           @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  pagamentos      Pagamento[]
+
+  @@map("assinaturas")
+}
+
+// ============================================
+// PAGAMENTO - Histórico de pagamentos
+// ============================================
+model Pagamento {
+  id              String          @id @default(cuid())
+  valor           Float
+  dataVencimento  DateTime
+  dataPagamento   DateTime?
+  status          StatusPagamento @default(PENDENTE)
+  formaPagamento  FormaPagamento?
+  observacoes     String?
+  clienteId       String
+  assinaturaId    String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  cliente         Cliente         @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  assinatura      Assinatura?     @relation(fields: [assinaturaId], references: [id], onDelete: SetNull)
+
+  @@map("pagamentos")
+}
+
+// ============================================
+// FATURAMENTO - Registro de faturamento das máquinas
+// ============================================
+model Faturamento {
+  id            String    @id @default(cuid())
+  maquinaId     String
+  dataReferencia DateTime
+  valorTotal    Float
+  quantidade    Int?
+  observacoes   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  maquina       Maquina   @relation(fields: [maquinaId], references: [id], onDelete: Cascade)
+
+  @@map("faturamentos")
+}
+
+// ============================================
+// LEITURA - Histórico de leituras das máquinas
+// ============================================
+model Leitura {
+  id                String    @id @default(cuid())
+  maquinaId         String
+  clienteId         String
+  usuarioId         String
+  dataLeitura       DateTime  @default(now())
+  entradaAnterior   Float     @default(0)
+  entradaNova       Float     @default(0)
+  saidaAnterior     Float     @default(0)
+  saidaNova         Float     @default(0)
+  diferencaEntrada  Float     @default(0)
+  diferencaSaida    Float     @default(0)
+  saldo             Float     @default(0)
+  moeda             TipoMoeda @default(M010)
+  observacoes       String?
+  despesa           String?   // Descrição da despesa extra
+  valorDespesa      Float?    // Valor da despesa extra
+  caixa             String?   // JSON dos itens de caixa
+  valorCaixa        Float?    // Diferença de caixa (caixa inicial - demais)
+  fotoGcsPath       String?   // Caminho GCS do pacote criptografado de fotos (compartilhado por batch)
+  createdAt         DateTime  @default(now())
+
+  maquina           Maquina   @relation(fields: [maquinaId], references: [id], onDelete: Cascade)
+  cliente           Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  usuario           Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([clienteId, dataLeitura])
+  @@index([maquinaId, dataLeitura])
+  @@map("leituras")
+}
+
+// ============================================
+// LOG DE ACESSO - Auditoria do sistema
+// ============================================
+model LogAcesso {
+  id          String      @id @default(cuid())
+  acao        String
+  descricao   String?
+  ip          String?
+  usuarioId   String
+  createdAt   DateTime    @default(now())
+
+  usuario     Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("logs_acesso")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum NivelAcesso {
+  ADMINISTRADOR
+  SUPERVISOR
+  OPERADOR
+}
+
+enum Plano {
+  BASICO
+  PROFISSIONAL
+  PREMIUM
+  ENTERPRISE
+}
+
+enum StatusMaquina {
+  ATIVA
+  INATIVA
+  MANUTENCAO
+  VENDIDA
+}
+
+enum StatusAssinatura {
+  ATIVA
+  SUSPENSA
+  CANCELADA
+  VENCIDA
+}
+
+enum StatusPagamento {
+  PENDENTE
+  PAGO
+  ATRASADO
+  CANCELADO
+}
+
+enum FormaPagamento {
+  PIX
+  BOLETO
+  CARTAO_CREDITO
+  CARTAO_DEBITO
+  DINHEIRO
+  TRANSFERENCIA
+}
+
+enum TipoMoeda {
+  M001  // R$ 0,01
+  M005  // R$ 0,05
+  M010  // R$ 0,10
+  M025  // R$ 0,25
+}
+
+// ============================================
+// WEBHOOK LOG - Registro de todos os requests do webhook
+// ============================================
+model WebhookLog {
+  id          String   @id @default(cuid())
+  metodo      String              // GET, POST
+  url         String              // URL completa
+  headers     String              // JSON com todos os headers
+  body        String?             // Body do request (JSON)
+  query       String?             // Query params
+  statusCode  Int?                // Status code da resposta
+  origem      String   @default("mercadopago")
+  createdAt   DateTime @default(now())
+
+  @@map("webhook_logs")
+}
+
+// ============================================
+// CONTA - Contas a Pagar e Receber (Fluxo de Caixa)
+// ============================================
+model Conta {
+  id             String    @id @default(cuid())
+  descricao      String
+  valor          Float
+  data           DateTime  @default(now())
+  paga           Boolean   @default(false)
+  dataPagamento  DateTime?
+  observacoes    String?
+  tipo           Int       @default(1) // 0 = A Pagar, 1 = A Receber
+  empresaId      String
+  clienteId      String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  empresa        Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  cliente        Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@map("debitos")
+}
+
+// ============================================
+// PLANO SAAS - Planos de assinatura do SaaS
+// ============================================
+model PlanoSaaS {
+  id            String   @id @default(cuid())
+  nome          String   @unique
+  descricao     String?
+  valorMensal   Float
+  valorAnual    Float?   // opcional com desconto anual
+  moeda         String   @default("BRL")
+  // Limites do plano
+  limiteClientes  Int
+  limiteUsuarios  Int
+  limiteMaquinas  Int     // -1 = ilimitado
+  // Recursos habilitados
+  recIA          Boolean @default(false)  // IA Vision (OCR de leitura)
+  recChatIA      Boolean @default(false)  // Chat IA (assistente virtual)
+  recRelatorios  Boolean @default(false)  // Relatórios avançados
+  recBackup      Boolean @default(false)  // Backup automático
+  recAPI         Boolean @default(false)  // API dedicada
+  recSuporte     String  @default("email") // email | prioritario | 24h
+  // Ordem de exibição (menor primeiro)
+  ordem         Int      @default(0)
+  ativo         Boolean  @default(true)
+  popular       Boolean  @default(false)  // destaque "mais popular"
+  // Dados do MercadoPago
+  mercadoPagoPreferenceId String?  // ID da preferência recorrente
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  assinaturas    AssinaturaSaaS[]
+
+  @@map("planos_saas")
+}
+
+// ============================================
+// ASSINATURA SAAS - Assinatura da empresa no SaaS
+// ============================================
+model AssinaturaSaaS {
+  id                String              @id @default(cuid())
+  empresaId         String
+  planoSaaSId       String
+  status            StatusAssinaturaSaaS @default(ATIVA)
+  dataInicio        DateTime            @default(now())
+  dataFim           DateTime?
+  dataCancelamento  DateTime?
+  // Integração MercadoPago
+  mercadoPagoPreferenciaId  String?
+  mercadoPagoPagamentoId    String?
+  mercadoPagoStatus         String?
+  // Renovação
+  valorPago         Float?
+  formaPagamento    FormaPagamentoSaaS?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  empresa           Empresa             @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  planoSaaS         PlanoSaaS           @relation(fields: [planoSaaSId], references: [id])
+  pagamentos        PagamentoSaaS[]
+
+  @@map("assinaturas_saas")
+}
+
+// ============================================
+// PAGAMENTO SAAS - Registro de pagamentos do SaaS
+// ============================================
+model PagamentoSaaS {
+  id                  String              @id @default(cuid())
+  assinaturaSaaSId    String
+  empresaId           String
+  valor               Float
+  status              StatusPagamentoSaaS @default(PENDENTE)
+  formaPagamento      FormaPagamentoSaaS?
+  dataVencimento      DateTime
+  dataPagamento       DateTime?
+  // Dados MercadoPago
+  mercadoPagoPaymentId    String?
+  mercadoPagoStatus       String?
+  mercadoPagoApprovedAt   DateTime?
+  mercadoPagoFee          Float?
+  // Metadados
+  descricao           String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  assinaturaSaaS      AssinaturaSaaS      @relation(fields: [assinaturaSaaSId], references: [id], onDelete: Cascade)
+  empresa             Empresa             @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@map("pagamentos_saas")
+  @@unique([mercadoPagoPaymentId])
+}
+
+// ============================================
+// ENUMS SAAS
+// ============================================
+
+enum StatusAssinaturaSaaS {
+  ATIVA
+  TRIAL
+  VENCIDA
+  CANCELADA
+  SUSPENSA
+}
+
+enum StatusPagamentoSaaS {
+  PENDENTE
+  PAGO
+  ATRASADO
+  CANCELADO
+  ESTORNADO
+}
+
+enum FormaPagamentoSaaS {
+  PIX
+  BOLETO
+  CARTAO_CREDITO
+  CARTAO_DEBITO
+  TRANSFERENCIA
+}
+
+// ============================================
+// CHAT HISTORICO - Historico de conversas do Chat IA
+// ============================================
+model ChatHistorico {
+  id              String    @id @default(cuid())
+  empresaId       String
+  sessaoId        String    // Identificador da sessao (gerado no frontend)
+  role            String    // "user" | "assistant"
+  content         String    @db.Text
+  acaoExecutada   String?   // null | "listar_contas" | "criar_conta" | "liquidar_conta" | "excluir_conta"
+  resultadoAcao   String?   @db.Text // JSON string com resultado da acao
+  criadoEm        DateTime  @default(now())
+  deletadoEm      DateTime? // Soft delete para auto-limpeza
+
+  @@index([empresaId, criadoEm])
+  @@index([empresaId, sessaoId])
+  @@index([deletadoEm])
+  @@map("chat_historico")
+}
+
+// ============================================
+// CONFIG SAAS - Configuracoes globais do SaaS (assinaturas)
+// MP e PIX para pagamentos de assinaturas de plano
+// Separado das credenciais por empresa (usadas no cobrador POS)
+// ============================================
+model ConfigSaaS {
+  id              String   @id @default(cuid())
+  // MercadoPago — credenciais para assinaturas SaaS (substitui ENV vars)
+  mpAccessToken   String?
+  mpPublicKey     String?
+  // PIX Banco alternativo para assinaturas SaaS (QR estatico EMV COB)
+  pixChaveTipo    String?   // "CPF" | "CNPJ" | "TELEFONE" | "EMAIL" | "ALEATORIA"
+  pixChave        String?   // Chave PIX (valor)
+  pixMerchantNome  String?  // Nome do recebedor (max 25 chars ASCII)
+  pixMerchantCidade String? // Cidade do recebedor (max 15 chars ASCII)
+  pixBancoNome    String?   // Nome do banco (exibicao)
+  // IA — token unico para todo o SaaS (Gemini)
+  geminiApiKey    String?   // API Key do Google Gemini (usada por todas as empresas)
+  llmModel        String?   // Modelo de IA padrao (ex: gemini-2.5-flash-lite)
+  // Permissoes por nivel de acesso — JSON: { "ADMINISTRADOR": [...], "SUPERVISOR": [...], "OPERADOR": [...] }
+  permissoes      String?   @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("config_saas")
+}
+
+// ============================================
+// CHAT INSTRUCOES - Instrucoes permanentes do Chat IA
+// Nunca sao removidas pela auto-limpeza
+// Sempre incluidas no contexto do LLM
+// ============================================
+model ChatInstrucao {
+  id          String   @id @default(cuid())
+  empresaId   String
+  instrucao   String   @db.Text  // Texto da instrucao
+  criadoEm    DateTime @default(now())
+
+  @@index([empresaId])
+  @@map("chat_instrucoes")
+}
+
+// ============================================
+// GRUA — Maquinas de grua (claw machines) com POS
+// ============================================
+model Grua {
+  id              String          @id @default(cuid())
+  nome            String          // Nome da maquina (ex: "GRUA-01 Shopping")
+  empresaId       String
+  clienteId       String?         // Cliente proprietario (integracao com fluxo financeiro)
+  ativa           Boolean         @default(true)
+  // Hardware / Rede
+  dispositivoId   String?         @unique  // ID unico do Android POS (DataStore)
+  relayIp         String?         // IP do Sonoff Tasmota na LAN (ex: "192.168.1.100")
+  relayPort       Int             @default(80)
+  mpAccessToken   String?         // MercadoPago Access Token (por grua)
+  mpPublicKey     String?         // MercadoPago Public Key
+  // Localizacao
+  endereco        String?
+  latitude        Float?
+  longitude       Float?
+  // Contadores de pulsos (atualizados pela telemetria e vendas PIX)
+  // Cada pulso = valorPulso de credito. Contadores mecanicos da maquina
+  // contabilizam tanto cedulas quanto pulsos Sonoff (PIX).
+  contadorParcial Int             @default(0)   // Pulsos PIX desde ultimo reset (acerto)
+  contadorTotal   Int             @default(0)   // Pulsos PIX acumulados (total geral)
+  ultimoResetAt   DateTime?       // Data do ultimo zeramento
+  // Valor por pulso (configuravel, padrao R$ 2,00)
+  valorPulso      Float           @default(2.00)
+
+  // ========== AUDITORIA E CONCILIACAO (Odometro + Auditor) ==========
+  // T (Total Hardware): Counter1 do Tasmota = pulsos PIX + pulsos Cedulas
+  // P (Pulsos PIX): pulsos enviados pelo proprio sistema (contadorTotal no app)
+  // C (Cedulas): calculado = (T_atual - T_zero) - (P_atual - P_zero)
+  //
+  // Os marcos zero sao capturados no momento do "Zerar Acerto".
+  // O hardware (Counter1) NUNCA e resetado — quem gerencia o periodo e o App.
+  contadorHardwareAtual  Int       @default(0)   // T: leitura atual do Counter1 do Tasmota
+  contadorPixAcumulado   Int       @default(0)   // P: total de pulsos PIX enviados pelo app
+  marcoZeroHardware      Int       @default(0)   // T no momento do ultimo zeramento
+  marcoZeroPix           Int       @default(0)   // P no momento do ultimo zeramento
+
+  // Status (calculado pela telemetria: ONLINE se bateu nos ultimos 10 min)
+  ultimaTelemetria DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  empresa         Empresa         @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  cliente         Cliente?        @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  vendas          VendaGrua[]
+  telemetrias     TelemetriaGrua[]
+
+  @@unique([nome, empresaId])
+  @@map("gruas")
+}
+
+// ============================================
+// VENDA GRUA - Registro de vendas PIX (valores multiplos de R$ 2,00)
+// Cada venda gera N pulsos no Sonoff (pulsos = valor / valorPulso)
+// Os contadores mecanicos da maquina contabilizam todos os pulsos
+// (cedulas + Sonoff). Para cobranca, vale a leitura dos relogios.
+// ============================================
+model VendaGrua {
+  id              String          @id @default(cuid())
+  gruaId          String
+  empresaId       String
+  // Pagamento PIX
+  mpPaymentId     String?         @unique  // MercadoPago payment ID
+  mpStatus        String?         // approved | pending | rejected
+  valor           Float           @default(2.00)  // Valor do PIX (multiplo de 2)
+  pulsos          Int             @default(1)    // Quantidade de pulsos Sonoff (valor / valorPulso)
+  formaPagamento  String          @default("PIX")
+  // Confirmacao do rele
+  relayOk         Boolean         @default(false)
+  // Info do dispositivo
+  dispositivoId   String?
+  gpsLatitude     Float?
+  gpsLongitude    Float?
+  createdAt       DateTime        @default(now())
+
+  grua            Grua            @relation(fields: [gruaId], references: [id], onDelete: Cascade)
+  empresa         Empresa         @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@index([gruaId, createdAt])
+  @@index([empresaId, createdAt])
+  @@map("vendas_grua")
+}
+
+// ============================================
+// TELEMETRIA GRUA - Sinais de vida do POS + Auditoria
+// ============================================
+model TelemetriaGrua {
+  id              String          @id @default(cuid())
+  gruaId          String
+  empresaId       String
+  // Estado do dispositivo
+  bateria         Int?
+  sinal4g         Int?
+  sinalWifi       Int?
+  temperatura     Float?
+  memoriaLivre    Int?
+  versaoApp       String?
+  // Estado do rele
+  relayOnline     Boolean?
+  // Localizacao
+  gpsLatitude     Float?
+  gpsLongitude    Float?
+  // ========== DADOS DE AUDITORIA (enviados pelo POS) ==========
+  contadorHardwareAtual  Int?     // T: Counter1 do Tasmota (pulsos totais = PIX + Cedulas)
+  contadorPixAcumulado   Int?     // P: pulsos PIX acumulados (ACUMULADO_PIX_TOTAL do app)
+  faturamentoDigital      Float?   // (P_atual - P_zero) * valorPulso — receita PIX do periodo
+  faturamentoFisico       Float?   // ((T_atual - T_zero) - (P_atual - P_zero)) * valorPulso — receita Cedulas
+  statusCofre             String?  // "CONCILIADO" | "DIVERGENTE" | "ALERTA_FRAUDE"
+  createdAt       DateTime        @default(now())
+
+  grua            Grua            @relation(fields: [gruaId], references: [id], onDelete: Cascade)
+  empresa         Empresa         @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@index([gruaId, createdAt])
+  @@index([createdAt])
+  @@map("telemetria_grua")
+}

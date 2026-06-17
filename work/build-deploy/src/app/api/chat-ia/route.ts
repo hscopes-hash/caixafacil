@@ -1,0 +1,1002 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/db';
+import { loadAIConfig, getVertexAccessToken, getVertexModel, VERTEX_PROJECT, VERTEX_LOCATIONS, tryVertexAIRegion } from '@/lib/ai-vision';
+import { gatherCompanyContext, detectIntent } from '@/lib/gather-context';
+import { enforcePlan } from '@/lib/plan-enforcement';
+
+interface LLMAction {
+  acao: string;
+  dados?: Record<string, unknown>;
+  friendlyText?: string;
+}
+
+const DESTRUCTIVE_ACTIONS = new Set(['criar_conta', 'liquidar_conta', 'excluir_conta', 'editar_conta']);
+
+// Salvar mensagem no historico (fire-and-forget, nao bloqueia a resposta)
+function saveToHistory(empresaId: string, sessaoId: string, role: string, content: string, acaoExecutada?: string | null, resultadoAcao?: string | null): void {
+  db.chatHistorico.create({
+    data: {
+      empresaId,
+      sessaoId,
+      role,
+      content: content.substring(0, 5000), // Limitar a 5000 chars
+      acaoExecutada: acaoExecutada || null,
+      resultadoAcao: resultadoAcao || null,
+    },
+  }).catch(err => {
+    console.warn('Erro ao salvar historico do chat:', err);
+  });
+}
+
+function parseActionFromResponse(text: string): { action: LLMAction | null; friendlyText: string } {
+  let action: LLMAction | null = null;
+
+  // 1) Tentar extrair JSON de bloco ```json ... ```
+  const jsonMatch = text.match(/```json\s*([\s\S]*?)```/);
+  // 2) Tentar extrair JSON bruto com "acao" (greedy para pegar objetos aninhados)
+  const rawJsonMatch = !jsonMatch ? text.match(/\{[^{}]*"acao"[^{}]*\}/) : null;
+  // 3) Fallback: JSON multi-linha com "acao"
+  const multiJsonMatch = (!jsonMatch && !rawJsonMatch) ? text.match(/\{[\s\S]*?"acao"[\s\S]*\}/) : null;
+
+  const jsonBlock = jsonMatch ? jsonMatch[1].trim() : rawJsonMatch ? rawJsonMatch[0] : multiJsonMatch ? multiJsonMatch[0] : null;
+
+  if (jsonBlock) {
+    try {
+      action = JSON.parse(jsonBlock);
+    } catch {
+      try {
+        const cleaned = jsonBlock.replace(/[,]\s*([}\]])/g, '$1');
+        action = JSON.parse(cleaned);
+      } catch {}
+    }
+  }
+
+  // Remover qualquer JSON da resposta para obter o texto amigavel
+  // Primeiro remover blocos ```json```
+  let friendlyText = text.replace(/```json[\s\S]*?```/g, '');
+  // Depois remover JSON com "acao" (greedy: do primeiro { ate o ultimo })
+  friendlyText = friendlyText.replace(/\{[\s\S]*?"acao"[\s\S]*\}/g, '');
+  // Remover qualquer bloco de codigo residual
+  friendlyText = friendlyText.replace(/```[\s\S]*?```/g, '');
+  friendlyText = friendlyText.trim();
+
+  // Se ainda comecar com { e terminar com }, e JSON puro - limpar
+  if (friendlyText.startsWith('{') && friendlyText.endsWith('}')) {
+    friendlyText = '';
+  }
+
+  // Limpar linhas vazias extras
+  friendlyText = friendlyText.replace(/\n{3,}/g, '\n\n').trim();
+
+  return { action, friendlyText };
+}
+
+// ==================== Resolver clienteId (nome -> UUID) ====================
+// O LLM frequentemente passa o NOME do cliente em vez do UUID real.
+// Esta funcao detecta se o valor e um UUID ou um nome e faz a conversao.
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function resolveClienteId(empresaId: string, rawId: string): Promise<{ id: string; error?: string }> {
+  // Se ja e UUID valido, usar direto
+  if (UUID_REGEX.test(rawId)) return { id: rawId };
+
+  // Se parece com inicio de UUID (ex: "cmofawri..." copiado pelo LLM), limpar e buscar por prefixo
+  const cleanedRaw = rawId.replace(/\.{2,}/g, '').trim().toLowerCase();
+
+  try {
+    // 1) Buscar por nome (case-insensitive, partial match)
+    const byName = await db.cliente.findFirst({
+      where: { empresaId, nome: { contains: cleanedRaw, mode: 'insensitive' } },
+      select: { id: true, nome: true },
+    });
+    if (byName) return { id: byName.id };
+
+    // 2) Se nao achou por nome, tentar buscar por prefixo do UUID (ex: "cmofawri")
+    if (cleanedRaw.length >= 6) {
+      const byPrefix = await db.cliente.findFirst({
+        where: { empresaId, id: { startsWith: cleanedRaw } },
+        select: { id: true, nome: true },
+      });
+      if (byPrefix) return { id: byPrefix.id };
+    }
+
+    return { id: '', error: `Cliente "${rawId}" nao encontrado no cadastro.` };
+  } catch {
+    return { id: '', error: 'Erro ao buscar cliente.' };
+  }
+}
+
+// ==================== Resolver contaId (descricao + valor + cliente) ====================
+// O LLM frequentemente nao tem o UUID da conta. Esta funcao encontra a conta
+// pelo cliente + valor + data, combinacoes flexiveis.
+async function resolveContaId(empresaId: string, dados: Record<string, unknown>): Promise<{ id: string; conta?: any; error?: string }> {
+  // Se ja e UUID valido, usar direto (mas verificar se existe)
+  const rawId = String(dados.id || '');
+  if (UUID_REGEX.test(rawId)) {
+    try {
+      const conta = await db.conta.findFirst({
+        where: { id: rawId, empresaId },
+        include: { cliente: { select: { id: true, nome: true } } },
+      });
+      if (conta) return { id: conta.id, conta };
+      return { id: '', error: 'Conta nao encontrada (pode ter sido excluida).' };
+    } catch {
+      return { id: '', error: 'Erro ao buscar conta.' };
+    }
+  }
+
+  // Buscar por combinacao de: cliente, valor, data, tipo
+  try {
+    const where: Record<string, unknown> = { empresaId };
+
+    // Resolver clienteId se fornecido
+    if (dados.clienteId) {
+      const resolved = await resolveClienteId(empresaId, String(dados.clienteId));
+      if (resolved.error) return { id: '', error: resolved.error };
+      where.clienteId = resolved.id;
+    }
+
+    // Filtrar por valor se fornecido (mas nao se for novoValor - nesse caso valor e o antigo para busca)
+    if (dados.valor !== undefined && dados.novoValor === undefined) {
+      const valorNum = parseFloat(String(dados.valor));
+      // Usar faixa de tolerancia para evitar problemas de precisao de ponto flutuante
+      where.valor = { gte: valorNum - 0.01, lte: valorNum + 0.01 };
+    }
+
+    // Filtrar por data se fornecida (comparar apenas a parte da data, ignorando horas)
+    if (dados.data) {
+      const dataStr = String(dados.data);
+      const dataObj = new Date(dataStr);
+      if (!isNaN(dataObj.getTime())) {
+        const dia = dataObj.getDate();
+        const mes = dataObj.getMonth();
+        const ano = dataObj.getFullYear();
+        // Gerar range do dia inteiro no fuso do servidor
+        const inicioDia = new Date(ano, mes, dia, 0, 0, 0);
+        const fimDia = new Date(ano, mes, dia, 23, 59, 59, 999);
+        where.data = { gte: inicioDia, lte: fimDia };
+      }
+    }
+
+    // Filtrar por tipo se fornecido (padrao: receber)
+    if (dados.tipo !== undefined) {
+      where.tipo = parseInt(String(dados.tipo), 10);
+    }
+
+    // Filtrar apenas contas pendentes (se for liquidar)
+    if (dados.paga !== undefined) {
+      where.paga = dados.paga as boolean;
+    }
+
+    const conta = await db.conta.findFirst({
+      where,
+      include: { cliente: { select: { id: true, nome: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (conta) return { id: conta.id, conta };
+
+    // Fallback: tentar busca mais ampla (apenas por clienteId + valor, sem data)
+    // Isso cobre casos onde o LLM nao envia a data ou envia errada
+    if (where.clienteId && (dados.valor !== undefined && dados.novoValor === undefined)) {
+      const whereAmplo: Record<string, unknown> = { empresaId, clienteId: where.clienteId, valor: where.valor };
+      // Buscar contas pendentes por padrao na liquidacao
+      if (!dados.paga) whereAmplo.paga = false;
+      const contaAmplo = await db.conta.findFirst({
+        where: whereAmplo,
+        include: { cliente: { select: { id: true, nome: true } } },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (contaAmplo) return { id: contaAmplo.id, conta: contaAmplo };
+    }
+
+    // Montar detalhes do que foi buscado para mensagem de erro mais clara
+    const detalhes: string[] = [];
+    if (dados.clienteId) detalhes.push(`cliente: ${String(dados.clienteId)}`);
+    if (dados.valor !== undefined) detalhes.push(`valor: R$ ${parseFloat(String(dados.valor)).toFixed(2)}`);
+    if (dados.data) detalhes.push(`data: ${String(dados.data)}`);
+    if (dados.tipo !== undefined) detalhes.push(`tipo: ${parseInt(String(dados.tipo), 10) === 0 ? 'pagar' : 'receber'}`);
+    if (dados.paga !== undefined) detalhes.push(`status: ${dados.paga ? 'paga' : 'pendente'}`);
+
+    return { id: '', error: `Nenhuma conta encontrada com os criterios informados (${detalhes.join(', ')}). Verifique o nome do cliente, valor e data.` };
+  } catch {
+    return { id: '', error: 'Erro ao buscar conta.' };
+  }
+}
+
+// ==================== Executar acao no banco ====================
+async function runAction(
+  action: LLMAction,
+  empresaId: string,
+): Promise<{ finalText: string; resultadoAcao: unknown }> {
+  let finalText = '';
+  let resultadoAcao: unknown = null;
+
+  switch (action.acao) {
+    case 'listar_contas': {
+      const whereClause: Record<string, unknown> = { empresaId };
+      if (action.dados?.clienteId) {
+        const resolved = await resolveClienteId(empresaId, String(action.dados.clienteId));
+        if (resolved.error) { finalText = resolved.error; break; }
+        whereClause.clienteId = resolved.id;
+      }
+      if (action.dados?.tipo !== undefined) whereClause.tipo = parseInt(String(action.dados.tipo), 10);
+      if (action.dados?.paga !== undefined) whereClause.paga = action.dados.paga as boolean;
+      if (!action.dados?.clienteId) whereClause.cliente = { empresaId: empresaId };
+
+      resultadoAcao = await db.conta.findMany({
+        where: whereClause,
+        include: { cliente: { select: { id: true, nome: true } } },
+        orderBy: { data: 'desc' },
+      });
+      break;
+    }
+    case 'criar_conta': {
+      const dados = action.dados!;
+      if (!dados.descricao || !dados.valor || !dados.data || !dados.clienteId) {
+        finalText = 'Campos obrigatorios faltando para criar conta (descricao, valor, data, clienteId).';
+      } else {
+        // Resolver clienteId (nome -> UUID)
+        const resolved = await resolveClienteId(empresaId, String(dados.clienteId));
+        if (resolved.error) { finalText = resolved.error; break; }
+        resultadoAcao = await db.conta.create({
+          data: {
+            descricao: dados.descricao as string,
+            valor: parseFloat(String(dados.valor)),
+            data: new Date(dados.data as string),
+            tipo: dados.tipo !== undefined ? parseInt(String(dados.tipo), 10) : 1,
+            clienteId: resolved.id,
+            empresaId,
+          },
+          include: { cliente: { select: { id: true, nome: true } } },
+        });
+      }
+      break;
+    }
+    case 'liquidar_conta': {
+      if (!action.dados?.id && !action.dados?.clienteId) {
+        finalText = 'Informacoes insuficientes para liquidar. Informe pelo menos o cliente e o valor.';
+      } else {
+        const resolved = await resolveContaId(empresaId, action.dados!);
+        if (resolved.error) { finalText = resolved.error; break; }
+        resultadoAcao = await db.conta.update({
+          where: { id: resolved.id },
+          data: {
+            paga: true,
+            dataPagamento: action.dados.dataPagamento
+              ? new Date(action.dados.dataPagamento as string)
+              : new Date(),
+          },
+          include: { cliente: { select: { id: true, nome: true } } },
+        });
+      }
+      break;
+    }
+    case 'excluir_conta': {
+      if (!action.dados?.id && !action.dados?.clienteId) {
+        finalText = 'Informacoes insuficientes para excluir. Informe pelo menos o cliente e o valor.';
+      } else {
+        const resolved = await resolveContaId(empresaId, action.dados!);
+        if (resolved.error) { finalText = resolved.error; break; }
+        resultadoAcao = await db.conta.delete({
+          where: { id: resolved.id },
+        });
+      }
+      break;
+    }
+    case 'editar_conta': {
+      if (!action.dados?.id && !action.dados?.clienteId) {
+        finalText = 'Informacoes insuficientes para editar. Informe pelo menos o cliente e o valor.';
+      } else {
+        const resolved = await resolveContaId(empresaId, action.dados!);
+        if (resolved.error) { finalText = resolved.error; break; }
+
+        // Bloquear edicao de contas ja quitadas/pagas
+        if (resolved.conta?.paga) {
+          finalText = 'Essa conta ja esta quitada. Contas pagas nao podem ser alteradas.';
+          break;
+        }
+
+        // Montar campos para atualizar (so os que foram fornecidos)
+        const updateData: Record<string, unknown> = {};
+        if (action.dados.descricao !== undefined) updateData.descricao = String(action.dados.descricao);
+        if (action.dados.novoValor !== undefined) {
+          // Quando o LLM envia "mude de X para Y", ele usa novoValor para o novo valor
+          updateData.valor = parseFloat(String(action.dados.novoValor));
+        } else if (action.dados.valor !== undefined) {
+          updateData.valor = parseFloat(String(action.dados.valor));
+        }
+        if (action.dados.data !== undefined) updateData.data = new Date(String(action.dados.data));
+        if (action.dados.tipo !== undefined) updateData.tipo = parseInt(String(action.dados.tipo), 10);
+        if (action.dados.paga !== undefined) updateData.paga = action.dados.paga as boolean;
+        if (action.dados.observacoes !== undefined) updateData.observacoes = String(action.dados.observacoes);
+
+        if (Object.keys(updateData).length === 0) {
+          finalText = 'Nenhum campo fornecido para atualizar. Informe o que deseja alterar (descricao, valor, data, etc).';
+          break;
+        }
+
+        resultadoAcao = await db.conta.update({
+          where: { id: resolved.id },
+          data: updateData,
+          include: { cliente: { select: { id: true, nome: true } } },
+        });
+      }
+      break;
+    }
+    case 'listar_clientes': {
+      resultadoAcao = await db.cliente.findMany({
+        where: { empresaId },
+        select: { id: true, nome: true, telefone: true, ativo: true, bloqueado: true },
+        orderBy: { nome: 'asc' },
+        take: 30,
+      });
+      break;
+    }
+    case 'listar_maquinas': {
+      const whereM: Record<string, unknown> = { cliente: { empresaId } };
+      if (action.dados?.clienteId) {
+        const resolved = await resolveClienteId(empresaId, String(action.dados.clienteId));
+        if (resolved.error) { finalText = resolved.error; break; }
+        whereM.clienteId = resolved.id;
+      }
+
+      resultadoAcao = await db.maquina.findMany({
+        where: whereM,
+        select: { id: true, codigo: true, descricao: true, status: true, localizacao: true, cliente: { select: { nome: true } } },
+        orderBy: { codigo: 'asc' },
+        take: 30,
+      });
+      break;
+    }
+    case 'resumo_financeiro': {
+      const ctx = await gatherCompanyContext(empresaId);
+      resultadoAcao = ctx;
+      break;
+    }
+  }
+
+  return { finalText, resultadoAcao };
+}
+
+// ==================== Helpers de formatacao ====================
+function fmtBrl(valor: number): string {
+  return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtDate(data: string | Date | null): string {
+  if (!data) return '';
+  try {
+    return new Date(data).toLocaleDateString('pt-BR');
+  } catch {
+    return '';
+  }
+}
+
+// ==================== Formatar resultado das acoes ====================
+// IMPORTANTE: Toda resposta aqui deve ser em linguagem natural, adequada para TTS (fala).
+// Evitar simbolos como |, [], {}. Usar frases completas com pontuacao.
+function formatActionResult(
+  finalText: string,
+  resultadoAcao: unknown,
+  action: LLMAction | null,
+): string {
+  let text = finalText;
+  const acaoNome = action?.acao || '';
+
+  if (resultadoAcao && Array.isArray(resultadoAcao) && resultadoAcao.length > 0) {
+    if (acaoNome === 'listar_contas') {
+      const receber = resultadoAcao.filter((d: any) => d.tipo === 1);
+      const pagar = resultadoAcao.filter((d: any) => d.tipo === 0);
+      const totalGeral = resultadoAcao.reduce((s: number, d: any) => s + (d.valor || 0), 0);
+      const totalReceberPend = receber.filter((d: any) => !d.paga).reduce((s: number, d: any) => s + (d.valor || 0), 0);
+      const totalPagarPend = pagar.filter((d: any) => !d.paga).reduce((s: number, d: any) => s + (d.valor || 0), 0);
+      const totalReceberLiq = receber.filter((d: any) => d.paga).reduce((s: number, d: any) => s + (d.valor || 0), 0);
+      const totalPagarLiq = pagar.filter((d: any) => d.paga).reduce((s: number, d: any) => s + (d.valor || 0), 0);
+      const isMista = receber.length > 0 && pagar.length > 0;
+
+      let intro = '';
+      if (isMista) {
+        intro = `Encontrei ${resultadoAcao.length} contas no total:\n\n`;
+      } else if (receber.length > 0) {
+        const pendentes = receber.filter((d: any) => !d.paga).length;
+        intro = `Voce tem ${receber.length} conta${receber.length > 1 ? 's' : ''} a receber`;
+        if (pendentes > 0) intro += ` (${pendentes} pendente${pendentes > 1 ? 's' : ''})`;
+        intro += `:\n\n`;
+      } else if (pagar.length > 0) {
+        const pendentes = pagar.filter((d: any) => !d.paga).length;
+        intro = `Voce tem ${pagar.length} conta${pagar.length > 1 ? 's' : ''} a pagar`;
+        if (pendentes > 0) intro += ` (${pendentes} pendente${pendentes > 1 ? 's' : ''})`;
+        intro += `:\n\n`;
+      }
+
+      const listaContas = resultadoAcao.map((d: any, i: number) => {
+        const verbo = d.tipo === 0 ? 'Pagar a' : 'Receber de';
+        const cliente = d.cliente?.nome || 'Sem cliente cadastrado';
+        const valor = fmtBrl(d.valor || 0);
+        const status = d.paga ? 'ja liquidada' : 'pendente';
+        const venc = d.data ? `, vencimento em ${fmtDate(d.data)}` : '';
+        const descExtra = (d.descricao && d.descricao !== cliente) ? ` (${d.descricao})` : '';
+        return `${i + 1}. ${verbo} ${cliente}${descExtra}, R$ ${valor}, ${status}${venc}`;
+      }).join('\n');
+
+      text = intro + listaContas + '\n\n';
+
+      if (isMista) {
+        text += `Total geral: R$ ${fmtBrl(totalGeral)}.\n`;
+        text += `A receber pendente: R$ ${fmtBrl(totalReceberPend)}. A receber ja liquidado: R$ ${fmtBrl(totalReceberLiq)}.\n`;
+        text += `A pagar pendente: R$ ${fmtBrl(totalPagarPend)}. A pagar ja pago: R$ ${fmtBrl(totalPagarLiq)}.`;
+      } else if (receber.length > 0) {
+        text += `Total: R$ ${fmtBrl(totalGeral)}.`;
+        if (totalReceberLiq > 0) text += ` Pendente: R$ ${fmtBrl(totalReceberPend)}. Ja recebido: R$ ${fmtBrl(totalReceberLiq)}.`;
+      } else if (pagar.length > 0) {
+        text += `Total: R$ ${fmtBrl(totalGeral)}.`;
+        if (totalPagarLiq > 0) text += ` Pendente: R$ ${fmtBrl(totalPagarPend)}. Ja pago: R$ ${fmtBrl(totalPagarLiq)}.`;
+      }
+
+    } else if (acaoNome === 'listar_clientes') {
+      const ativos = resultadoAcao.filter((c: any) => c.ativo && !c.bloqueado).length;
+      text = text + '\n\n' +
+        `Voce tem ${resultadoAcao.length} clientes cadastrados (${ativos} ativos):\n\n` +
+        resultadoAcao.map((c: any, i: number) => {
+          const status = c.bloqueado ? 'bloqueado' : (c.ativo ? 'ativo' : 'inativo');
+          const tel = c.telefone ? `, telefone ${c.telefone}` : '';
+          return `${i + 1}. ${c.nome}, ${status}${tel}`;
+        }).join('\n');
+
+    } else if (acaoNome === 'listar_maquinas') {
+      const ativas = resultadoAcao.filter((m: any) => m.status === 'ATIVA').length;
+      text = text + '\n\n' +
+        `Foram encontradas ${resultadoAcao.length} maquinas (${ativas} ativas):\n\n` +
+        resultadoAcao.map((m: any, i: number) => {
+          const cliente = m.cliente?.nome || 'Sem cliente';
+          const loc = m.localizacao ? `, em ${m.localizacao}` : '';
+          const desc = m.descricao && m.descricao !== '-' ? ` (${m.descricao})` : '';
+          const statusStr = m.status === 'ATIVA' ? 'ativa' : m.status === 'MANUTENCAO' ? 'em manutencao' : 'inativa';
+          return `${i + 1}. Maquina ${m.codigo}${desc}, do cliente ${cliente}${loc}, ${statusStr}`;
+        }).join('\n');
+
+    } else {
+      const total = resultadoAcao.reduce((s: number, d: any) => s + (d.valor || 0), 0);
+      text = text + '\n\n' +
+        resultadoAcao.map((d: any) =>
+          '- ' + (d.descricao || 'Sem descricao') + ', R$ ' + fmtBrl(d.valor || 0) + ', ' + (d.paga ? 'liquidada' : 'pendente')
+        ).join('\n') +
+        '\n\nTotal: ' + resultadoAcao.length + ' registros, R$ ' + fmtBrl(total);
+    }
+  } else if (resultadoAcao && !Array.isArray(resultadoAcao)) {
+    if (acaoNome === 'criar_conta') {
+      const desc = (resultadoAcao as any).descricao || '';
+      const valor = (resultadoAcao as any).valor || 0;
+      const tipoStr = (resultadoAcao as any).tipo === 0 ? 'a pagar' : 'a receber';
+      const cliente = (resultadoAcao as any).cliente?.nome || '';
+      const clienteStr = cliente ? ` do cliente ${cliente}` : '';
+      text = text + '\n\nConta criada com sucesso! Conta ' + tipoStr + clienteStr + ', ' + desc + ', no valor de R$ ' + fmtBrl(valor);
+    } else if (acaoNome === 'liquidar_conta') {
+      const desc = (resultadoAcao as any).descricao || '';
+      const valor = (resultadoAcao as any).valor || 0;
+      const cliente = (resultadoAcao as any).cliente?.nome || '';
+      const clienteStr = cliente ? ` do cliente ${cliente}` : '';
+      text = text + '\n\nConta liquidada com sucesso! ' + desc + clienteStr + ', R$ ' + fmtBrl(valor);
+    } else if (acaoNome === 'excluir_conta') {
+      text = text + '\n\nConta excluida com sucesso.';
+    } else if (acaoNome === 'editar_conta') {
+      const desc = (resultadoAcao as any).descricao || '';
+      const valor = (resultadoAcao as any).valor || 0;
+      const cliente = (resultadoAcao as any).cliente?.nome || '';
+      const clienteStr = cliente ? ` do cliente ${cliente}` : '';
+      text = text + `\n\nConta atualizada com sucesso! ${desc}${clienteStr}, R$ ${fmtBrl(valor)}.`;
+    } else if (acaoNome === 'resumo_financeiro') {
+      text = text + '\n\n' + String(resultadoAcao);
+    }
+  } else if (resultadoAcao && Array.isArray(resultadoAcao) && resultadoAcao.length === 0) {
+    if (acaoNome === 'listar_contas') {
+      text = text + '\n\nNenhuma conta encontrada com esse filtro. Que tal criar uma nova conta?';
+    } else if (acaoNome === 'listar_clientes') {
+      text = text + '\n\nNenhum cliente encontrado. Cadastre clientes pela tela de Clientes.';
+    } else if (acaoNome === 'listar_maquinas') {
+      text = text + '\n\nNenhuma maquina encontrada.';
+    } else {
+      text = text + '\n\nNenhum registro encontrado.';
+    }
+  }
+
+  return text.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+async function loadInstrucoes(empresaId: string): Promise<string> {
+  try {
+    const instrucoes = await db.$queryRawUnsafe<Array<{ instrucao: string }>>(
+      `SELECT instrucao FROM chat_instrucoes WHERE "empresaId" = $1 ORDER BY "criadoEm" ASC`,
+      empresaId
+    );
+    if (instrucoes.length > 0) {
+      return '\nINSTRUCOES PERMANENTES DO USUARIO (OBRIGATORIO seguir):\n' +
+        instrucoes.map((inst, i) => `${i + 1}. ${inst.instrucao}`).join('\n') +
+        '\nVoce DEVE seguir estas instrucoes em TODAS as suas respostas.';
+    }
+  } catch {
+    // Tabela pode nao existir ainda
+  }
+  return '';
+}
+
+async function loadConversationSummary(empresaId: string): Promise<string> {
+  try {
+    // UNICA query substitui o antigo for-loop (1 query em vez de 1 + N + 1)
+    const recentHistory = await db.$queryRawUnsafe<Array<{ content: string; role: string; sessaoId: string; acaoExecutada: string | null }>>(
+      `SELECT content, role, "sessaoId", "acaoExecutada"
+       FROM chat_historico
+       WHERE "empresaId" = $1 AND "deletadoEm" IS NULL
+       AND "criadoEm" > NOW() - INTERVAL '24 hours'
+       ORDER BY "criadoEm" DESC
+       LIMIT 30`,
+      empresaId
+    );
+
+    if (recentHistory.length === 0) return '';
+
+    // Agrupar por sessao no JS (sem queries dentro de loop)
+    const sessions = new Map<string, string[]>();
+    const actions: string[] = [];
+
+    for (const row of recentHistory) {
+      if (row.role === 'user') {
+        if (!sessions.has(row.sessaoId)) sessions.set(row.sessaoId, []);
+        const msgs = sessions.get(row.sessaoId)!;
+        if (msgs.length < 5) msgs.push(row.content.substring(0, 100));
+      }
+      if (row.acaoExecutada) {
+        actions.push(`[${row.acaoExecutada}] ${row.content.substring(0, 60)}`);
+      }
+    }
+
+    const summaries: string[] = [];
+    for (const [, questions] of sessions) {
+      summaries.push(`Perguntas recentes: ${questions.join(' | ')}`);
+    }
+
+    let summary = '\nCONTEXTO DE CONVERSAS RECENTES (ultimas 24h):\n';
+    if (summaries.length > 0) summary += summaries.join('\n');
+    if (actions.length > 0) summary += '\nAcoes recentes do usuario: ' + actions.slice(0, 10).join(' | ');
+    return summary;
+  } catch {
+    return '';
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { mensagem, empresaId, clienteId, messages: historyMessages, confirmAction, sessaoId } = body;
+
+    if (!empresaId) {
+      return NextResponse.json({ error: 'empresaId e obrigatorio' }, { status: 400 });
+    }
+
+    const planCheck = await enforcePlan(empresaId, { feature: 'recChatIA' }, request);
+    if (planCheck.error) return NextResponse.json({ error: planCheck.error }, { status: 403 });
+
+    // ========== CONFIRM ACTION FLOW (sem chamada LLM) ==========
+    if (confirmAction && !mensagem) {
+      try {
+        const { finalText: actionText, resultadoAcao } = await runAction(confirmAction, empresaId);
+        const formatted = formatActionResult(actionText || 'Acao executada.', resultadoAcao, confirmAction);
+
+        // Salvar resultado da acao confirmada no historico
+        if (sessaoId) {
+          saveToHistory(empresaId, sessaoId, 'assistant', formatted || 'Acao executada com sucesso.', confirmAction.acao, resultadoAcao ? JSON.stringify(resultadoAcao) : null);
+        }
+
+        return NextResponse.json({
+          text: formatted || 'Acao executada com sucesso.',
+          acao: confirmAction.acao,
+          resultado: resultadoAcao,
+        });
+      } catch (acaoErr) {
+        console.error('Erro ao executar acao confirmada:', acaoErr);
+        return NextResponse.json({
+          error: `Erro ao executar acao: ${acaoErr instanceof Error ? acaoErr.message : 'Erro desconhecido'}`,
+        }, { status: 500 });
+      }
+    }
+
+    if (!mensagem) {
+      return NextResponse.json({ error: 'Mensagem e obrigatoria' }, { status: 400 });
+    }
+
+    // ========== DETECCAO DE INSTRUCOES (sem chamada LLM) ==========
+    const msgLower = mensagem.toLowerCase().trim();
+
+    // Detectar: "anote uma instrucao: ..." ou "instrucao: ..." ou "lembre-se: ..."
+    const instructionPatterns = [
+      /anote\s+(?:uma\s+)?instruc[\wã]*:\s*(.+)/i,
+      /instruc[\wã]*:\s*(.+)/i,
+      /lembre[- ](?:se)?\s*:\s*(.+)/i,
+      /regra:\s*(.+)/i,
+      /sempre:\s*(.+)/i,
+    ];
+
+    for (const pattern of instructionPatterns) {
+      const match = mensagem.match(pattern);
+      if (match?.[1]?.trim()) {
+        const instrucaoText = match[1].trim().substring(0, 500);
+        // Salvar instrucao permanente
+        await db.$queryRawUnsafe(
+          `INSERT INTO chat_instrucoes ("empresaId", instrucao) VALUES ($1, $2)`,
+          empresaId, instrucaoText
+        ).catch(() => {});
+
+        if (sessaoId) {
+          saveToHistory(empresaId, sessaoId, 'user', mensagem);
+        }
+
+        const reply = `Instrucao registrada com sucesso: "${instrucaoText.substring(0, 100)}${instrucaoText.length > 100 ? '...' : ''}"
+
+Vou seguir essa instrucao em todas as nossas conversas, mesmo se voce fechar e reabrir o chat.\n\nPara ver suas instrucoes, digite "lista instrucoes".\nPara remover, digite "remova instrucao: <parte do texto>".`;
+
+        if (sessaoId) {
+          saveToHistory(empresaId, sessaoId, 'assistant', reply);
+        }
+
+        return NextResponse.json({ text: reply, acao: 'salvar_instrucao' });
+      }
+    }
+
+    // Detectar: "lista instrucoes" ou "quais instrucoes"
+    if (/lista\s+instruc|quais\s+instruc|minhas\s+instruc/.test(msgLower)) {
+      const instrucoes = await db.$queryRawUnsafe<Array<{ instrucao: string; criadoEm: Date }>>(
+        `SELECT instrucao, "criadoEm" FROM chat_instrucoes WHERE "empresaId" = $1 ORDER BY "criadoEm" ASC`,
+        empresaId
+      ).catch(() => []);
+
+      if (sessaoId) {
+        saveToHistory(empresaId, sessaoId, 'user', mensagem);
+      }
+
+      let reply: string;
+      if (instrucoes.length === 0) {
+        reply = 'Voce nao tem nenhuma instrucao permanente registrada.\n\nPara criar uma, digite:\n"Anote uma instrucao: <texto>"';
+      } else {
+        reply = `Voce tem ${instrucoes.length} instrucao(oes) permanente(s):\n\n` +
+          instrucoes.map((inst, i) => `${i + 1}. ${inst.instrucao}`).join('\n') +
+          '\n\nPara remover, digite: "Remova instrucao: <parte do texto>"';
+      }
+
+      if (sessaoId) {
+        saveToHistory(empresaId, sessaoId, 'assistant', reply);
+      }
+
+      return NextResponse.json({ text: reply });
+    }
+
+    // Detectar: "remova instrucao: ..." ou "esqueca instrucao: ..."
+    if (/remova\s+instruc|esquec[a\s]+instruc|apague\s+instruc|delete\s+instruc/i.test(msgLower)) {
+      const removeMatch = mensagem.match(/(?:remova|esquec[a]|apague|delete)\s+instruc[\wã]*:\s*(.+)/i);
+
+      if (sessaoId) {
+        saveToHistory(empresaId, sessaoId, 'user', mensagem);
+      }
+
+      if (removeMatch?.[1]?.trim()) {
+        const searchText = '%' + removeMatch[1].trim() + '%';
+        await db.$queryRawUnsafe(
+          `DELETE FROM chat_instrucoes WHERE "empresaId" = $1 AND instrucao ILIKE $2`,
+          empresaId, searchText
+        ).catch(() => {});
+
+        const reply = `Instrucao removida. Se nao encontrou exatamente o texto, tente novamente com uma parte diferente.`;
+        if (sessaoId) {
+          saveToHistory(empresaId, sessaoId, 'assistant', reply);
+        }
+        return NextResponse.json({ text: reply, acao: 'remover_instrucao' });
+      } else {
+        const reply = 'Para remover uma instrucao, digite: "Remova instrucao: <parte do texto da instrucao>"';
+        if (sessaoId) {
+          saveToHistory(empresaId, sessaoId, 'assistant', reply);
+        }
+        return NextResponse.json({ text: reply });
+      }
+    }
+
+    // Salvar mensagem do usuario no historico
+    if (sessaoId) {
+      saveToHistory(empresaId, sessaoId, 'user', mensagem);
+    }
+
+    // ========== NORMAL CHAT FLOW (com historico multi-turn) ==========
+
+    // Detectar intencao para carregar APENAS contexto relevante (ex: perguntar sobre contas nao carrega maquinas)
+    const intent = detectIntent(mensagem);
+
+    // Carregar tudo em PARALELO: contexto da empresa + instrucoes + historico recente
+    // Antes: ~13 queries sequenciais (~15s). Agora: 3 grupos paralelos (~2s)
+    const [companyContext, instrucoesPermanentes, conversationSummary] = await Promise.all([
+      gatherCompanyContext(empresaId, intent),
+      loadInstrucoes(empresaId),
+      loadConversationSummary(empresaId),
+    ]);
+
+    // Buscar configuracoes de IA (ConfigSaaS global)
+    const { llmModel } = await loadAIConfig();
+
+    // Montar prompt do sistema - General Business Assistant
+    // Calcular data/hora atual no timezone do Brasil (America/Sao_Paulo)
+    const agoraBrasil = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const hojeBrasil = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const amanhaBrasil = new Date(Date.now() + 86400000).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const ontemBrasil = new Date(Date.now() - 86400000).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+
+    const systemPrompt = `Voce e o assistente virtual do CaixaFacil, sistema de gestao de maquinas de entretenimento.
+Voce tem acesso a dados em tempo real da empresa e pode responder perguntas sobre:
+- Clientes (cadastro, status, contato)
+- Maquinas (status, localizacao, leituras)
+- Fluxo de caixa (contas a pagar e receber, saldo)
+- Leituras recentes (valores de entrada/saida)
+- Pagamentos e assinaturas
+
+DATA E HORA ATUAL (obrigatorio usar como referencia para calculos de data):
+- Agora: ${agoraBrasil}
+- Hoje: ${hojeBrasil}
+- Amanha: ${amanhaBrasil}
+- Ontem: ${ontemBrasil}
+IMPORTANTE: Use SEMPRE estas datas como referencia. Quando o usuario disser "amanha", use a data "${amanhaBrasil}". Quando disser "hoje", use "${hojeBrasil}". Quando disser "ontem", use "${ontemBrasil}". Formato de data para campos JSON: AAAA-MM-DD (ex: 2026-05-01).
+
+RESUMO ATUAL DA EMPRESA (apenas numeros resumidos, NAO e a lista completa):
+${companyContext}${conversationSummary}${instrucoesPermanentes}
+
+REGRAS FUNDAMENTAIS:
+1. RESPOSTAS EM LINGUAGEM NATURAL: Suas respostas serao FALADAS em voz alta pelo sistema (TTS). Use frases completas, pontuacao adequada e linguagem coloquial brasileira. Evite simbolos como |, [], {}, abreviacoes ou formato de tabela.
+2. SEMPRE USE ACAO JSON PARA CONSULTAS: Quando o usuario pedir para VER, LISTAR, MOSTRAR, CONSULTAR contas, clientes, maquinas ou dados financeiros, voce DEVE SEMPRE retornar a acao JSON correspondente. NUNCA responda com dados do resumo acima como se fossem os dados completos. O resumo acima e apenas um panorama geral. Os dados reais e completos estao no banco e so podem ser acessados via acao JSON.
+3. Perguntas genericas como "contas a receber", "meus clientes", "minhas maquinas" devem SEMPRE gerar a acao JSON correspondente.
+4. Apenas perguntas GERAIS ou CONVERSACIONAIS (como "oi", "como funciona", etc.) devem ser respondidas sem acao JSON.
+
+Acoes disponiveis:
+- "listar_contas": Listar contas com filtros (clienteId, tipo: 0=Pagar, 1=Receber, paga: true/false). SEMPRE use esta acao quando o usuario perguntar sobre contas.
+- "criar_conta": Criar nova conta (campos OBRIGATORIOS: descricao, valor, data, tipo: 0=Pagar/1=Receber, clienteId). ATENCAO: NUNCA gere criar_conta se o usuario nao informou TODOS os campos obrigatorios. Se faltar algum campo (valor, cliente, data, descricao), responda em texto perguntando o que falta. NUNCA invente valores (zero, vazio ou qualquer outro).
+- "liquidar_conta": Marcar conta como liquidada. Use clienteId + valor + data para identificar. Ex: {"acao":"liquidar_conta","dados":{"clienteId":"NOME_DO_CLIENTE","valor":110,"data":"2026-04-28"}}
+- "excluir_conta": Excluir conta. Use clienteId + valor + data para identificar. Ex: {"acao":"excluir_conta","dados":{"clienteId":"NOME_DO_CLIENTE","valor":110,"data":"2026-04-28"}}
+- "editar_conta": Alterar campos de uma conta PENDENTE. Contas ja quitadas NAO podem ser editadas. Use clienteId + valor + data para identificar, e inclua os campos a alterar. Ex: {"acao":"editar_conta","dados":{"clienteId":"Geninho","valor":239,"descricao":"JB"}}
+- "listar_clientes": Listar clientes. SEMPRE use esta acao quando o usuario perguntar sobre clientes.
+- "listar_maquinas": Listar maquinas (por clienteId). SEMPRE use esta acao quando o usuario perguntar sobre maquinas.
+- "resumo_financeiro": Obter resumo financeiro detalhado completo
+
+REGRA CRITICA DE CONSISTENCIA:
+- NUNCA gere acoes JSON (criar_conta, liquidar_conta, excluir_conta, editar_conta) com dados incompletos ou inventados.
+- Se o usuario digitar algo ambiguo ou incompleto (ex: apenas "registre", "pague", "crie" sem especificar valor, cliente ou data), RESPONDA EM TEXTO perguntando as informacoes que faltam. NAO tente adivinhar ou preencher com zeros/valores genericos.
+- Exemplo: Usuario diz "registre" -> Voce responde "O que voce deseja registrar? Me informe o tipo (conta a pagar ou receber), o cliente, o valor e a data de vencimento."
+- Apenas gere acao JSON quando TODOS os campos obrigatorios forem explicitamente informados pelo usuario na mensagem atual ou em mensagens anteriores do contexto da conversa.
+
+FORMATO DA RESPOSTA:
+Quando uma acao JSON for necessaria, responda EXCLUSIVAMENTE com:
+{"acao": "nome_da_acao", "dados": {...}}
+
+NAO inclua texto fora do JSON quando for executar uma acao. O sistema vai formatar os resultados em linguagem natural automaticamente.
+Se precisar explicar algo antes da acao, use o campo "friendlyText" dentro do JSON.
+
+Para acoes que MODIFICAM dados (criar, liquidar, excluir), SEMPRE inclua "friendlyText" explicando o que sera feito. O sistema pedira confirmacao ao usuario.
+
+EXEMPLOS:
+- Usuario: "contas a receber" -> {"acao": "listar_contas", "dados": {"tipo": 1}}
+- Usuario: "contas a receber pendentes" -> {"acao": "listar_contas", "dados": {"tipo": 1, "paga": false}}
+- Usuario: "todas as contas" -> {"acao": "listar_contas", "dados": {}}
+- Usuario: "meus clientes" -> {"acao": "listar_clientes", "dados": {}}
+- Usuario: "receber de Joao" -> {"acao": "listar_contas", "dados": {"tipo": 1, "clienteId": "ID_DO_CLIENTE"}}
+- Usuario: "quanto tenho a receber pendente?" -> {"acao": "listar_contas", "dados": {"tipo": 1, "paga": false}}
+- Usuario: "minhas maquinas" -> {"acao": "listar_maquinas", "dados": {}}
+- Usuario: "marque a conta do Joao de R$ 150 como paga" -> {"acao": "liquidar_conta", "dados": {"clienteId": "Joao", "valor": 150}}
+- Usuario: "liquidar conta do BAR R$ 110" -> {"acao": "liquidar_conta", "dados": {"clienteId": "BAR", "valor": 110}}
+- Usuario: "altere a descricao dessa conta para JB" -> {"acao": "editar_conta", "dados": {"clienteId": "Geninho", "valor": 239, "descricao": "JB"}, "friendlyText": "Vou alterar a descricao da conta para JB."}
+- Usuario: "mude o valor da conta do Joao de R$ 100 para R$ 200" -> {"acao": "editar_conta", "dados": {"clienteId": "Joao", "valor": 100, "data": "2026-04-28", "novoValor": 200}, "friendlyText": "Vou atualizar o valor da conta de R$ 100 para R$ 200."}
+
+Use formato de moeda brasileiro (R$ X.XXX,XX) nos valores.`;
+
+    // Historico de conversa (limitado as ultimas 10 mensagens)
+    const recentHistory = Array.isArray(historyMessages)
+      ? historyMessages.slice(-10)
+      : [];
+
+    // Vertex AI only
+    let accessToken: string;
+    try {
+      accessToken = await getVertexAccessToken();
+    } catch {
+      return NextResponse.json(
+        { error: 'Falha ao obter token de acesso do Vertex AI. Verifique as credenciais de serviço.' },
+        { status: 400 }
+      );
+    }
+
+    const vertexModel = getVertexModel(llmModel);
+
+    const contents = [
+      { role: 'user', parts: [{ text: systemPrompt }] },
+      { role: 'model', parts: [{ text: 'Entendido, sou o assistente virtual do CaixaFacil.' }] },
+      ...recentHistory.flatMap(m => [
+        { role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] }
+      ]),
+      { role: 'user', parts: [{ text: mensagem }] },
+    ];
+
+    const generationConfig = { temperature: 0.3, maxOutputTokens: 2048 };
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    let llmText = '';
+    let llmError = '';
+
+    try {
+      let lastError: string | null = null;
+      for (const region of VERTEX_LOCATIONS) {
+        const result = await tryVertexAIRegion(
+          region, accessToken, vertexModel, contents, generationConfig, controller.signal
+        );
+        if (result) {
+          llmText = result.content;
+          break;
+        }
+        lastError = `[VERTEX ${region}] Falhou`;
+      }
+      if (!llmText) {
+        throw new Error(`Vertex AI falhou em todas as regioes (${VERTEX_LOCATIONS.join(', ')}). Ultimo erro: ${lastError}`);
+      }
+    } catch (fetchErr: unknown) {
+      clearTimeout(timeoutId);
+      const errMsg = fetchErr instanceof Error ? fetchErr.message : 'Erro desconhecido';
+      if (errMsg.includes('abort') || errMsg.includes('timeout')) {
+        return NextResponse.json({ error: 'Tempo esgotado ao comunicar com IA. Tente novamente.' }, { status: 504 });
+      }
+      return NextResponse.json({ error: 'Erro Vertex AI: ' + errMsg.substring(0, 120) }, { status: 502 });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    // Parsear acao da resposta
+    const parsed = parseActionFromResponse(llmText);
+
+    let finalText = '';
+
+    // 1) Prioridade: texto limpo fora do JSON (resposta natural do LLM)
+    if (parsed.friendlyText) {
+      finalText = parsed.friendlyText;
+    }
+    // 2) Fallback: friendlyText de dentro do JSON
+    else if (parsed.action?.friendlyText) {
+      finalText = parsed.action.friendlyText;
+    }
+    // 3) Fallback: limpar qualquer JSON residual
+    if (!finalText.trim()) {
+      finalText = llmMessage
+        .replace(/```json[\s\S]*?```/g, '')
+        .replace(/\{[\s\S]*?"acao"[\s\S]*\}/g, '')
+        .replace(/```[\s\S]*?```/g, '')
+        .trim();
+    }
+    // 4) Se ainda for JSON puro, usar friendlyText ou texto vazio (sera preenchido apos execucao)
+    if (!finalText.trim() || (finalText.trim().startsWith('{') && finalText.trim().endsWith('}'))) {
+      finalText = parsed.action?.friendlyText || '';
+    }
+    // 5) Limpar linhas duplicadas
+    finalText = finalText.replace(/\n{3,}/g, '\n\n').trim();
+
+    // ========== FALLBACK: detectar consultas de dados sem acao JSON ==========
+    if (!parsed.action?.acao) {
+      const msgLow = mensagem.toLowerCase().trim();
+      if (/^contas?\s*a\s*receber/.test(msgLow) || /^receber\b/.test(msgLow)) {
+        parsed.action = { acao: 'listar_contas', dados: { tipo: 1 } };
+      } else if (/^contas?\s*a\s*pagar/.test(msgLow) || /^pagar\b/.test(msgLow)) {
+        parsed.action = { acao: 'listar_contas', dados: { tipo: 0 } };
+      } else if (/contas?\s*a\s*receber.*pendentes?/.test(msgLow)) {
+        parsed.action = { acao: 'listar_contas', dados: { tipo: 1, paga: false } };
+      } else if (/contas?\s*a\s*pagar.*pendentes?/.test(msgLow)) {
+        parsed.action = { acao: 'listar_contas', dados: { tipo: 0, paga: false } };
+      } else if (/^todas?\s*as?\s*contas?$/.test(msgLow) || msgLow === 'contas') {
+        parsed.action = { acao: 'listar_contas', dados: {} };
+      } else if (/meus\s*clientes?|lista\s*(de\s*)?clientes?/.test(msgLow)) {
+        parsed.action = { acao: 'listar_clientes', dados: {} };
+      } else if (/minhas?\s*maquinas?|lista\s*(de\s*)?maquinas?/.test(msgLow)) {
+        parsed.action = { acao: 'listar_maquinas', dados: {} };
+      } else if (/resumo\s*financeiro|situac[\w]*\s*financeir/.test(msgLow)) {
+        parsed.action = { acao: 'resumo_financeiro', dados: {} };
+      }
+      if (parsed.action?.acao) {
+        finalText = '';
+      }
+    }
+
+    // ========== ACAO DESTRUTIVA: pedir confirmacao ==========
+    if (parsed.action?.acao && parsed.action.dados && DESTRUCTIVE_ACTIONS.has(parsed.action.acao)) {
+      // Se o LLM nao forneceu friendlyText, gerar um texto descritivo automaticamente
+      if (!finalText.trim()) {
+        const dados = parsed.action.dados;
+        const acaoNome = parsed.action.acao;
+        const valor = dados.valor ? `R$ ${parseFloat(String(dados.valor)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '';
+        const cliente = dados.clienteId ? String(dados.clienteId) : '';
+        const descricao = dados.descricao ? String(dados.descricao) : '';
+        const data = dados.data ? new Date(String(dados.data)).toLocaleDateString('pt-BR') : '';
+
+        if (acaoNome === 'criar_conta') {
+          const tipoStr = parseInt(String(dados.tipo), 10) === 0 ? 'a pagar' : 'a receber';
+          const partes = [`Deseja criar uma conta ${tipoStr}`];
+          if (cliente) partes.push(`do cliente ${cliente}`);
+          if (descricao) partes.push(`"${descricao}"`);
+          if (valor) partes.push(`no valor de ${valor}`);
+          if (data) partes.push(`para ${data}`);
+          finalText = partes.join(', ') + '?';
+        } else if (acaoNome === 'liquidar_conta') {
+          const partes = ['Deseja liquidar (marcar como paga) a conta'];
+          if (cliente) partes.push(`do cliente ${cliente}`);
+          if (descricao) partes.push(`"${descricao}"`);
+          if (valor) partes.push(`no valor de ${valor}`);
+          finalText = partes.join(', ') + '?';
+        } else if (acaoNome === 'excluir_conta') {
+          const partes = ['Deseja EXCLUIR permanentemente a conta'];
+          if (cliente) partes.push(`do cliente ${cliente}`);
+          if (descricao) partes.push(`"${descricao}"`);
+          if (valor) partes.push(`no valor de ${valor}`);
+          finalText = partes.join(', ') + '?';
+        } else if (acaoNome === 'editar_conta') {
+          const partes = ['Deseja alterar a conta'];
+          if (cliente) partes.push(`do cliente ${cliente}`);
+          const mudancas: string[] = [];
+          if (dados.descricao) mudancas.push(`descricao para "${dados.descricao}"`);
+          if (dados.novoValor) mudancas.push(`valor para R$ ${parseFloat(String(dados.novoValor)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+          if (dados.data) mudancas.push(`data para ${new Date(String(dados.data)).toLocaleDateString('pt-BR')}`);
+          if (mudancas.length > 0) partes.push(`(${mudancas.join(', ')})`);
+          finalText = partes.join(', ') + '?';
+        }
+      }
+
+      // Salvar a resposta pendente de confirmacao no historico
+      if (sessaoId) {
+        saveToHistory(empresaId, sessaoId, 'assistant', finalText, parsed.action.acao, JSON.stringify(parsed.action.dados));
+      }
+
+      return NextResponse.json({
+        text: finalText,
+        acao: parsed.action.acao,
+        requiresConfirmation: true,
+        pendingAction: parsed.action,
+      });
+    }
+
+    // ========== ACAO NAO-DESTRUTIVA: executar imediatamente ==========
+    let resultadoAcao: unknown = null;
+
+    if (parsed.action?.acao) {
+      if (!parsed.action.dados) {
+        parsed.action.dados = {};
+      }
+      try {
+        const result = await runAction(parsed.action, empresaId);
+        resultadoAcao = result.resultadoAcao;
+        if (result.finalText) finalText = result.finalText;
+        finalText = formatActionResult(finalText, resultadoAcao, parsed.action);
+      } catch (acaoErr) {
+        console.error('Erro ao executar acao:', acaoErr);
+        finalText = `Erro ao executar acao: ${acaoErr instanceof Error ? acaoErr.message : 'Erro desconhecido'}`;
+      }
+    }
+
+    // Salvar resposta do assistente no historico
+    if (sessaoId) {
+      saveToHistory(
+        empresaId, sessaoId, 'assistant', finalText,
+        parsed.action?.acao || null,
+        resultadoAcao ? JSON.stringify(resultadoAcao).substring(0, 3000) : null
+      );
+    }
+
+    return NextResponse.json({
+      text: finalText,
+      acao: parsed.action?.acao || null,
+      resultado: resultadoAcao,
+    });
+  } catch (error) {
+    console.error('Erro no chat-ia:', error);
+    return NextResponse.json(
+      { error: 'Erro ao processar mensagem' },
+      { status: 500 }
+    );
+  }
+}

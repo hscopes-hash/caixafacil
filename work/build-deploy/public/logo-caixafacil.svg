@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 60" fill="none">
+  <!-- Robot Icon -->
+  <g transform="translate(4, 2)">
+    <!-- Antenna -->
+    <rect x="22" y="0" width="3" height="8" rx="1.5" fill="#6B7280"/>
+    <circle cx="23.5" cy="0" r="2.5" fill="#F59E0B"/>
+    <!-- Head -->
+    <rect x="8" y="8" width="32" height="24" rx="6" fill="#9CA3AF"/>
+    <!-- Eyes -->
+    <circle cx="18" cy="20" r="4" fill="#1F2937"/>
+    <circle cx="30" cy="20" r="4" fill="#1F2937"/>
+    <!-- Eye shine -->
+    <circle cx="19.5" cy="18.5" r="1.5" fill="#D1D5DB"/>
+    <circle cx="31.5" cy="18.5" r="1.5" fill="#D1D5DB"/>
+    <!-- Body -->
+    <rect x="6" y="34" width="36" height="22" rx="4" fill="#9CA3AF"/>
+    <!-- Chest panel -->
+    <rect x="14" y="38" width="20" height="14" rx="3" fill="#F59E0B"/>
+    <!-- Chest details -->
+    <rect x="17" y="41" width="5" height="3" rx="1" fill="#D97706"/>
+    <rect x="26" y="41" width="5" height="3" rx="1" fill="#D97706"/>
+    <rect x="20" y="46" width="9" height="3" rx="1" fill="#D97706"/>
+    <!-- Arms -->
+    <rect x="0" y="36" width="5" height="14" rx="2.5" fill="#6B7280"/>
+    <rect x="43" y="36" width="5" height="14" rx="2.5" fill="#6B7280"/>
+    <!-- Feet -->
+    <rect x="10" y="56" width="10" height="5" rx="2.5" fill="#6B7280"/>
+    <rect x="28" y="56" width="10" height="5" rx="2.5" fill="#6B7280"/>
+    <!-- Ears -->
+    <rect x="5" y="14" width="4" height="8" rx="2" fill="#F59E0B"/>
+    <rect x="39" y="14" width="4" height="8" rx="2" fill="#F59E0B"/>
+  </g>
+  <!-- Text: "Caixa" in dark gray -->
+  <text x="58" y="40" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="bold" fill="#374151">Caixa</text>
+  <!-- Text: "Fácil" in yellow (no space before) -->
+  <text x="135" y="40" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="bold" fill="#F59E0B">Fácil</text>
+</svg>
