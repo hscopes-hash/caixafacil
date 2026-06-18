@@ -7327,13 +7327,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                           const file = event.target.files?.[0];
                           if (!file) return;
                           event.target.value = '';
-                          processarArquivoImagem(file, 'CÂMARA');
+                          processarArquivoImagem(file, 'CÂMERA');
                         }}
                       />
                       <Button className="w-full bg-gradient-to-r from-indigo-500 to-purple-600" asChild>
                         <span>
                           <Camera className="w-4 h-4 mr-2" />
-                          CÂMARA
+                          CÂMERA
                         </span>
                       </Button>
                     </label>
@@ -11260,12 +11260,8 @@ function ConfiguracoesPage({ empresaId, onShowGestao }: { empresaId: string; onS
   const getProviderLocal = (m: string) => m.includes('/') ? 'openrouter' : m.startsWith('glm-') ? 'glm' : 'gemini';
 
   const modelosIA = [
-    { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite (Padrão - Mais rápido)', provider: 'gemini' },
-    { value: 'gemini-3.1-flash', label: 'Gemini 3.1 Flash (Equilibrado)', provider: 'gemini' },
-    { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro (Preciso - Mais lento)', provider: 'gemini' },
-    { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite (Alternativa rápida)', provider: 'gemini' },
-    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Alternativa)', provider: 'gemini' },
-    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (Alternativa precisa)', provider: 'gemini' },
+    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Padrão - Equilibrado)', provider: 'gemini' },
+    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (Mais preciso - Mais lento)', provider: 'gemini' },
   ];
 
   useEffect(() => {
@@ -11277,7 +11273,7 @@ function ConfiguracoesPage({ empresaId, onShowGestao }: { empresaId: string; onS
     ])
       .then(([data, saasData]) => {
         setLlmApiKey(data.llmApiKey || '');
-        setLlmModel(data.llmModel || data.modeloPadrao || 'gemini-3.1-flash-lite');
+        setLlmModel(data.llmModel || data.modeloPadrao || 'gemini-2.5-flash');
         setSavedKeyGemini(data.llmApiKeyGemini || '');
         setSavedKeyGlm(data.llmApiKeyGlm || '');
         setSavedKeyOpenrouter(data.llmApiKeyOpenrouter || '');

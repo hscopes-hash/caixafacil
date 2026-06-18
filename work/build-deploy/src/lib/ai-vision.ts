@@ -12,6 +12,7 @@
  */
 
 import sharp from 'sharp';
+import crypto from 'node:crypto';
 import { db } from '@/lib/db';
 import { getModel } from '@/lib/zhipu-auth';
 
@@ -35,8 +36,10 @@ export const VERTEX_LOCATIONS_VISION = ['us-central1'];
 const VERTEX_MODEL_MAP: Record<string, string> = {
   'gemini-2.0-flash-001': 'gemini-2.5-flash',
   'gemini-2.5-flash-lite': 'gemini-2.5-flash',
-  'gemini-3.1-flash': 'gemini-3.5-flash',
-  'gemini-3.1-flash-lite': 'gemini-3.5-flash',
+  'gemini-3.1-flash': 'gemini-2.5-flash',
+  'gemini-3.1-flash-lite': 'gemini-2.5-flash',
+  'gemini-3.1-pro': 'gemini-2.5-pro',
+  'gemini-3.5-flash': 'gemini-2.5-flash',
 };
 
 export function getVertexModel(model?: string | null): string {
@@ -82,11 +85,91 @@ export async function compressImage(base64DataUrl: string): Promise<string> {
 }
 
 // ============================================
-// VERTEX AI — TOKEN DO METADATA SERVER
+// VERTEX AI — TOKEN DO METADATA SERVER / SA JSON
 // ============================================
 
 let _vertexTokenCache: { token: string; expiresAt: number } | null = null;
 let _vertexTokenFetching: Promise<string | null> | null = null;
+
+let _saCredentials: any = null;
+
+/**
+ * Retorna as credenciais da Service Account, se configuradas via
+ * GOOGLE_APPLICATION_CREDENTIALS_JSON (string JSON completa).
+ * Esse é o caminho recomendado para rodar fora do Cloud Run (ex: Vercel).
+ */
+function getServiceAccountCredentials(): any | null {
+  if (_saCredentials) return _saCredentials;
+  const raw = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  if (!raw) return null;
+  try {
+    _saCredentials = JSON.parse(raw);
+    return _saCredentials;
+  } catch {
+    console.warn('[VERTEX] GOOGLE_APPLICATION_CREDENTIALS_JSON inválido (JSON malformado)');
+    _saCredentials = null;
+    return null;
+  }
+}
+
+function base64url(buf: Buffer): string {
+  return buf
+    .toString('base64')
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+}
+
+/**
+ * Troca um JWT assinado com a private key da SA por um access_token OAuth2.
+ * Equivalente ao que google-auth-library faz internamente, mas sem dependência extra.
+ */
+async function getAccessTokenFromServiceAccount(): Promise<string | null> {
+  const sa = getServiceAccountCredentials();
+  if (!sa || !sa.private_key || !sa.client_email) return null;
+
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    iss: sa.client_email,
+    scope: 'https://www.googleapis.com/auth/cloud-platform',
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: now,
+    exp: now + 3600,
+  };
+
+  const header = { alg: 'RS256', typ: 'JWT', kid: sa.private_key_id };
+  const encodedHeader = base64url(Buffer.from(JSON.stringify(header)));
+  const encodedPayload = base64url(Buffer.from(JSON.stringify(payload)));
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+
+  const sign = crypto.createSign('RSA-SHA256');
+  sign.update(signingInput);
+  const signature = sign.sign(sa.private_key, 'base64')
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+
+  const assertion = `${signingInput}.${signature}`;
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion,
+    }),
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '<no body>');
+    console.warn('[VERTEX] Falha ao obter token via SA JSON:', res.status, text);
+    return null;
+  }
+
+  const data = await res.json() as { access_token?: string; expires_in?: number };
+  return data.access_token ?? null;
+}
 
 export async function getVertexAccessToken(): Promise<string | null> {
   if (_vertexTokenCache && Date.now() < _vertexTokenCache.expiresAt) {
@@ -99,13 +182,24 @@ export async function getVertexAccessToken(): Promise<string | null> {
 
   _vertexTokenFetching = (async () => {
     try {
+      // 1) Prioriza SA JSON quando configurada (caminho para Vercel/produção fora do Cloud Run)
+      const saToken = await getAccessTokenFromServiceAccount();
+      if (saToken) {
+        _vertexTokenCache = {
+          token: saToken,
+          expiresAt: Date.now() + 55 * 60 * 1000, // 55min (token OAuth2 dura 1h)
+        };
+        return saToken;
+      }
+
+      // 2) Fallback: metadata server (funciona em Cloud Run / GCE / GKE)
       const res = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token', {
         headers: { 'Metadata-Flavor': 'Google' },
         signal: AbortSignal.timeout(5000),
       });
 
       if (!res.ok) {
-        console.warn('[VERTEX] Metadata server indisponivel');
+        console.warn('[VERTEX] Metadata server indisponivel e SA JSON nao configurada. Configure GOOGLE_APPLICATION_CREDENTIALS_JSON para usar IA no Vercel.');
         return null;
       }
 
@@ -120,7 +214,7 @@ export async function getVertexAccessToken(): Promise<string | null> {
 
       return token;
     } catch {
-      console.warn('[VERTEX] Nao foi possivel acessar o metadata server');
+      console.warn('[VERTEX] Nao foi possivel obter token (metadata server e SA JSON falharam)');
       return null;
     } finally {
       _vertexTokenFetching = null;
