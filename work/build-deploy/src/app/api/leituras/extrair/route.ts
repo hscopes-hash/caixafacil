@@ -29,24 +29,37 @@ export async function POST(request: NextRequest) {
     // Prompt focado: APENAS localizar os valores ao lado dos rótulos configurados
     const nomeE = nomeEntrada || 'E';
     const nomeS = nomeSaida || 'S';
-    const prompt = `Esta é uma foto do display de uma máquina de entretenimento.
+    const prompt = `Esta é uma foto do display de uma máquina de entretenimento (como caça-níqueis, terminais de jogo, vending machines).
 
-Sua única tarefa: localize na imagem os textos "${nomeE}" e "${nomeS}".
+Sua tarefa é localizar na imagem os textos "${nomeE}" e "${nomeS}" (que podem estar em LEDs, LCDs, displays de 7 segmentos, ou impressos em painel) e ler o valor numérico que aparece ao lado ou abaixo de cada um deles.
 
-Para cada texto encontrado, leia o valor numérico que aparece ao lado/abaixo dele no display.
+INSTRUÇÕES DETALHADAS:
+1. Os rótulos "${nomeE}" e "${nomeS}" podem aparecer em qualquer cor (vermelho, verde, azul, branco, laranja) e fonte (digital, LED, LCD, impresso).
+2. Os números ao lado também podem estar em qualquer cor.
+3. Os números podem ter 1 a 7 dígitos, com ou sem separadores de milhar (ponto ou vírgula).
+4. Se houver múltiplos displays, priorize aqueles imediatamente adjacentes aos rótulos "${nomeE}" e "${nomeS}".
+5. Se a foto estiver escura, tente identificar os dígitos mesmo assim (displays LED costumam ser visíveis no escuro).
 
-Regras:
-- Retorne APENAS os dígitos numéricos visíveis no display, sem pontos e sem vírgulas.
-- Retorne o valor COMPLETO: se o display mostrar 1.234,56 retorne 123456 (ignore os separadores . e ,).
-- Mantenha todos os dígitos incluindo zeros à esquerda (ex: 0042, não 42).
-- Ignore pontos (.) e vírgulas (,) usados como separadores de milhar/decimal.
+REGRAS DE SAÍDA:
+- Retorne APENAS os dígitos numéricos visíveis, sem pontos e sem vírgulas.
+- Retorne o valor COMPLETO: se o display mostrar 1.234,56 retorne 123456 (ignore separadores).
+- Mantenha zeros à esquerda (ex: 0042, não 42).
 - Se "${nomeE}" não aparecer na foto, retorne null para entrada.
 - Se "${nomeS}" não aparecer na foto, retorne null para saida.
 - Se o valor for ilegível, retorne null.
-- NUNCA invente valores. Retorne null se não conseguir ler.
+- NUNCA invente valores. Retorne null se não conseguir ler com segurança.
+
+CAMPO "confianca":
+- 90-100: valores claramente legíveis, sem ambiguidade
+- 70-89: legíveis mas com alguma incerteza (ex: dígito que pode ser 3 ou 8)
+- 50-69: legíveis com dificuldade (ex: foto borrada, mas digitou parcialmente)
+- 0-49: não conseguiu ler com segurança (preferir null)
+
+CAMPO "observacoes":
+- Descreva brevemente o que viu (ex: "Display LED vermelho, 6 dígitos" ou "Foto escura, display parcialmente visível")
 
 Responda apenas com o JSON:
-{"entrada": "digitos ou null", "saida": "digitos ou null", "confianca": 0_ate_100, "observacoes": "texto"}`;
+{"entrada": "digitos ou null", "saida": "digitos ou null", "confianca": 0_a_100, "observacoes": "texto"}`;
 
     console.log(`[EXTRAIR] Modelo: ${model}`);
 

@@ -4111,7 +4111,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       // Feedback ao usuário
       if (data.entrada === null && data.saida === null) {
-        toast.warning('Não foi possível identificar os valores na foto. Tente outra foto mais clara.');
+        const obs = data.observacoes ? ` Detalhe: ${data.observacoes}` : '';
+        toast.warning(`Não foi possível identificar os valores na foto. Tente outra foto mais clara e certifique-se de que os rótulos "${maquinaFoto?.tipo?.nomeEntrada || 'E'}" e "${maquinaFoto?.tipo?.nomeSaida || 'S'}" estejam visíveis.${obs}`);
       } else if ((data.confianca || 0) < 70) {
         toast.warning(`Leitura com baixa confiança (${data.confianca || 0}%). Verifique os valores.`);
       } else {
