@@ -17,14 +17,16 @@ export async function GET(request: NextRequest) {
 
     // Buscar as datas distintas dos fechamentos (groupBy via raw query)
     // Ordena por data decrescente, pega os 30 mais recentes
+    // ⚠️ REGRA #6: nomes de tabela em minúsculo SEM aspas (leituras, usuarios)
+    //    Colunas podem ter aspas pois Prisma mantém camelCase
     const fechamentos = await db.$queryRawUnsafe(`
       SELECT 
         DATE_TRUNC('minute', "dataLeitura") as data_trunc,
         COUNT(*) as qtd_leituras,
         COUNT(CASE WHEN "fotoGcsPath" IS NOT NULL THEN 1 END) as qtd_fotos,
         STRING_AGG(DISTINCT u.nome, ', ') as operadores
-      FROM "Leitura" l
-      LEFT JOIN "Usuario" u ON u.id = l."usuarioId"
+      FROM leituras l
+      LEFT JOIN usuarios u ON u.id = l."usuarioId"
       WHERE l."clienteId" = $1
       GROUP BY DATE_TRUNC('minute', "dataLeitura")
       ORDER BY data_trunc DESC
