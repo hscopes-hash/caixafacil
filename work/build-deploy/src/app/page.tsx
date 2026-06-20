@@ -7548,8 +7548,28 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
           {/* Modal de Captura de Foto */}
           <Dialog open={fotoModalOpen} onOpenChange={(open) => {
-            // NUNCA fecha pelo onOpenChange (clique fora / Escape).
-            // So fecha pelos botoes X/Sair/Cancelar/Concluir explicitos.
+            // Permite fechar pelo X do Dialog (radix-ui chama onOpenChange(false))
+            // quando o usuario explicitamente clica no botao de fechar.
+            // Continua bloqueando clique fora e ESC — ambos tambem chamam
+            // onOpenChange(false), mas o X do Dialog tem data-slot="dialog-close"
+            // que e detectado abaixo.
+            if (open === false) {
+              // Verifica se o evento foi disparado pelo botao X do Dialog
+              // (DialogPrimitive.Close tem data-slot="dialog-close")
+              // ou por um botao com data-close-foto-modal="true"
+              const activeEl = document.activeElement as HTMLElement | null;
+              const isExplicitClose =
+                activeEl?.closest('[data-slot="dialog-close"]') ||
+                activeEl?.closest('[data-close-foto-modal="true"]');
+              if (isExplicitClose) {
+                setFotoModalOpen(false);
+                setFotoCapturada(null);
+                setLeituraExtraida(null);
+              }
+              // Caso contrario (clique fora, ESC), nao faz nada
+            } else {
+              setFotoModalOpen(true);
+            }
           }}>
             <DialogContent className="bg-card border-border text-foreground max-w-md max-h-[90vh] overflow-y-auto">
               <DialogHeader>
@@ -7705,6 +7725,21 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   </div>
                 )}
               </div>
+
+              {/* Botão Sair — sempre visível no rodapé */}
+              <DialogFooter className="mt-4">
+                <Button
+                  variant="outline"
+                  data-close-foto-modal="true"
+                  onClick={() => {
+                    setFotoModalOpen(false);
+                    setFotoCapturada(null);
+                    setLeituraExtraida(null);
+                  }}
+                >
+                  Sair
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
 
