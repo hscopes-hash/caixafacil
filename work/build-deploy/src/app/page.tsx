@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useRef, useCallback, startTransition } from 'react';
 import { useSwipeNavigation } from '@/hooks/use-swipe-navigation';
+import { useKioskMode } from '@/hooks/use-kiosk-mode';
 import { useTheme } from 'next-themes';
 import { useAuthStore, type Usuario, type Empresa, type NivelAcesso, type PreferenciasUsuario } from '@/stores/auth-store';
 import { SUPER_ADMIN_EMAIL } from '@/lib/saas-config';
@@ -13407,6 +13408,8 @@ function PWAInstallBanner() {
 // v2.41.0.263
 export default function App() {
   const { usuario, empresa, isAuthenticated, logout, updateEmpresa, preferencias, updatePreferencias } = useAuthStore();
+  // Modo quiosque: fullscreen automático após login, re-entra se usuário sair
+  useKioskMode(isAuthenticated);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
