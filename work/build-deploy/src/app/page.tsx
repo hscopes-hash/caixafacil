@@ -4990,20 +4990,38 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setSegundaViaLoading(true);
     setSegundaViaSelecionada(fechamento);
     try {
-      // Buscar todas as leituras do cliente na mesma data
-      const isoDate = fechamento.dataISO;
-      const [datePart, timePart] = isoDate.split('T');
-      const inicio = new Date(`${datePart}T00:00:00`);
-      const fim = new Date(`${datePart}T23:59:59`);
-      const res = await fetch(`/api/leituras?clienteId=${clienteSelecionado.id}&dataInicio=${inicio.toISOString()}&dataFim=${fim.toISOString()}`);
+      // ⚠️ BUG histórico: dataISO retornado pelo endpoint fechamentos-anteriores
+      // é construído em UTC (getUTC* no servidor), mas o frontend interpretava
+      // como hora local — causava "Nenhuma leitura encontrada".
+      //
+      // Solução: tratar tudo como UTC. Montar o range de busca em UTC e comparar
+      // os timestamps em milissegundos (sem depender de getHours/getMinutes que
+      // usam timezone do browser).
+      const isoDate = fechamento.dataISO; // ex: '2026-06-21T17:30:00' (UTC)
+
+      // Timestamp alvo (trata como UTC: anexa 'Z' se não tiver offset)
+      const targetIso = isoDate.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(isoDate)
+        ? isoDate
+        : `${isoDate}Z`;
+      const targetMs = new Date(targetIso).getTime();
+
+      // Range: dia inteiro em UTC baseado no dataISO
+      const [datePart] = isoDate.split('T');
+      const inicioUtc = new Date(`${datePart}T00:00:00Z`);
+      const fimUtc = new Date(`${datePart}T23:59:59Z`);
+
+      const res = await fetch(`/api/leituras?clienteId=${clienteSelecionado.id}&dataInicio=${inicioUtc.toISOString()}&dataFim=${fimUtc.toISOString()}`);
       if (!res.ok) throw new Error('Erro ao carregar leituras');
       const leituras: any[] = await res.json();
-      // Filtrar para o mesmo horário (±5 min)
-      const [h, min] = timePart.split(':').map(Number);
+
+      // Filtrar para o mesmo horário (±5 min) — comparando em MS (timezone-agnostic)
+      const JANELA_MS = 5 * 60 * 1000; // 5 minutos
       const filtradas = leituras.filter((l: any) => {
-        const d = new Date(l.dataLeitura);
-        return Math.abs(d.getHours() - h) <= 0 && Math.abs(d.getMinutes() - min) <= 5;
+        if (!l.dataLeitura) return false;
+        const leituraMs = new Date(l.dataLeitura).getTime();
+        return Math.abs(leituraMs - targetMs) <= JANELA_MS;
       });
+
       setSegundaViaDados(filtradas);
       setSegundaViaExtratoOpen(true);
     } catch (err: any) {

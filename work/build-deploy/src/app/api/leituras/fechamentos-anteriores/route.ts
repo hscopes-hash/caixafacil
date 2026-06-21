@@ -34,14 +34,19 @@ export async function GET(request: NextRequest) {
     `, clienteId);
 
     const resultado = (fechamentos as any[]).map((f: any) => {
+      // Usa explicitamente getUTC* para deixar claro que o dataISO é em UTC.
+      // O servidor Vercel roda em UTC por padrão, mas vamos ser explícitos
+      // para evitar bugs se o TZ do servidor mudar no futuro.
       const d = new Date(f.data_trunc);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      const h = String(d.getHours()).padStart(2, '0');
-      const min = String(d.getMinutes()).padStart(2, '0');
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(d.getUTCDate()).padStart(2, '0');
+      const h = String(d.getUTCHours()).padStart(2, '0');
+      const min = String(d.getUTCMinutes()).padStart(2, '0');
       return {
         data: `${day}/${m}/${y} ${h}:${min}`,
+        // ⚠️ dataISO é em UTC (sem sufixo 'Z' por compatibilidade com frontend,
+        // mas o frontend deve tratar como UTC ao montar Date objects)
         dataISO: `${y}-${m}-${day}T${h}:${min}:00`,
         operadores: f.operadores || '',
         qtdFotos: Number(f.qtd_fotos) || 0,
