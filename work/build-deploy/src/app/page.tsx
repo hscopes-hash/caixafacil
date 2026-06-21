@@ -165,6 +165,30 @@ function ThemeToggle() {
   );
 }
 
+// Abrir link do WhatsApp de forma confiável em mobile/PWA
+// (Função global no arquivo — usada tanto por LoginPage quanto por App)
+const abrirWhatsAppLink = (url: string) => {
+  // Em PWA/Capacitor, usar o plugin Browser
+  try {
+    if ((window as any).Capacitor?.isNativePlatform?.()) {
+      (window as any).Capacitor?.Plugins?.Browser?.open({ url });
+      return;
+    }
+  } catch {}
+  // Fallback: usar anchor element (mais confiavel que location.href em mobile PWA)
+  try {
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => document.body.removeChild(a), 300);
+  } catch {
+    window.location.href = url;
+  }
+};
+
 function LoginPage() {
   const [etapa, setEtapa] = useState<'empresa' | 'credenciais' | 'nova_empresa' | 'adicionar_empresa'>('empresa');
   const [deviceEmpresas, setDeviceEmpresas] = useState<Empresa[]>([]);
@@ -3391,7 +3415,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [debitosVencidosSalvos, setDebitosVencidosSalvos] = useState<number>(0);
   // Estados para Lançamento de Lote
   const [loteModalOpen, setLoteModalOpen] = useState(false);
-  const [fotosLote, setFotosLote] = useState<{ id: string; imagem: string; status: 'pendente' | 'processando' | 'concluido' | 'erro'; origem?: 'CÂMERA' | 'GALERIA' | 'LOTE' | 'WHATSAPP'; resultado?: { codigoMaquina: string; codigoReconhecido: boolean; entrada?: number | null; saida?: number | null; confianca: number; observacoes: string; confiancaOCR?: number }; erro?: string }[]>([]);
+  const [fotosLote, setFotosLote] = useState<{ id: string; imagem: string; status: 'pendente' | 'processando' | 'concluido' | 'erro'; origem?: 'CÂMERA' | 'GALERIA' | 'LOTE'; resultado?: { codigoMaquina: string; codigoReconhecido: boolean; entrada?: number | null; saida?: number | null; confianca: number; observacoes: string; confiancaOCR?: number }; erro?: string }[]>([]);
   const [processandoLote, setProcessandoLote] = useState(false);
   const [loteProgresso, setLoteProgresso] = useState(0);
   const loteIdCounter = useRef(0);
@@ -3407,11 +3431,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const entradaRefs = useRef<{ [key: number]: HTMLInputElement | null }>({});
   const saidaRefs = useRef<{ [key: number]: HTMLInputElement | null }>({});
   
-  // Estados para fotos recebidas via WhatsApp (Web Share Target + IndexedDB)
-  const [whatsappPanelOpen, setWhatsappPanelOpen] = useState(false);
-  const [whatsappPhotos, setWhatsappPhotos] = useState<Array<{ id: string; url: string; file: File; nome: string; timestamp: number }>>([]);
-  const [whatsappSelectedIds, setWhatsappSelectedIds] = useState<Set<string>>(new Set());
-  const [loadingWhatsapp, setLoadingWhatsapp] = useState(false);
+  // (Painel de fotos recebidas via WhatsApp Business removido — integração inativa)
   
   // Ref para o container da imagem em tela cheia (para pinch zoom)
   const imageContainerRef = useRef<HTMLDivElement | null>(null);
@@ -3608,28 +3628,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     }
   };
 
-  // Abrir link do WhatsApp de forma confiável em mobile/PWA
-  const abrirWhatsAppLink = (url: string) => {
-    // Em PWA/Capacitor, usar o plugin Browser
-    try {
-      if ((window as any).Capacitor?.isNativePlatform?.()) {
-        (window as any).Capacitor?.Plugins?.Browser?.open({ url });
-        return;
-      }
-    } catch {}
-    // Fallback: usar anchor element (mais confiavel que location.href em mobile PWA)
-    try {
-      const a = document.createElement('a');
-      a.href = url;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => document.body.removeChild(a), 300);
-    } catch {
-      window.location.href = url;
-    }
-  };
+  // (Função abrirWhatsAppLink movida para escopo global do arquivo — usada por LoginPage e App)
 
   // Enviar texto via WhatsApp — usa navigator.share (sem limite de tamanho) ou wa.me link
   const enviarWhatsAppTextoSeguro = async (texto: string, phone?: string, grupoUrl?: string) => {
@@ -4179,139 +4178,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setFotoOrigem(null);
   };
 
-  // ============================================
-  // FOTOS RECEBIDAS VIA WHATSAPP (Web Share Target + IndexedDB)
-  // ============================================
-
-  const WHATSAPP_DB_NAME = 'caixafacil-whatsapp';
-  const WHATSAPP_DB_VERSION = 1;
-  const WHATSAPP_STORE = 'photos';
-
-  const openWhatsappDB = (): Promise<IDBDatabase> => {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(WHATSAPP_DB_NAME, WHATSAPP_DB_VERSION);
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve(request.result);
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        if (!db.objectStoreNames.contains(WHATSAPP_STORE)) {
-          db.createObjectStore(WHATSAPP_STORE, { keyPath: 'id' });
-        }
-      };
-    });
-  };
-
-  const carregarWhatsappPhotos = async () => {
-    try {
-      setLoadingWhatsapp(true);
-      const db = await openWhatsappDB();
-      const results = await new Promise<Array<{ id: string; blob: Blob; nome: string; tipo: string; timestamp: number }>>((resolve, reject) => {
-        const tx = db.transaction(WHATSAPP_STORE, 'readonly');
-        const store = tx.objectStore(WHATSAPP_STORE);
-        const req = store.getAll();
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      });
-
-      const photos = results
-        .map(item => ({
-          id: item.id,
-          url: URL.createObjectURL(item.blob),
-          file: new File([item.blob], item.nome, { type: item.tipo || 'image/jpeg' }),
-          nome: item.nome,
-          timestamp: item.timestamp,
-        }))
-        .sort((a, b) => b.timestamp - a.timestamp);
-
-      setWhatsappPhotos(photos);
-    } catch (err) {
-      console.error('Erro ao carregar fotos WhatsApp:', err);
-      setWhatsappPhotos([]);
-    } finally {
-      setLoadingWhatsapp(false);
-    }
-  };
-
-  const deletarWhatsappPhoto = async (id: string) => {
-    try {
-      const db = await openWhatsappDB();
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(WHATSAPP_STORE, 'readwrite');
-        const store = tx.objectStore(WHATSAPP_STORE);
-        const req = store.delete(id);
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject(req.error);
-      });
-      await carregarWhatsappPhotos();
-      setWhatsappSelectedIds(prev => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    } catch (err) {
-      console.error('Erro ao deletar foto WhatsApp:', err);
-    }
-  };
-
-  const limparWhatsappPhotos = async () => {
-    try {
-      const db = await openWhatsappDB();
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(WHATSAPP_STORE, 'readwrite');
-        const store = tx.objectStore(WHATSAPP_STORE);
-        const req = store.clear();
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject(req.error);
-      });
-      setWhatsappPhotos([]);
-      setWhatsappSelectedIds(new Set());
-    } catch (err) {
-      console.error('Erro ao limpar fotos WhatsApp:', err);
-    }
-  };
-
-  const abrirPainelWhatsapp = async () => {
-    await carregarWhatsappPhotos();
-    setWhatsappPanelOpen(true);
-  };
-
-  const fecharPainelWhatsapp = () => {
-    setWhatsappPanelOpen(false);
-    setWhatsappSelectedIds(new Set());
-  };
-
-  const adicionarWhatsappSelecionadas = () => {
-    const selecionadas = whatsappPhotos.filter(p => whatsappSelectedIds.has(p.id));
-    if (selecionadas.length === 0) return;
-    selecionadas.forEach(p => {
-      try { processarArquivoImagem(p.file, 'WHATSAPP'); } catch (err) { console.error('Erro ao adicionar foto WhatsApp:', err); }
-    });
-    setWhatsappSelectedIds(new Set());
-    setWhatsappPanelOpen(false);
-    toast.success(`${selecionadas.length} foto(s) do WhatsApp adicionada(s) a fila`);
-  };
-
-  // Escutar mensagens do service worker sobre novas fotos WhatsApp
-  useEffect(() => {
-    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
-    const handler = (event: MessageEvent) => {
-      if (event.data?.type === 'WHATSAPP_PHOTOS_UPDATED') {
-        if (whatsappPanelOpen) {
-          carregarWhatsappPhotos();
-        }
-        toast.success(`${event.data.count || 1} foto(s) recebida(s) via WhatsApp!`);
-      }
-    };
-    navigator.serviceWorker.addEventListener('message', handler);
-    return () => { try { navigator.serviceWorker.removeEventListener('message', handler); } catch {} };
-  }, [whatsappPanelOpen]);
+  // (Seção de fotos recebidas via WhatsApp Business removida — integração inativa)
 
   // ============================================
   // LANÇAMENTO DE LOTE
   // ============================================
 
   // Função helper para processar arquivo de imagem e adicionar ao lote
-  const processarArquivoImagem = (file: File, origem: 'CÂMERA' | 'GALERIA' | 'LOTE' | 'WHATSAPP' = 'LOTE') => {
+  const processarArquivoImagem = (file: File, origem: 'CÂMERA' | 'GALERIA' | 'LOTE' = 'LOTE') => {
     try {
       const url = URL.createObjectURL(file);
       const img = new Image();
@@ -11268,17 +11142,7 @@ function ConfiguracoesPage({ empresaId, onShowGestao }: { empresaId: string; onS
   const [salvandoIA, setSalvandoIA] = useState(false);
   // Estado para ENV config flags (SaaS)
   const [envConfig, setEnvConfig] = useState({ llmModel: false, mercadopagoAccessToken: false, mercadopagoPublicKey: false });
-  // WhatsApp Business Config (SaaS)
-  const [waAccessToken, setWaAccessToken] = useState('');
-  const [waVerifyToken, setWaVerifyToken] = useState('');
-  const [waNumeroTelefone, setWaNumeroTelefone] = useState('');
-  const [waPhoneId, setWaPhoneId] = useState('');
-  const [waBusinessId, setWaBusinessId] = useState('');
-  const [waWebhookUrl, setWaWebhookUrl] = useState('');
-  const [waShowAccessToken, setWaShowAccessToken] = useState(false);
-  const [salvandoWa, setSalvandoWa] = useState(false);
-  const [testandoWa, setTestandoWa] = useState(false);
-  const [resultadoTesteWa, setResultadoTesteWa] = useState<{ sucesso: boolean; mensagem: string; detalhe?: string; tempoMs?: number } | null>(null);
+  // (WhatsApp Business API removido — integração inativa, foi substituída por Telegram)
   // Cielo Config
   const [cieloMerchantId, setCieloMerchantId] = useState('');
   const [cieloMerchantKey, setCieloMerchantKey] = useState('');
@@ -11332,13 +11196,6 @@ function ConfiguracoesPage({ empresaId, onShowGestao }: { empresaId: string; onS
         setSaasPixMerchantCidade(saasData.pixMerchantCidade || '');
         setSaasPixBancoNome(saasData.pixBancoNome || '');
         setSaasLlmModel(saasData.llmModel || 'gemini-2.5-flash');
-        // WhatsApp Business config
-        setWaAccessToken(saasData.whatsappAccessToken || '');
-        setWaVerifyToken(saasData.whatsappVerifyToken || 'caixafacil_webhook_2026');
-        setWaNumeroTelefone(saasData.whatsappNumero || '');
-        setWaPhoneId(saasData.whatsappPhoneId || '');
-        setWaBusinessId(saasData.whatsappBusinessId || '');
-        setWaWebhookUrl(saasData.whatsappWebhookUrl || '');
       })
       .catch((err) => {
         console.error('Erro ao carregar configurações:', err);
@@ -11535,71 +11392,6 @@ function ConfiguracoesPage({ empresaId, onShowGestao }: { empresaId: string; onS
       toast.error(message);
     } finally {
       setSalvandoIA(false);
-    }
-  };
-
-  // ===== WhatsApp Business — Salvar =====
-  const handleSalvarWhatsApp = async () => {
-    setSalvandoWa(true);
-    try {
-      const res = await fetch('/api/saas-config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mpAccessToken: saasMpAccessToken || null,
-          mpPublicKey: saasMpPublicKey || null,
-          pixChaveTipo: saasPixChaveTipo || null,
-          pixChave: saasPixChave || null,
-          pixMerchantNome: saasPixMerchantNome || null,
-          pixMerchantCidade: saasPixMerchantCidade || null,
-          pixBancoNome: saasPixBancoNome || null,
-          llmModel: saasLlmModel || null,
-          whatsappAccessToken: waAccessToken || null,
-          whatsappVerifyToken: waVerifyToken || null,
-          whatsappNumero: waNumeroTelefone || null,
-          whatsappPhoneId: waPhoneId || null,
-          whatsappBusinessId: waBusinessId || null,
-          whatsappWebhookUrl: waWebhookUrl || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao salvar config WhatsApp');
-      toast.success('Configuracoes do WhatsApp Business salvas com sucesso!');
-      setResultadoTesteWa(null);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao salvar config WhatsApp');
-    } finally {
-      setSalvandoWa(false);
-    }
-  };
-
-  // ===== WhatsApp Business — Testar =====
-  const handleTestarWhatsApp = async () => {
-    setTestandoWa(true);
-    setResultadoTesteWa(null);
-    try {
-      if (!waAccessToken) {
-        setResultadoTesteWa({ sucesso: false, mensagem: 'Access Token nao informado' });
-        setTestandoWa(false);
-        return;
-      }
-      const inicio = performance.now();
-      const res = await fetch(`https://graph.facebook.com/v21.0/${waPhoneId || 'me'}?fields=name,display_phone_number`, {
-        headers: { 'Authorization': `Bearer ${waAccessToken}` },
-      });
-      const tempoMs = Math.round(performance.now() - inicio);
-      if (res.ok) {
-        const data = await res.json();
-        const nome = data.name || data.display_phone_number || 'Conectado';
-        setResultadoTesteWa({ sucesso: true, mensagem: `Conexao OK — ${nome}`, detalhe: waPhoneId ? `Phone ID: ${waPhoneId}` : undefined, tempoMs });
-      } else {
-        const err = await res.json().catch(() => ({}));
-        setResultadoTesteWa({ sucesso: false, mensagem: `Erro ${res.status}`, detalhe: err.error?.message || err.message || 'Token invalido ou expirado', tempoMs });
-      }
-    } catch (err: any) {
-      setResultadoTesteWa({ sucesso: false, mensagem: 'Erro de conexao', detalhe: err.message });
-    } finally {
-      setTestandoWa(false);
     }
   };
 
@@ -11872,161 +11664,7 @@ function ConfiguracoesPage({ empresaId, onShowGestao }: { empresaId: string; onS
         </CardContent>
       </Card>
 
-      {/* ========== SECAO — WHATSAPP BUSINESS (SaaS) ========== */}
-      <div className="flex items-center gap-3 mt-4 mb-2">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
-          <MessageCircle className="w-5 h-5 text-white" />
-        </div>
-        <div>
-          <h2 className="text-lg font-bold text-foreground">Integracao WhatsApp Business</h2>
-          <p className="text-xs text-muted-foreground">Receba fotos de leituras via WhatsApp e processe automaticamente pelo bot</p>
-        </div>
-      </div>
-
-      {/* Card WhatsApp Business */}
-      <Card className="border-green-500/20 bg-gradient-to-br from-green-500/5 to-emerald-500/5">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <MessageCircle className="w-4 h-4 text-green-500" />
-            WhatsApp Business API
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Configure o WhatsApp Business Cloud API para receber fotos de leituras dos operadores. As imagens serao enfileiradas para processamento automatico (lote OCR).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {/* Access Token */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground flex items-center gap-1.5"><Lock className="w-3 h-3" />Access Token (Permanente)</Label>
-            <div className="relative">
-              <Input type={waShowAccessToken ? 'text' : 'password'} value={waAccessToken} onChange={(e) => setWaAccessToken(e.target.value)} placeholder="EAAxxxxxxxxxxxxxxxxxxxxxxxx" className="bg-muted border-border pr-10 text-sm font-mono" />
-              <button type="button" onClick={() => setWaShowAccessToken(!waShowAccessToken)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                {waShowAccessToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-            <p className="text-[10px] text-muted-foreground">Token permanente gerado no Meta Developer Dashboard. Nao expira automaticamente.</p>
-          </div>
-
-          {/* Verify Token */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground flex items-center gap-1.5"><Shield className="w-3 h-3" />Verify Token (Webhook)</Label>
-            <Input type="text" value={waVerifyToken} onChange={(e) => setWaVerifyToken(e.target.value)} placeholder="caixafacil_webhook_2026" className="bg-muted border-border text-sm font-mono" />
-            <p className="text-[10px] text-muted-foreground">Token personalizado para verificar o webhook no Meta. Deve ser igual ao configurado no Meta Developer.</p>
-          </div>
-
-          {/* Phone Number ID */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground flex items-center gap-1.5"><Phone className="w-3 h-3" />Phone Number ID</Label>
-            <Input type="text" value={waPhoneId} onChange={(e) => setWaPhoneId(e.target.value)} placeholder="100234567890" className="bg-muted border-border text-sm font-mono" />
-          </div>
-
-          {/* Business Account ID */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground flex items-center gap-1.5"><Building2 className="w-3 h-3" />Business Account ID</Label>
-            <Input type="text" value={waBusinessId} onChange={(e) => setWaBusinessId(e.target.value)} placeholder="100234567890" className="bg-muted border-border text-sm font-mono" />
-          </div>
-
-          {/* Numero do WhatsApp do Bot */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground flex items-center gap-1.5"><Smartphone className="w-3 h-3" />Numero do WhatsApp do Bot</Label>
-            <Input type="text" value={waNumeroTelefone} onChange={(e) => setWaNumeroTelefone(e.target.value)} placeholder="5511999999999" className="bg-muted border-border text-sm font-mono" />
-            <p className="text-[10px] text-muted-foreground">Numero do WhatsApp conectado ao bot (com codigo do pais, sem +). Os operadores enviarao fotos para este numero.</p>
-          </div>
-
-          {/* Webhook URL */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground flex items-center gap-1.5"><Globe className="w-3 h-3" />Webhook URL (Callback)</Label>
-            <div className="relative">
-              <Input type="text" value={waWebhookUrl} onChange={(e) => setWaWebhookUrl(e.target.value)} placeholder="https://caixafacil-app-xxxxx.run.app/api/whatsapp/webhook" className="bg-muted border-border pr-10 text-sm font-mono" />
-              <button type="button" onClick={() => { navigator.clipboard.writeText(waWebhookUrl || ''); toast.success('URL copiada!'); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" title="Copiar URL">
-                <Copy className="w-4 h-4" />
-              </button>
-            </div>
-            <p className="text-[10px] text-muted-foreground">Cole esta URL no campo Webhook do Meta Developer Dashboard. Eventos: messages (messages).</p>
-          </div>
-
-          {/* Status */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {waAccessToken && waPhoneId ? (
-              <Badge className="bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30 text-xs"><CheckCircle className="w-3 h-3 mr-1" />WhatsApp Business configurado</Badge>
-            ) : (
-              <Badge variant="secondary" className="text-muted-foreground text-xs"><Circle className="w-3 h-3 mr-1" />Preencha Access Token e Phone ID</Badge>
-            )}
-            {waNumeroTelefone && (
-              <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30 text-xs"><Smartphone className="w-3 h-3 mr-1" />Bot: {waNumeroTelefone}</Badge>
-            )}
-          </div>
-
-          {/* Botoes Salvar + Testar */}
-          <div className="flex gap-2 pt-1">
-            <Button onClick={handleSalvarWhatsApp} disabled={salvandoWa} size="sm" className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white text-xs">
-              {salvandoWa ? <><div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1" />Salvando...</> : <><Save className="w-3 h-3 mr-1" />Salvar</>}
-            </Button>
-            <Button variant="outline" onClick={handleTestarWhatsApp} disabled={testandoWa || !waAccessToken} size="sm" className="flex-1 border-green-500/30 text-green-500 hover:bg-green-500/10 text-xs">
-              {testandoWa ? <><div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1" />Testando...</> : <><Zap className="w-3 h-3 mr-1" />Testar</>}
-            </Button>
-          </div>
-
-          {/* Resultado do teste */}
-          {resultadoTesteWa && (
-            <div className={`flex items-center gap-2 rounded-lg p-2 text-xs ${resultadoTesteWa.sucesso ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-              {resultadoTesteWa.sucesso ? <CheckCircle className="w-3.5 h-3.5 shrink-0" /> : <XCircle className="w-3.5 h-3.5 shrink-0" />}
-              <span className="font-medium">{resultadoTesteWa.mensagem}</span>
-              {resultadoTesteWa.tempoMs && <span className="ml-auto text-muted-foreground">{resultadoTesteWa.tempoMs}ms</span>}
-            </div>
-          )}
-
-          <Separator className="bg-border" />
-
-          {/* Links uteis */}
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">LINKS UTEIS:</p>
-            <div className="flex flex-col gap-1.5">
-              <a href="https://developers.facebook.com/apps/"
-                target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-xs text-green-500 hover:text-green-400 transition-colors py-1">
-                <ExternalLink className="w-3 h-3" />
-                Meta Developer Dashboard (Criar App)
-              </a>
-              <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started"
-                target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-xs text-green-500 hover:text-green-400 transition-colors py-1">
-                <BookOpen className="w-3 h-3" />
-                Guia de Inicio Rapido — Cloud API
-              </a>
-              <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/reference/webhooks"
-                target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-xs text-green-500 hover:text-green-400 transition-colors py-1">
-                <Globe className="w-3 h-3" />
-                Configurar Webhooks
-              </a>
-              <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/guides/set-up-webhooks"
-                target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-xs text-green-500 hover:text-green-400 transition-colors py-1">
-                <Shield className="w-3 h-3" />
-                Gerar Token Permanente
-              </a>
-              <a href="https://business.facebook.com/settings/whatsapp-business-api"
-                target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-xs text-green-500 hover:text-green-400 transition-colors py-1">
-                <Smartphone className="w-3 h-3" />
-                Gerenciamento do Numero WhatsApp
-              </a>
-            </div>
-          </div>
-
-          {/* Como funciona */}
-          <div className="rounded-lg bg-muted/50 p-3 space-y-2">
-            <p className="text-xs font-semibold text-foreground flex items-center gap-1.5"><HelpCircle className="w-3 h-3" />Como funciona?</p>
-            <ol className="text-[11px] text-muted-foreground space-y-1 list-decimal list-inside">
-              <li>O operador abre a tela de leitura e seleciona as fotos das maquinas</li>
-              <li>As fotos sao enviadas ao WhatsApp do bot configurado acima</li>
-              <li>O webhook recebe as imagens e as salva como fotos pendentes</li>
-              <li>O operador abre o app e processa as fotos na fila de lotes (OCR automatico)</li>
-            </ol>
-          </div>
-        </CardContent>
-      </Card>
+      {/* (Secção WhatsApp Business API removida — integração inativa, foi substituída por Telegram) */}
 
       {/* Gestão de Empresas */}
 
