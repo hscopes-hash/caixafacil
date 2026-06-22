@@ -355,6 +355,15 @@ function LoginPage() {
       }
     }
 
+    // ⚠️ Kiosk Mode: chamar ANTES do fetch assíncrono para manter user gesture
+    // requestFullscreen() em mobile requer gesture direto — se chamado após
+    // await, perde o contexto e o navegador bloqueia silenciosamente.
+    try {
+      (window as any).__caixafacil_requestFullscreenOnLogin?.();
+    } catch (e) {
+      console.warn('[Login] Falha ao ativar fullscreen no clique:', e);
+    }
+
     setLoading(true);
     try {
       const res = await fetch('/api/auth/login', {
@@ -13095,7 +13104,14 @@ function PWAInstallBanner() {
 export default function App() {
   const { usuario, empresa, isAuthenticated, logout, updateEmpresa, preferencias, updatePreferencias } = useAuthStore();
   // Modo quiosque: fullscreen automático após login, re-entra se usuário sair
-  useKioskMode(isAuthenticated);
+  // requestFullscreenOnLogin: chamar DENTRO do clique do botão login (mantém user gesture)
+  const { requestFullscreenOnLogin } = useKioskMode(isAuthenticated);
+  // Disponibiliza globalmente para o componente LoginPage usar
+  // (LoginPage é renderizado quando !isAuthenticated, dentro do mesmo escopo App)
+  useEffect(() => {
+    (window as any).__caixafacil_requestFullscreenOnLogin = requestFullscreenOnLogin;
+    return () => { delete (window as any).__caixafacil_requestFullscreenOnLogin; };
+  }, [requestFullscreenOnLogin]);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
