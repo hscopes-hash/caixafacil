@@ -11,10 +11,14 @@
  * Env vars necessárias:
  *   FOTO_ENCRYPTION_KEY — chave AES-256 (32 bytes hex, ex: "0123...1f")
  *   FOTO_BUCKET         — nome do bucket GCS (default: caixafacil-leitura-fotos)
+ *   GOOGLE_APPLICATION_CREDENTIALS_JSON — (Vercel/produção fora do Cloud Run)
+ *                                        Service Account JSON completa para
+ *                                        autenticar no GCS via OAuth2 JWT
  */
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import { deflateSync, inflateSync } from 'zlib';
+import * as crypto from 'crypto';
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const BUCKET = process.env.FOTO_BUCKET || 'caixafacil-leitura-fotos';
@@ -34,27 +38,132 @@ function getEncryptionKey(): Buffer {
   return Buffer.from(hex, 'hex');
 }
 
-// ── Token GCS via metadata server (Cloud Run) ou fallback JWT ────────────────
+// ── Token GCS: SA JSON (Vercel) com fallback para metadata server (Cloud Run) ─
 
-async function getGcsAccessToken(): Promise<string> {
-  // No Cloud Run, o metadata server fornece token automaticamente
+let _gcsTokenCache: { token: string; expiresAt: number } | null = null;
+let _gcsTokenFetching: Promise<string | null> | null = null;
+let _gcsSaCredentials: any = null;
+
+function getGcsServiceAccount(): any | null {
+  if (_gcsSaCredentials) return _gcsSaCredentials;
+  const raw = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  if (!raw) return null;
   try {
-    const res = await fetch(
-      'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
-      {
-        headers: { 'Metadata-Flavor': 'Google' },
-        signal: AbortSignal.timeout(5000),
-      }
-    );
-    if (res.ok) {
-      const data = await res.json();
-      return data.access_token as string;
-    }
+    _gcsSaCredentials = JSON.parse(raw);
+    return _gcsSaCredentials;
   } catch {
-    // Metadata server indisponível (dev local) — continua sem token
+    console.warn('[GCS-FOTOS] GOOGLE_APPLICATION_CREDENTIALS_JSON inválido');
+    _gcsSaCredentials = null;
+    return null;
+  }
+}
+
+function b64url(buf: Buffer): string {
+  return buf.toString('base64')
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+}
+
+async function getGcsAccessTokenFromSA(): Promise<string | null> {
+  const sa = getGcsServiceAccount();
+  if (!sa || !sa.private_key || !sa.client_email) return null;
+
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    iss: sa.client_email,
+    scope: 'https://www.googleapis.com/auth/devstorage.read_write',
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: now,
+    exp: now + 3600,
+  };
+  const header = { alg: 'RS256', typ: 'JWT', kid: sa.private_key_id };
+
+  const encodedHeader = b64url(Buffer.from(JSON.stringify(header)));
+  const encodedPayload = b64url(Buffer.from(JSON.stringify(payload)));
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+
+  const sign = crypto.createSign('RSA-SHA256');
+  sign.update(signingInput);
+  const signature = sign.sign(sa.private_key, 'base64')
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+
+  const assertion = `${signingInput}.${signature}`;
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion,
+    }),
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '<no body>');
+    console.warn('[GCS-FOTOS] Falha ao obter token via SA JSON:', res.status, text);
+    return null;
+  }
+  const data = await res.json() as { access_token?: string };
+  return data.access_token ?? null;
+}
+
+/**
+ * Obtém access token para o GCS.
+ * 1) Prioriza SA JSON (GOOGLE_APPLICATION_CREDENTIALS_JSON) — funciona no Vercel
+ * 2) Fallback: metadata server (Cloud Run / GCE)
+ */
+async function getGcsAccessToken(): Promise<string> {
+  // Cache token por 55 min (token OAuth2 dura 1h)
+  if (_gcsTokenCache && Date.now() < _gcsTokenCache.expiresAt) {
+    return _gcsTokenCache.token;
   }
 
-  throw new Error('Metadata server indisponível — necessário Cloud Run para autenticar no GCS');
+  if (_gcsTokenFetching) {
+    return _gcsTokenFetching as Promise<string>;
+  }
+
+  _gcsTokenFetching = (async () => {
+    try {
+      // 1) SA JSON (Vercel/produção fora do Cloud Run)
+      const saToken = await getGcsAccessTokenFromSA();
+      if (saToken) {
+        _gcsTokenCache = {
+          token: saToken,
+          expiresAt: Date.now() + 55 * 60 * 1000,
+        };
+        return saToken;
+      }
+
+      // 2) Metadata server (Cloud Run / GCE)
+      const res = await fetch(
+        'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+        {
+          headers: { 'Metadata-Flavor': 'Google' },
+          signal: AbortSignal.timeout(5000),
+        }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const token = data.access_token as string;
+        const expiresIn = (data.expires_in || 3600) * 1000;
+        _gcsTokenCache = {
+          token,
+          expiresAt: Date.now() + expiresIn - 60_000,
+        };
+        return token;
+      }
+
+      throw new Error('Metadata server indisponível e SA JSON não configurada. Configure GOOGLE_APPLICATION_CREDENTIALS_JSON para usar GCS no Vercel.');
+    } finally {
+      _gcsTokenFetching = null;
+    }
+  })();
+
+  return _gcsTokenFetching as Promise<string>;
 }
 
 // ── GCS REST helpers ─────────────────────────────────────────────────────
