@@ -4343,6 +4343,27 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 novasMaquinas[indexMaquina].diferencaEntrada - novasMaquinas[indexMaquina].diferencaSaida
               );
 
+              // ⚠️ CORREÇÃO: Guardar foto processada (com tarja vermelha) na máquina
+              // Antes estava faltando — causava fotos sem tarja no GCS e no relatório 2a via
+              try {
+                const nowTs = new Date();
+                const dataStrTarja = `${nowTs.getDate().toString().padStart(2, '0')}/${(nowTs.getMonth() + 1).toString().padStart(2, '0')}/${nowTs.getFullYear().toString().slice(-2)} ${nowTs.getHours().toString().padStart(2, '0')}:${nowTs.getMinutes().toString().padStart(2, '0')}`;
+                const fotoComTarja = await adicionarTarjaNaFoto(
+                  foto.imagem,
+                  dataStrTarja,
+                  usuarioNome,
+                  data.entrada ?? null,
+                  data.saida ?? null,
+                  foto.origem || 'LOTE'
+                );
+                novasMaquinas[indexMaquina].fotoProcessada = fotoComTarja;
+                console.log(`[Lote] Tarja aplicada à máquina ${data.codigoMaquina}`);
+              } catch (err) {
+                console.warn(`[Lote] Falha ao aplicar tarja na máquina ${data.codigoMaquina}:`, err);
+                // Fallback: usar foto original sem tarja (melhor que null)
+                novasMaquinas[indexMaquina].fotoProcessada = foto.imagem;
+              }
+
               maquinasSnapshot = novasMaquinas;
               setMaquinas(novasMaquinas);
 
