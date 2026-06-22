@@ -2851,6 +2851,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [resumoTelegramEnviado, setResumoTelegramEnviado] = useState(false);
   const [maquinaFoto, setMaquinaFoto] = useState<MaquinaLeitura | null>(null);
   const [fotoCapturada, setFotoCapturada] = useState<string | null>(null);
+  // ⚠️ Ref para a foto COM tarja vermelha — evita race condition com estado assíncrono
+  // Usado em aplicarLeituraExtraida() para garantir que fotoProcessada sempre tenha tarja
+  const fotoComTarjaRef = useRef<string | null>(null);
   // Estado para extração de leitura
   const [extraindoLeitura, setExtraindoLeitura] = useState(false);
   const [leituraExtraida, setLeituraExtraida] = useState<{ entrada: number | null; saida: number | null; confianca?: number } | null>(null);
@@ -4116,10 +4119,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           fotoOrigem
         );
         setFotoCapturada(fotoComTarja);
+        // ⚠️ Armazena em ref para evitar race condition com estado assíncrono
+        // aplicarLeituraExtraida() usa fotoComTarjaRef.current em vez de fotoCapturada
+        fotoComTarjaRef.current = fotoComTarja;
         console.log('Tarja adicionada com sucesso');
       } catch (error) {
         console.error('Erro ao adicionar tarja na foto:', error);
         // Continua mesmo sem a tarja
+        // Fallback: usar foto original (sem tarja) no ref
+        fotoComTarjaRef.current = fotoCapturada;
       }
 
       // Sempre definir os valores extraídos (mesmo que sejam null)
@@ -4188,7 +4196,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setMaquinas(novasMaquinas);
     
     // Guardar foto processada (com tarja) diretamente no objeto da máquina
-    novasMaquinas[index].fotoProcessada = fotoCapturada || null;
+    // ⚠️ Usa fotoComTarjaRef.current (não fotoCapturada) para evitar race condition:
+    // setFotoCapturada(fotoComTarja) pode não ter re-renderizado ainda quando o
+    // usuário clica em APLICAR VALORES, capturando foto original sem tarja.
+    novasMaquinas[index].fotoProcessada = fotoComTarjaRef.current || fotoCapturada || null;
     setMaquinas([...novasMaquinas]);
     
     toast.success('Valores aplicados com sucesso!');
@@ -4199,6 +4210,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setMaquinaFoto(null);
     setLeituraExtraida(null);
     setFotoOrigem(null);
+    // Limpar ref para próxima foto
+    fotoComTarjaRef.current = null;
   };
 
   // (Seção de fotos recebidas via WhatsApp Business removida — integração inativa)
