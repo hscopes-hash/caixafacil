@@ -6031,22 +6031,43 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           // Texto ao lado da foto
           const textX = padding + 210;
           ctx.fillStyle = '#000000';
+
+          // Linha 1: Código + Nome + Moeda (na mesma linha)
           ctx.font = FONT_LABEL;
-          ctx.fillText(m.codigo, textX, y + 40);
-          ctx.font = FONT_VALUE;
-          ctx.fillText((m.tipo?.descricao || '').toUpperCase(), textX, y + 70);
+          const nomeMaquina = (m.tipo?.descricao || '').toUpperCase();
+          const moeda = lws[0].moeda || 'M001';
+          const linha1 = `${m.codigo} - ${nomeMaquina} [${moeda}]`;
+          ctx.fillText(linha1, textX, y + 40);
 
+          // Linha 2: Ent: AAA - BBB = CCC  (Atual - Anterior = Diferença)
           ctx.font = FONT_VALUE;
-          ctx.fillText(`Entrada: ${lws[0].entradaAnterior || 0} → ${lws[0].entradaNova || 0}`, textX, y + 110);
-          ctx.fillText(`Saída: ${lws[0].saidaAnterior || 0} → ${lws[0].saidaNova || 0}`, textX, y + 140);
+          const entAtual = lws[0].entradaNova || 0;
+          const entAnt = lws[0].entradaAnterior || 0;
+          const entDif = entAtual - entAnt;
+          ctx.fillText(`Ent: ${entAtual} - ${entAnt} = ${entDif}`, textX, y + 75);
 
+          // Linha 3: Total da entrada convertido em valor (usando moeda)
           ctx.font = FONT_LABEL;
           ctx.fillStyle = '#0066cc';
-          ctx.fillText(`Dif. Entrada: ${formatNumber(e)}`, textX, y + 175);
-          ctx.fillStyle = '#cc3300';
-          ctx.fillText(`Dif. Saída: ${formatNumber(s)}`, textX, y + 205);
+          ctx.fillText(`Total Entrada: ${formatNumber(e)}`, textX, y + 105);
           ctx.fillStyle = '#000000';
-          ctx.fillText(`Saldo: ${formatNumber(lws[0].saldo)}`, textX, y + 235);
+
+          // Linha 4: Saída: AAA - BBB = CCC  (Atual - Anterior = Diferença)
+          ctx.font = FONT_VALUE;
+          const saiAtual = lws[0].saidaNova || 0;
+          const saiAnt = lws[0].saidaAnterior || 0;
+          const saiDif = saiAtual - saiAnt;
+          ctx.fillText(`Saída: ${saiAtual} - ${saiAnt} = ${saiDif}`, textX, y + 140);
+
+          // Linha 5: Total da saída convertido em valor (usando moeda)
+          ctx.font = FONT_LABEL;
+          ctx.fillStyle = '#cc3300';
+          ctx.fillText(`Total Saída: ${formatNumber(s)}`, textX, y + 170);
+          ctx.fillStyle = '#000000';
+
+          // Linha 6: Saldo
+          ctx.font = FONT_LABEL;
+          ctx.fillText(`Saldo: ${formatNumber(lws[0].saldo)}`, textX, y + 205);
 
           y += CARD_HEIGHT;
         }
@@ -8754,12 +8775,22 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                                     </div>
                                     {/* Dados da máquina */}
                                     <div className="flex-1 text-sm">
-                                      <p className="font-bold text-base">{m.codigo}</p>
-                                      <p className="text-xs uppercase">{m.tipo?.descricao || ''}</p>
-                                      <p>Ent: {lws[0].entradaAnterior || 0} → {lws[0].entradaNova || 0}</p>
-                                      <p>Saída: {lws[0].saidaAnterior || 0} → {lws[0].saidaNova || 0}</p>
-                                      <p className="text-blue-700">Dif E: {formatNumber(e)}</p>
-                                      <p className="text-red-700">Dif S: {formatNumber(s)}</p>
+                                      {/* Linha 1: Código + Nome + Moeda (mesma linha) */}
+                                      <p className="font-bold text-base">
+                                        {m.codigo} - {(m.tipo?.descricao || '').toUpperCase()} [{lws[0].moeda || 'M001'}]
+                                      </p>
+                                      {/* Linha 2: Ent: AAA - BBB = CCC (Atual - Anterior = Diferença) */}
+                                      <p>
+                                        Ent: {lws[0].entradaNova || 0} - {lws[0].entradaAnterior || 0} = {(lws[0].entradaNova || 0) - (lws[0].entradaAnterior || 0)}
+                                      </p>
+                                      {/* Linha 3: Total entrada convertido */}
+                                      <p className="text-blue-700 font-medium">Total Entrada: {formatNumber(e)}</p>
+                                      {/* Linha 4: Saída: AAA - BBB = CCC */}
+                                      <p>
+                                        Saída: {lws[0].saidaNova || 0} - {lws[0].saidaAnterior || 0} = {(lws[0].saidaNova || 0) - (lws[0].saidaAnterior || 0)}
+                                      </p>
+                                      {/* Linha 5: Total saída convertido */}
+                                      <p className="text-red-700 font-medium">Total Saída: {formatNumber(s)}</p>
                                     </div>
                                   </div>
                                 );
