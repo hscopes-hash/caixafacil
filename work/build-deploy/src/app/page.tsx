@@ -5164,87 +5164,70 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     try {
       toast.loading('Enviando para Telegram...', { id: 'telegram-2via' });
 
-      // Gerar texto do extrato (mesma lógica do WhatsApp)
-      const fmt = (n: number) => Math.abs(n).toFixed(2).replace('.', ',');
-      const modo2via = clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANCA' : 'LEITURA';
-      const porMaquina = new Map<string, any[]>();
-      const despesaItens: { descricao: string; valor: number }[] = [];
-      const receitaItens: { descricao: string; valor: number }[] = [];
-      segundaViaDados.forEach((l: any) => {
-        const temLeitura = l.entradaNova > 0 || l.saidaNova > 0 || l.diferencaEntrada !== 0 || l.diferencaSaida !== 0;
-        if (temLeitura) { if (!porMaquina.has(l.maquinaId)) porMaquina.set(l.maquinaId, []); porMaquina.get(l.maquinaId)!.push(l); }
-        if (l.despesa) { try { const p = JSON.parse(l.despesa); if (Array.isArray(p)) p.forEach((d: any) => { if (d.valor > 0) despesaItens.push(d); }); } catch {} }
-        if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor > 0) receitaItens.push(r); }); } catch {} }
-      });
-      const despesasFinal = Array.from(new Map(despesaItens.map(d => [d.descricao, d])).values());
-      const receitasFinal = Array.from(new Map(receitaItens.map(r => [r.descricao, r])).values());
-      let texto = `${clienteSelecionado.nome.toUpperCase()}\nData: ${segundaViaSelecionada?.data}\n`;
-      const operadoresSet = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => l.usuario.nome));
-      const opList = Array.from(operadoresSet);
-      if (opList.length > 0) texto += `Operador(es): ${opList.join(', ')}\n`;
-      texto += `_____________\n`;
-      let totalEntradas = 0; let totalSaidas = 0; let idx = 0;
-      porMaquina.forEach((lws) => {
-        const m = lws[0].maquina;
-        if (idx > 0) texto += `_____________\n`;
-        texto += `${m.codigo} - ${(m.tipo?.descricao || '').toUpperCase()}\n`;
-        lws.forEach((l: any) => {
-          const e = calcularValor(l.moeda, l.diferencaEntrada);
-          const s = calcularValor(l.moeda, l.diferencaSaida);
-          totalEntradas += e; totalSaidas += s;
-          texto += `E ${String(l.entradaAnterior || 0).padStart(8)} ${String(l.entradaNova || 0).padStart(8)}___${fmt(e)}\n`;
-          texto += `S ${String(l.saidaAnterior || 0).padStart(8)} ${String(l.saidaNova || 0).padStart(8)}___${fmt(s)}\n`;
-          texto += `Saldo: ${fmt(l.saldo)}\n`;
-        }); idx++;
-      });
-      texto += `_____________\n`;
-      texto += `Qtde Maqs: ${porMaquina.size} | Entradas: ${fmt(totalEntradas)} | Saidas: ${fmt(totalSaidas)}\n`;
-      const jogado = totalEntradas - totalSaidas;
-      const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
-      if (modo2via === 'COBRANCA') { texto += `Jogado: ${fmt(jogado)} | Cliente (${acertoPct}%): ${fmt(jogado * (acertoPct / 100))}\n`; }
-      const totalReceitas = receitasFinal.reduce((a, r) => a + r.valor, 0);
-      const totalDespesas = despesasFinal.reduce((a, d) => a + d.valor, 0);
-      if (receitasFinal.length > 0) { receitasFinal.forEach(r => { texto += `  ${r.descricao}: ${fmt(r.valor)}\n`; }); texto += `Total Entradas: ${fmt(totalReceitas)}\n`; }
-      if (despesasFinal.length > 0) { despesasFinal.forEach(d => { texto += `  ${d.descricao}: ${fmt(d.valor)}\n`; }); texto += `Total Saidas: ${fmt(totalDespesas)}\n`; }
-      const temItensExtras = totalReceitas > 0 || totalDespesas > 0;
-      const entradaFinal = modo2via === 'COBRANCA' ? jogado : (temItensExtras ? totalReceitas : jogado);
-      const saidaFinal = temItensExtras ? totalDespesas : 0;
-      const fechamentoFinal = temItensExtras ? saidaFinal - entradaFinal : entradaFinal;
-      if (modo2via !== 'COBRANCA') {
-        texto += `_____________\nENTRADA: ${fmt(entradaFinal)} | SAIDA: ${fmt(saidaFinal)} | FECHAMENTO: ${fmt(fechamentoFinal)}\n`;
-      }
+      // 1) Gerar imagem do extrato via canvas (ao invés de texto)
+      const extratoImagem = await gerarExtratoImagemSegundaVia();
+      console.log('[Telegram 2a via] Extrato imagem gerada:', extratoImagem ? `${extratoImagem.length} chars` : 'null');
 
-      // Buscar fotos do GCS
+      // 2) Buscar fotos do GCS para TODAS as leituras que têm fotoGcsPath
+      // (não apenas a primeira — bug anterior: find() retornava só 1 leitura)
       const fotos: string[] = [];
-      const gcsPath = segundaViaDados.find((l: any) => l.fotoGcsPath)?.fotoGcsPath;
-      if (gcsPath) {
+      const gcsPathsUnicos = new Set<string>();
+      segundaViaDados.forEach((l: any) => {
+        if (l.fotoGcsPath) gcsPathsUnicos.add(l.fotoGcsPath);
+      });
+      console.log('[Telegram 2a via] GCS paths únicos:', gcsPathsUnicos.size);
+
+      const token = useAuthStore.getState().token;
+      for (const gcsPath of gcsPathsUnicos) {
         try {
-          const token = useAuthStore.getState().token;
           const fotoRes = await fetch(`/api/leituras/download-fotos?gcsPath=${encodeURIComponent(gcsPath)}`, { headers: { 'Authorization': `Bearer ${token}` } });
           if (fotoRes.ok) {
             const fotoData = await fotoRes.json();
             if (fotoData.fotos && Array.isArray(fotoData.fotos)) {
-              fotoData.fotos.forEach((f: any) => { if (f.fotoBase64) fotos.push(f.fotoBase64); });
+              fotoData.fotos.forEach((f: any) => {
+                if (f.fotoBase64) {
+                  // Garantir que é data URL
+                  const dataUrl = f.fotoBase64.startsWith('data:')
+                    ? f.fotoBase64
+                    : `data:image/jpeg;base64,${f.fotoBase64}`;
+                  fotos.push(dataUrl);
+                }
+              });
             }
+          } else {
+            console.warn('[Telegram 2a via] Erro ao baixar fotos do GCS:', gcsPath, fotoRes.status);
           }
-        } catch (e) { console.warn('Erro ao buscar fotos 2a via:', e); }
+        } catch (e) { console.warn('Erro ao buscar fotos 2a via:', gcsPath, e); }
       }
+      console.log('[Telegram 2a via] Total de fotos coletadas:', fotos.length);
 
-      // Enviar para Telegram
+      // 3) Montar lista final: extrato (imagem) + fotos
+      const fotosEnvio: string[] = [];
+      if (extratoImagem) fotosEnvio.push(extratoImagem);
+      fotosEnvio.push(...fotos);
+
+      // 4) Enviar para Telegram
       const res = await fetch('/api/telegram/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           empresaId: empresa?.id,
           clienteId: clienteSelecionado?.id,
-          mensagem: texto,
-          fotos: fotos.length > 0 ? fotos : undefined,
+          mensagem: null, // não enviar mais texto — extrato vai como imagem
+          fotos: fotosEnvio.length > 0 ? fotosEnvio : undefined,
         }),
       });
       const data = await res.json();
       toast.dismiss('telegram-2via');
-      if (res.ok) { toast.success('Extrato enviado para o Telegram!'); }
-      else { toast.error(data.error || 'Erro ao enviar para Telegram'); }
+      if (res.ok && data.success) {
+        const msg = fotosEnvio.length > 0
+          ? `Extrato (${extratoImagem ? '1 imagem' : '0'}) + ${fotos.length} foto(s) enviados!`
+          : 'Extrato enviado!';
+        toast.success(msg);
+      } else {
+        console.error('[Telegram 2a via] Erro:', data);
+        toast.error(data.error || 'Erro ao enviar para Telegram');
+      }
     } catch (error) { toast.dismiss('telegram-2via'); toast.error('Erro ao enviar para Telegram'); console.error('Erro Telegram 2a via:', error); }
   };
 
@@ -5861,32 +5844,43 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     toast.loading('Enviando para Telegram...');
 
     try {
-      const mensagem = gerarMensagemWhatsApp();
+      // 1) Gerar imagem do extrato via canvas (ao invés de texto)
+      const extratoImagem = await gerarExtratoImagem();
+      console.log('[Telegram Resumo] Extrato imagem gerada:', extratoImagem ? `${extratoImagem.length} chars` : 'null');
 
-      // Coletar fotos processadas (com tarja)
+      // 2) Coletar fotos processadas (com tarja)
       const fotos: string[] = [];
       for (const m of maquinasSalvas) {
         if (m.fotoProcessada) fotos.push(m.fotoProcessada);
       }
       // Adicionar foto dos canhotos de cartão
       if (cartaoFotoProcessada) fotos.push(cartaoFotoProcessada);
+      console.log('[Telegram Resumo] Fotos processadas:', fotos.length);
 
+      // 3) Montar lista final: extrato (imagem) + fotos
+      const fotosEnvio: string[] = [];
+      if (extratoImagem) fotosEnvio.push(extratoImagem);
+      fotosEnvio.push(...fotos);
+
+      // 4) Enviar para Telegram
       const res = await fetch('/api/telegram/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           empresaId: empresa.id,
           clienteId: clienteSelecionado.id,
-          mensagem,
-          fotos,
+          mensagem: null, // não enviar mais texto — extrato vai como imagem
+          fotos: fotosEnvio,
         }),
       });
       toast.dismiss();
       const data = await res.json();
       if (data.success) {
-        toast.success('Extrato e fotos enviados para o Telegram!');
+        const msg = `Extrato (${extratoImagem ? '1 imagem' : '0'}) + ${fotos.length} foto(s) enviados!`;
+        toast.success(msg);
         setResumoTelegramEnviado(true);
       } else {
+        console.error('[Telegram Resumo] Erro:', data);
         toast.error(data.error || 'Erro ao enviar para Telegram');
       }
     } catch (error) {

@@ -218,6 +218,11 @@ export async function POST(request: NextRequest) {
       // Verificar se todas são URLs HTTP (pode usar media group)
       const allAreUrls = fotos.every(f => f.startsWith('http'));
 
+      // Caption para a primeira foto (extrato) — contexto para o destinatário
+      const caption = mensagem
+        ? undefined // se já enviou texto, não repetir
+        : undefined; // caption vazio por padrão (extrato já tem conteúdo visual)
+
       if (allAreUrls && fotos.length > 1) {
         // Tentar enviar como álbum
         const ok = await sendTelegramMediaGroup(botToken, groupId, fotos);
@@ -226,14 +231,14 @@ export async function POST(request: NextRequest) {
         } else {
           // Fallback: enviar uma por uma
           for (let i = 0; i < fotos.length; i++) {
-            const ok = await sendTelegramPhoto(botToken, groupId, fotos[i]);
+            const ok = await sendTelegramPhoto(botToken, groupId, fotos[i], i === 0 ? caption : undefined);
             resultados.push({ tipo: `foto_${i + 1}`, sucesso: ok });
           }
         }
       } else {
         // Enviar uma por uma (base64 precisa de upload multipart)
         for (let i = 0; i < fotos.length; i++) {
-          const ok = await sendTelegramPhoto(botToken, groupId, fotos[i]);
+          const ok = await sendTelegramPhoto(botToken, groupId, fotos[i], i === 0 ? caption : undefined);
           resultados.push({ tipo: `foto_${i + 1}`, sucesso: ok });
           // Delay entre envios para evitar rate limit (30 msg/s)
           if (i < fotos.length - 1) {
