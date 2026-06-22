@@ -2867,6 +2867,20 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [segundaViaSelecionada, setSegundaViaSelecionada] = useState<{ data: string; dataISO: string } | null>(null);
   const [segundaViaDados, setSegundaViaDados] = useState<any[]>([]);
   const [segundaViaExtratoOpen, setSegundaViaExtratoOpen] = useState(false);
+  // Seletor de visualização da 2a via: 'EXTRATO' (texto) ou 'RELATORIO' (A4 com fotos)
+  // Persiste em localStorage para lembrar da última escolha do usuário
+  const [segundaViaModo, setSegundaViaModo] = useState<'EXTRATO' | 'RELATORIO'>('EXTRATO');
+  // Fotos baixadas do GCS para exibir no relatório (miniaturas)
+  const [segundaViaFotos, setSegundaViaFotos] = useState<Array<{ maquinaId: string; codigo: string; fotoBase64: string }>>([]);
+  // Carrega preferência do usuário ao montar o componente
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('caixafacil-2via-modo');
+      if (saved === 'EXTRATO' || saved === 'RELATORIO') {
+        setSegundaViaModo(saved);
+      }
+    } catch {}
+  }, []);
   // Ref para evitar loop infinito no restore do localStorage
   const restoreDoneRef = useRef<string>('');
   // Estado para rastrear origem da foto (CÂMERA ou GALERIA)
@@ -5033,6 +5047,44 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       setSegundaViaDados(filtradas);
       setSegundaViaExtratoOpen(true);
+
+      // Pré-carregar fotos do GCS (para exibir miniaturas no modo RELATÓRIO)
+      // Apenas se houver leituras com fotoGcsPath
+      const gcsPathsUnicosPre = new Set<string>();
+      filtradas.forEach((l: any) => {
+        if (l.fotoGcsPath) gcsPathsUnicosPre.add(l.fotoGcsPath);
+      });
+      if (gcsPathsUnicosPre.size > 0) {
+        setSegundaViaFotos([]); // limpa anterior
+        const token = useAuthStore.getState().token;
+        const fotosColetadas: Array<{ maquinaId: string; codigo: string; fotoBase64: string }> = [];
+        for (const gcsPath of gcsPathsUnicosPre) {
+          try {
+            const fotoRes = await fetch(`/api/leituras/download-fotos?gcsPath=${encodeURIComponent(gcsPath)}`, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (fotoRes.ok) {
+              const fotoData = await fotoRes.json();
+              if (fotoData.fotos && Array.isArray(fotoData.fotos)) {
+                fotoData.fotos.forEach((f: any) => {
+                  if (f.fotoBase64) {
+                    const dataUrl = f.fotoBase64.startsWith('data:')
+                      ? f.fotoBase64
+                      : `data:image/jpeg;base64,${f.fotoBase64}`;
+                    fotosColetadas.push({
+                      maquinaId: f.maquinaId || '',
+                      codigo: f.codigo || '',
+                      fotoBase64: dataUrl,
+                    });
+                  }
+                });
+              }
+            }
+          } catch (e) { console.warn('Erro ao pré-carregar fotos 2a via:', e); }
+        }
+        setSegundaViaFotos(fotosColetadas);
+        console.log('[2a via] Fotos pré-carregadas para relatório:', fotosColetadas.length);
+      } else {
+        setSegundaViaFotos([]);
+      }
     } catch (err: any) {
       toast.error(err.message || 'Erro ao carregar fechamento');
     } finally {
@@ -5173,9 +5225,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     try {
       toast.loading('Enviando para Telegram...', { id: 'telegram-2via' });
 
-      // 1) Gerar imagem do extrato via canvas (ao invés de texto)
-      const extratoImagem = await gerarExtratoImagemSegundaVia();
-      console.log('[Telegram 2a via] Extrato imagem gerada:', extratoImagem ? `${extratoImagem.length} chars` : 'null');
+      // 1) Gerar imagem do extrato OU relatório (conforme modo ativo)
+      let extratoImagem: string | null = null;
+      if (segundaViaModo === 'RELATORIO') {
+        extratoImagem = await gerarRelatorioImagem2aVia();
+        console.log('[Telegram 2a via] Relatório (A4) gerado:', extratoImagem ? `${extratoImagem.length} chars` : 'null');
+      } else {
+        extratoImagem = await gerarExtratoImagemSegundaVia();
+        console.log('[Telegram 2a via] Extrato gerado:', extratoImagem ? `${extratoImagem.length} chars` : 'null');
+      }
 
       // 2) Buscar fotos do GCS para TODAS as leituras que têm fotoGcsPath
       // (não apenas a primeira — bug anterior: find() retornava só 1 leitura)
@@ -5210,7 +5268,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       }
       console.log('[Telegram 2a via] Total de fotos coletadas:', fotos.length);
 
-      // 3) Montar lista final: extrato (imagem) + fotos
+      // 3) Montar lista final: extrato/relatório (imagem) + fotos
       const fotosEnvio: string[] = [];
       if (extratoImagem) fotosEnvio.push(extratoImagem);
       fotosEnvio.push(...fotos);
@@ -5222,16 +5280,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         body: JSON.stringify({
           empresaId: empresa?.id,
           clienteId: clienteSelecionado?.id,
-          mensagem: null, // não enviar mais texto — extrato vai como imagem
+          mensagem: null, // não enviar mais texto — extrato/relatório vai como imagem
           fotos: fotosEnvio.length > 0 ? fotosEnvio : undefined,
         }),
       });
       const data = await res.json();
       toast.dismiss('telegram-2via');
       if (res.ok && data.success) {
+        const tipoLabel = segundaViaModo === 'RELATORIO' ? 'Relatório A4' : 'Extrato';
         const msg = fotosEnvio.length > 0
-          ? `Extrato (${extratoImagem ? '1 imagem' : '0'}) + ${fotos.length} foto(s) enviados!`
-          : 'Extrato enviado!';
+          ? `${tipoLabel} (${extratoImagem ? '1 imagem' : '0'}) + ${fotos.length} foto(s) enviados!`
+          : `${tipoLabel} enviado!`;
         toast.success(msg);
       } else {
         console.error('[Telegram 2a via] Erro:', data);
@@ -5785,6 +5844,326 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         resolve(canvas.toDataURL('image/jpeg', 0.9));
       } catch (err) {
         console.error('Erro ao gerar imagem extrato 2a via:', err);
+        resolve(null);
+      }
+    });
+  };
+
+  // Gerar RELATÓRIO 2a via em formato A4 com fotos em miniatura
+  // Layout:
+  //   - Cabeçalho (cliente, data, operador)
+  //   - Para cada máquina: card com foto em miniatura + valores (entrada/saída)
+  //   - Cards finais em molduras: Total Entradas, Total Saídas, Resultado
+  //   - Letra maior (legível)
+  //   - Formato A4 (794 x 1123 px a 96 DPI)
+  const gerarRelatorioImagem2aVia = async (): Promise<string | null> => {
+    return new Promise((resolve) => {
+      try {
+        if (!segundaViaDados || segundaViaDados.length === 0) {
+          resolve(null);
+          return;
+        }
+
+        // Formato A4 a 96 DPI (padrão web): 794 x 1123 px
+        const A4_W = 794;
+        const A4_H = 1123;
+        const canvas = document.createElement('canvas');
+        canvas.width = A4_W;
+        canvas.height = A4_H; // altura será ajustada dinamicamente
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { resolve(null); return; }
+
+        // Configurações de fonte (letra maior)
+        const FONT_TITLE = 'bold 26px "Arial", sans-serif';
+        const FONT_SUBTITLE = '18px "Arial", sans-serif';
+        const FONT_LABEL = 'bold 20px "Arial", sans-serif';
+        const FONT_VALUE = '20px "Arial", sans-serif';
+        const FONT_TOTAL = 'bold 28px "Arial", sans-serif';
+
+        // Pré-processar dados (mesma lógica do extrato)
+        const modo2via = clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANCA' : 'LEITURA';
+        const porMaquina = new Map<string, any[]>();
+        const despesaItens: { descricao: string; valor: number }[] = [];
+        const receitaItens: { descricao: string; valor: number }[] = [];
+        segundaViaDados.forEach((l: any) => {
+          const temLeitura = l.entradaNova > 0 || l.saidaNova > 0 || l.diferencaEntrada !== 0 || l.diferencaSaida !== 0;
+          if (temLeitura) {
+            if (!porMaquina.has(l.maquinaId)) porMaquina.set(l.maquinaId, []);
+            porMaquina.get(l.maquinaId)!.push(l);
+          }
+          if (l.despesa) { try { const p = JSON.parse(l.despesa); if (Array.isArray(p)) p.forEach((d: any) => { if (d.valor > 0) despesaItens.push(d); }); } catch {} }
+          if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor > 0) receitaItens.push(r); }); } catch {} }
+        });
+        const despesasFinal = Array.from(new Map(despesaItens.map(d => [d.descricao, d])).values());
+        const receitasFinal = Array.from(new Map(receitaItens.map(r => [r.descricao, r])).values());
+        const maquinasArr = Array.from(porMaquina.entries());
+
+        // Calcular totais
+        let totalEntradas = 0;
+        let totalSaidas = 0;
+        maquinasArr.forEach(([id, lws]) => {
+          totalEntradas += calcularValor(lws[0].moeda, lws[0].diferencaEntrada);
+          totalSaidas += calcularValor(lws[0].moeda, lws[0].diferencaSaida);
+        });
+        const totalReceitas = receitasFinal.reduce((a, r) => a + r.valor, 0);
+        const totalDespesas = despesasFinal.reduce((a, d) => a + d.valor, 0);
+        const jogado = totalEntradas - totalSaidas;
+        const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
+        const valorCliente = jogado * (acertoPct / 100);
+        const temItensExtras = totalReceitas > 0 || totalDespesas > 0;
+        const entradaFinal = modo2via === 'COBRANCA' ? jogado : (temItensExtras ? totalReceitas : jogado);
+        const saidaFinal = temItensExtras ? totalDespesas : 0;
+        const fechamentoFinal = temItensExtras ? saidaFinal - entradaFinal : entradaFinal;
+
+        // ===== PRIMEIRO: calcular altura necessária =====
+        let y = 0;
+        const padding = 40;
+        y += padding; // margem topo
+        y += 40; // título
+        y += 30; // nome cliente
+        y += 30; // data
+        const operadores = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => l.usuario.nome));
+        if (operadores.size > 0) y += 30; // operador
+        y += 30; // separador
+
+        // Cada máquina: card de ~280px de altura (foto 200px + texto)
+        const CARD_HEIGHT = 280;
+        maquinasArr.forEach(() => { y += CARD_HEIGHT + 20; });
+        y += 30; // separador
+
+        // Receitas extras
+        if (modo2via !== 'COBRANCA' && receitasFinal.length > 0) {
+          y += receitasFinal.length * 30 + 40;
+        }
+        // Despesas extras
+        if (modo2via !== 'COBRANCA' && despesasFinal.length > 0) {
+          y += despesasFinal.length * 30 + 40;
+        }
+
+        // Cards de totais (3 molduras)
+        y += 60; // título "TOTAIS"
+        y += 140; // 3 cards (largura, não altura — vamos colocar lado a lado)
+        y += 40; // detalhe COBRANCA
+        y += padding; // margem inferior
+
+        // Se passar de 1 página A4, multiplica altura
+        const alturaFinal = Math.max(A4_H, y);
+        canvas.height = alturaFinal;
+
+        // ===== RENDERIZAÇÃO =====
+        // Fundo branco
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, A4_W, alturaFinal);
+
+        // Cabeçalho
+        y = padding;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#000000';
+        ctx.font = FONT_TITLE;
+        const titulo = modo2via === 'COBRANCA' ? 'RELATÓRIO DE COBRANÇA' : 'RELATÓRIO DE LEITURA';
+        ctx.fillText(titulo, A4_W / 2, y);
+        y += 35;
+
+        ctx.font = FONT_SUBTITLE;
+        ctx.fillText(clienteSelecionado?.nome?.toUpperCase() || '', A4_W / 2, y);
+        y += 30;
+
+        ctx.font = FONT_VALUE;
+        ctx.fillText(`Data: ${segundaViaSelecionada?.data || ''}`, A4_W / 2, y);
+        y += 30;
+
+        if (operadores.size > 0) {
+          ctx.fillText(`Operador(es): ${Array.from(operadores).join(', ')}`, A4_W / 2, y);
+          y += 30;
+        }
+
+        // Linha separadora
+        y += 10;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(padding, y);
+        ctx.lineTo(A4_W - padding, y);
+        ctx.stroke();
+        y += 30;
+
+        // Cards de cada máquina com foto em miniatura
+        ctx.textAlign = 'left';
+        for (const [id, lws] of maquinasArr) {
+          const m = lws[0].maquina;
+          const e = calcularValor(lws[0].moeda, lws[0].diferencaEntrada);
+          const s = calcularValor(lws[0].moeda, lws[0].diferencaSaida);
+
+          // Moldura do card
+          ctx.strokeStyle = '#333333';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(padding, y, A4_W - padding * 2, CARD_HEIGHT - 20);
+
+          // Buscar foto em miniatura (180x180px)
+          const fotoObj = segundaViaFotos.find(f => f.maquinaId === id || f.codigo === m.codigo);
+          if (fotoObj) {
+            const img = new Image();
+            img.src = fotoObj.fotoBase64;
+            // Tentar desenhar sincronamente (já carregada em memória)
+            try {
+              ctx.drawImage(img, padding + 10, y + 10, 180, 180);
+            } catch {
+              // Desenhar placeholder
+              ctx.fillStyle = '#f0f0f0';
+              ctx.fillRect(padding + 10, y + 10, 180, 180);
+              ctx.fillStyle = '#999999';
+              ctx.font = '14px Arial';
+              ctx.textAlign = 'center';
+              ctx.fillText('sem foto', padding + 100, y + 100);
+              ctx.textAlign = 'left';
+            }
+          } else {
+            // Sem foto: placeholder
+            ctx.fillStyle = '#f0f0f0';
+            ctx.fillRect(padding + 10, y + 10, 180, 180);
+            ctx.fillStyle = '#999999';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('sem foto', padding + 100, y + 100);
+            ctx.textAlign = 'left';
+          }
+
+          // Texto ao lado da foto
+          const textX = padding + 210;
+          ctx.fillStyle = '#000000';
+          ctx.font = FONT_LABEL;
+          ctx.fillText(m.codigo, textX, y + 40);
+          ctx.font = FONT_VALUE;
+          ctx.fillText((m.tipo?.descricao || '').toUpperCase(), textX, y + 70);
+
+          ctx.font = FONT_VALUE;
+          ctx.fillText(`Entrada: ${lws[0].entradaAnterior || 0} → ${lws[0].entradaNova || 0}`, textX, y + 110);
+          ctx.fillText(`Saída: ${lws[0].saidaAnterior || 0} → ${lws[0].saidaNova || 0}`, textX, y + 140);
+
+          ctx.font = FONT_LABEL;
+          ctx.fillStyle = '#0066cc';
+          ctx.fillText(`Dif. Entrada: ${formatNumber(e)}`, textX, y + 175);
+          ctx.fillStyle = '#cc3300';
+          ctx.fillText(`Dif. Saída: ${formatNumber(s)}`, textX, y + 205);
+          ctx.fillStyle = '#000000';
+          ctx.fillText(`Saldo: ${formatNumber(lws[0].saldo)}`, textX, y + 235);
+
+          y += CARD_HEIGHT;
+        }
+
+        // Separador
+        y += 10;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(padding, y);
+        ctx.lineTo(A4_W - padding, y);
+        ctx.stroke();
+        y += 30;
+
+        // Receitas extras (se houver)
+        if (modo2via !== 'COBRANCA' && receitasFinal.length > 0) {
+          ctx.font = FONT_LABEL;
+          ctx.fillText('ENTRADAS EXTRAS:', padding, y);
+          y += 30;
+          ctx.font = FONT_VALUE;
+          receitasFinal.forEach((r) => {
+            ctx.fillText(`  ${r.descricao || 'OUTROS'}: ${formatNumber(r.valor)}`, padding, y);
+            y += 28;
+          });
+          ctx.font = FONT_LABEL;
+          ctx.fillStyle = '#0066cc';
+          ctx.fillText(`Total Entradas Extras: ${formatNumber(totalReceitas)}`, padding, y);
+          ctx.fillStyle = '#000000';
+          y += 40;
+        }
+
+        // Despesas extras (se houver)
+        if (modo2via !== 'COBRANCA' && despesasFinal.length > 0) {
+          ctx.font = FONT_LABEL;
+          ctx.fillText('SAÍDAS EXTRAS:', padding, y);
+          y += 30;
+          ctx.font = FONT_VALUE;
+          despesasFinal.forEach((d) => {
+            ctx.fillText(`  ${d.descricao || 'OUTROS'}: ${formatNumber(d.valor)}`, padding, y);
+            y += 28;
+          });
+          ctx.font = FONT_LABEL;
+          ctx.fillStyle = '#cc3300';
+          ctx.fillText(`Total Saídas Extras: ${formatNumber(totalDespesas)}`, padding, y);
+          ctx.fillStyle = '#000000';
+          y += 40;
+        }
+
+        // ===== TOTAIS FINAIS — 3 cards em moldura =====
+        y += 10;
+        ctx.font = FONT_TITLE;
+        ctx.textAlign = 'center';
+        ctx.fillText('TOTAIS', A4_W / 2, y);
+        y += 30;
+
+        // 3 cards lado a lado: Entradas, Saídas, Resultado
+        const cardW = (A4_W - padding * 2 - 20) / 3; // 3 cards com 10px gap
+        const cardH = 100;
+        const cardY = y;
+
+        // Card 1: Total Entradas (azul)
+        ctx.strokeStyle = '#0066cc';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(padding, cardY, cardW, cardH);
+        ctx.fillStyle = '#e6f0ff';
+        ctx.fillRect(padding, cardY, cardW, cardH);
+        ctx.fillStyle = '#0066cc';
+        ctx.font = FONT_LABEL;
+        ctx.textAlign = 'center';
+        ctx.fillText('ENTRADAS', padding + cardW / 2, cardY + 35);
+        ctx.font = FONT_TOTAL;
+        ctx.fillText(formatNumber(totalEntradas), padding + cardW / 2, cardY + 75);
+
+        // Card 2: Total Saídas (vermelho)
+        const card2X = padding + cardW + 10;
+        ctx.strokeStyle = '#cc3300';
+        ctx.strokeRect(card2X, cardY, cardW, cardH);
+        ctx.fillStyle = '#ffe6e6';
+        ctx.fillRect(card2X, cardY, cardW, cardH);
+        ctx.fillStyle = '#cc3300';
+        ctx.font = FONT_LABEL;
+        ctx.fillText('SAÍDAS', card2X + cardW / 2, cardY + 35);
+        ctx.font = FONT_TOTAL;
+        ctx.fillText(formatNumber(totalSaidas), card2X + cardW / 2, cardY + 75);
+
+        // Card 3: Resultado (verde se positivo, vermelho se negativo)
+        const card3X = padding + (cardW + 10) * 2;
+        const isPositivo = fechamentoFinal >= 0;
+        const cor3 = isPositivo ? '#008800' : '#cc0000';
+        const bg3 = isPositivo ? '#e6ffe6' : '#ffe6e6';
+        ctx.strokeStyle = cor3;
+        ctx.strokeRect(card3X, cardY, cardW, cardH);
+        ctx.fillStyle = bg3;
+        ctx.fillRect(card3X, cardY, cardW, cardH);
+        ctx.fillStyle = cor3;
+        ctx.font = FONT_LABEL;
+        const labelResultado = modo2via === 'COBRANCA' ? 'JOGADO' : (temItensExtras ? 'FECHAMENTO' : 'RESULTADO');
+        ctx.fillText(labelResultado, card3X + cardW / 2, cardY + 35);
+        ctx.font = FONT_TOTAL;
+        ctx.fillText(formatNumber(fechamentoFinal), card3X + cardW / 2, cardY + 75);
+
+        y = cardY + cardH + 20;
+
+        // Detalhe COBRANCA
+        if (modo2via === 'COBRANCA') {
+          ctx.textAlign = 'left';
+          ctx.font = FONT_VALUE;
+          ctx.fillStyle = '#000000';
+          ctx.fillText(`Cliente (${acertoPct}%): ${formatNumber(valorCliente)}`, padding, y);
+          y += 30;
+        }
+
+        ctx.textAlign = 'left';
+
+        resolve(canvas.toDataURL('image/jpeg', 0.92));
+      } catch (err) {
+        console.error('Erro ao gerar relatório 2a via:', err);
         resolve(null);
       }
     });
@@ -7198,7 +7577,25 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           </div>
 
           {/* Modal de Lançamento de Lote */}
-          <Dialog open={loteModalOpen} onOpenChange={(open) => { if (!open) { setLoteModalOpen(false); setFotosLote([]); setLoteProgresso(0); setProcessandoLote(false); } }}>
+          <Dialog open={loteModalOpen} onOpenChange={(open) => {
+            // Bloqueia clique fora e ESC — só fecha via botão X do Dialog
+            // (data-slot="dialog-close") ou botão CONCLUIR (data-close-lote-modal)
+            if (open === false) {
+              const activeEl = document.activeElement as HTMLElement | null;
+              const isExplicitClose =
+                activeEl?.closest('[data-slot="dialog-close"]') ||
+                activeEl?.closest('[data-close-lote-modal="true"]');
+              if (isExplicitClose) {
+                setLoteModalOpen(false);
+                setFotosLote([]);
+                setLoteProgresso(0);
+                setProcessandoLote(false);
+              }
+              // Caso contrário (clique fora, ESC), não faz nada
+            } else {
+              setLoteModalOpen(true);
+            }
+          }}>
             <DialogContent className="bg-card border-border text-foreground max-w-md max-h-[92vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
@@ -7413,6 +7810,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     )}
 
                     <Button
+                      data-close-lote-modal="true"
                       onClick={() => {
                         setLoteModalOpen(false);
                         setFotosLote([]);
@@ -8133,11 +8531,45 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               <DialogHeader>
                 <DialogTitle className="text-center text-base">Extrato 2a Via</DialogTitle>
               </DialogHeader>
+
+              {/* Seletor EXTRATO / RELATÓRIO — última seleção persiste em localStorage */}
+              {!segundaViaLoading && segundaViaDados.length > 0 && (
+                <div className="flex gap-2 p-1 bg-muted rounded-lg">
+                  <button
+                    onClick={() => {
+                      setSegundaViaModo('EXTRATO');
+                      try { localStorage.setItem('caixafacil-2via-modo', 'EXTRATO'); } catch {}
+                    }}
+                    className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                      segundaViaModo === 'EXTRATO'
+                        ? 'bg-amber-500 text-white shadow'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    EXTRATO
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSegundaViaModo('RELATORIO');
+                      try { localStorage.setItem('caixafacil-2via-modo', 'RELATORIO'); } catch {}
+                    }}
+                    className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                      segundaViaModo === 'RELATORIO'
+                        ? 'bg-amber-500 text-white shadow'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    RELATÓRIO
+                  </button>
+                </div>
+              )}
+
               {segundaViaLoading ? (
                 <div className="text-center py-8 text-muted-foreground">Carregando...</div>
               ) : segundaViaDados.length > 0 ? (
                 <>
-                  <div className="bg-white text-black p-4 rounded-lg font-mono text-sm" id="extrato-segunda-via">
+                  {segundaViaModo === 'EXTRATO' ? (
+                    <div className="bg-white text-black p-4 rounded-lg font-mono text-sm" id="extrato-segunda-via">
                     <div className="text-center mb-2">
                       <p className="font-bold text-xs opacity-60 mb-1">EXTRATO DE {clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANÇA' : 'LEITURA'} 2a VIA</p>
                       <p className="font-bold">{clienteSelecionado?.nome?.toUpperCase()}</p>
@@ -8254,6 +8686,128 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       );
                     })()}
                   </div>
+                  ) : (
+                    /* MODO RELATÓRIO — preview HTML do que será gerado no canvas A4 */
+                    <div className="bg-white text-black p-3 rounded-lg" id="relatorio-segunda-via">
+                      <div className="text-center mb-3">
+                        <p className="font-bold text-base mb-1">
+                          {clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'RELATÓRIO DE COBRANÇA' : 'RELATÓRIO DE LEITURA'}
+                        </p>
+                        <p className="font-bold text-sm">{clienteSelecionado?.nome?.toUpperCase()}</p>
+                        <p className="text-sm">Data: {segundaViaSelecionada?.data}</p>
+                        {(() => {
+                          const operadores = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => l.usuario.nome));
+                          return operadores.size > 0 ? <p className="text-sm">Operador(es): {Array.from(operadores).join(', ')}</p> : null;
+                        })()}
+                      </div>
+
+                      {/* Cards de máquinas com foto em miniatura */}
+                      {(() => {
+                        const modo2via = clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANCA' : 'LEITURA';
+                        const porMaquina = new Map<string, any[]>();
+                        const despesaItens: { descricao: string; valor: number }[] = [];
+                        const receitaItens: { descricao: string; valor: number }[] = [];
+                        segundaViaDados.forEach((l: any) => {
+                          const temLeitura = l.entradaNova > 0 || l.saidaNova > 0 || l.diferencaEntrada !== 0 || l.diferencaSaida !== 0;
+                          if (temLeitura) {
+                            if (!porMaquina.has(l.maquinaId)) porMaquina.set(l.maquinaId, []);
+                            porMaquina.get(l.maquinaId)!.push(l);
+                          }
+                          if (l.despesa) { try { const p = JSON.parse(l.despesa); if (Array.isArray(p)) p.forEach((d: any) => { if (d.valor > 0) despesaItens.push(d); }); } catch {} }
+                          if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor > 0) receitaItens.push(r); }); } catch {} }
+                        });
+                        const despesasFinal = Array.from(new Map(despesaItens.map(d => [d.descricao, d])).values());
+                        const receitasFinal = Array.from(new Map(receitaItens.map(r => [r.descricao, r])).values());
+                        const maquinasArr = Array.from(porMaquina.entries());
+                        let totalEntradas = 0;
+                        let totalSaidas = 0;
+                        maquinasArr.forEach(([id, lws]) => {
+                          totalEntradas += calcularValor(lws[0].moeda, lws[0].diferencaEntrada);
+                          totalSaidas += calcularValor(lws[0].moeda, lws[0].diferencaSaida);
+                        });
+                        const totalReceitas = receitasFinal.reduce((a, r) => a + r.valor, 0);
+                        const totalDespesas = despesasFinal.reduce((a, d) => a + d.valor, 0);
+                        const jogado = totalEntradas - totalSaidas;
+                        const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
+                        const valorCliente = jogado * (acertoPct / 100);
+                        const temItensExtras = totalReceitas > 0 || totalDespesas > 0;
+                        const fechamentoFinal = temItensExtras ? (totalDespesas - totalReceitas) : jogado;
+
+                        return (
+                          <>
+                            {/* Cards de cada máquina */}
+                            <div className="space-y-2 mb-3">
+                              {maquinasArr.map(([id, lws]) => {
+                                const m = lws[0].maquina;
+                                const e = calcularValor(lws[0].moeda, lws[0].diferencaEntrada);
+                                const s = calcularValor(lws[0].moeda, lws[0].diferencaSaida);
+                                const foto = segundaViaFotos.find(f => f.maquinaId === id || f.codigo === m.codigo);
+                                return (
+                                  <div key={id} className="border border-gray-700 rounded p-2 flex gap-3">
+                                    {/* Miniatura da foto */}
+                                    <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
+                                      {foto ? (
+                                        <img src={foto.fotoBase64} alt={m.codigo} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <span className="text-xs text-gray-500">sem foto</span>
+                                      )}
+                                    </div>
+                                    {/* Dados da máquina */}
+                                    <div className="flex-1 text-sm">
+                                      <p className="font-bold text-base">{m.codigo}</p>
+                                      <p className="text-xs uppercase">{m.tipo?.descricao || ''}</p>
+                                      <p>Ent: {lws[0].entradaAnterior || 0} → {lws[0].entradaNova || 0}</p>
+                                      <p>Saída: {lws[0].saidaAnterior || 0} → {lws[0].saidaNova || 0}</p>
+                                      <p className="text-blue-700">Dif E: {formatNumber(e)}</p>
+                                      <p className="text-red-700">Dif S: {formatNumber(s)}</p>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Receitas/Despesas extras */}
+                            {modo2via !== 'COBRANCA' && receitasFinal.length > 0 && (
+                              <div className="mb-2 text-sm">
+                                <p className="font-bold">ENTRADAS EXTRAS:</p>
+                                {receitasFinal.map((r, i) => <p key={i}>  {r.descricao}: {formatNumber(r.valor)}</p>)}
+                                <p className="font-bold text-blue-700">Total: {formatNumber(totalReceitas)}</p>
+                              </div>
+                            )}
+                            {modo2via !== 'COBRANCA' && despesasFinal.length > 0 && (
+                              <div className="mb-2 text-sm">
+                                <p className="font-bold">SAÍDAS EXTRAS:</p>
+                                {despesasFinal.map((d, i) => <p key={i}>  {d.descricao}: {formatNumber(d.valor)}</p>)}
+                                <p className="font-bold text-red-700">Total: {formatNumber(totalDespesas)}</p>
+                              </div>
+                            )}
+
+                            {/* Cards de totais em molduras (3 lado a lado) */}
+                            <div className="grid grid-cols-3 gap-2 mt-3">
+                              <div className="border-2 border-blue-700 bg-blue-50 rounded p-2 text-center">
+                                <p className="font-bold text-blue-700 text-xs">ENTRADAS</p>
+                                <p className="font-bold text-base text-blue-900">{formatNumber(totalEntradas)}</p>
+                              </div>
+                              <div className="border-2 border-red-700 bg-red-50 rounded p-2 text-center">
+                                <p className="font-bold text-red-700 text-xs">SAÍDAS</p>
+                                <p className="font-bold text-base text-red-900">{formatNumber(totalSaidas)}</p>
+                              </div>
+                              <div className={`border-2 rounded p-2 text-center ${fechamentoFinal >= 0 ? 'border-green-700 bg-green-50' : 'border-red-700 bg-red-50'}`}>
+                                <p className={`font-bold text-xs ${fechamentoFinal >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                  {modo2via === 'COBRANCA' ? 'JOGADO' : (temItensExtras ? 'FECHAMENTO' : 'RESULTADO')}
+                                </p>
+                                <p className={`font-bold text-base ${fechamentoFinal >= 0 ? 'text-green-900' : 'text-red-900'}`}>{formatNumber(fechamentoFinal)}</p>
+                              </div>
+                            </div>
+
+                            {modo2via === 'COBRANCA' && (
+                              <p className="text-center mt-2 text-sm">Cliente ({acertoPct}%): {formatNumber(valorCliente)}</p>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
 
                   <DialogFooter className="flex gap-2 mt-4">
                     <Button variant="outline" onClick={() => window.print()}>
