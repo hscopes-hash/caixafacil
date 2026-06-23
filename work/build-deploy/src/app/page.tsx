@@ -6120,42 +6120,28 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           const textX = padding + 210;
           ctx.fillStyle = '#000000';
 
-          // Linha 1: Código + Nome + Moeda (na mesma linha)
+          // Linha 1: Código + Nome + Moeda convertida (ex: "x0,25" em vez de "[M025]")
           ctx.font = FONT_LABEL;
           const nomeMaquina = (m.tipo?.descricao || '').toUpperCase();
           const moeda = lws[0].moeda || 'M001';
-          const linha1 = `${m.codigo} - ${nomeMaquina} [${moeda}]`;
+          // Mapear código de moeda para multiplicador legível
+          const multiplicadoresMoeda: Record<string, number> = {
+            M001: 0.01,
+            M005: 0.05,
+            M010: 0.10,
+            M025: 0.25,
+          };
+          const multiplicador = multiplicadoresMoeda[moeda] ?? 0.01;
+          const moedaStr = `x${multiplicador.toString().replace('.', ',')}`;
+          const linha1 = `${m.codigo} - ${nomeMaquina} ${moedaStr}`;
           ctx.fillText(linha1, textX, y + 40);
 
-          // Linha 2: Ent: AAA - BBB = CCC  (Atual - Anterior = Diferença)
-          ctx.font = FONT_VALUE;
-          const entAtual = lws[0].entradaNova || 0;
-          const entAnt = lws[0].entradaAnterior || 0;
-          const entDif = entAtual - entAnt;
-          ctx.fillText(`Ent: ${entAtual} - ${entAnt} = ${entDif}`, textX, y + 75);
-
-          // Linha 3: Total da entrada convertido em valor (usando moeda)
+          // Linha 2: Saldo (total entradas - total saídas × moeda)
+          // Saldo já vem calculado no objeto da leitura (lws[0].saldo) e representa
+          // exatamente (diferencaEntrada - diferencaSaida) * multiplicador da moeda
           ctx.font = FONT_LABEL;
-          ctx.fillStyle = '#0066cc';
-          ctx.fillText(`Total Entrada: ${formatNumber(e)}`, textX, y + 105);
           ctx.fillStyle = '#000000';
-
-          // Linha 4: Saída: AAA - BBB = CCC  (Atual - Anterior = Diferença)
-          ctx.font = FONT_VALUE;
-          const saiAtual = lws[0].saidaNova || 0;
-          const saiAnt = lws[0].saidaAnterior || 0;
-          const saiDif = saiAtual - saiAnt;
-          ctx.fillText(`Saída: ${saiAtual} - ${saiAnt} = ${saiDif}`, textX, y + 140);
-
-          // Linha 5: Total da saída convertido em valor (usando moeda)
-          ctx.font = FONT_LABEL;
-          ctx.fillStyle = '#cc3300';
-          ctx.fillText(`Total Saída: ${formatNumber(s)}`, textX, y + 170);
-          ctx.fillStyle = '#000000';
-
-          // Linha 6: Saldo
-          ctx.font = FONT_LABEL;
-          ctx.fillText(`Saldo: ${formatNumber(lws[0].saldo)}`, textX, y + 205);
+          ctx.fillText(`Saldo: ${formatNumber(lws[0].saldo)}`, textX, y + 80);
 
           y += CARD_HEIGHT;
         }
@@ -8862,22 +8848,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                                     </div>
                                     {/* Dados da máquina */}
                                     <div className="flex-1 text-sm">
-                                      {/* Linha 1: Código + Nome + Moeda (mesma linha) */}
+                                      {/* Linha 1: Código + Nome + Moeda convertida (ex: "x0,25" em vez de "[M025]") */}
                                       <p className="font-bold text-base">
-                                        {m.codigo} - {(m.tipo?.descricao || '').toUpperCase()} [{lws[0].moeda || 'M001'}]
+                                        {m.codigo} - {(m.tipo?.descricao || '').toUpperCase()} {(() => {
+                                          const multMap: Record<string, number> = { M001: 0.01, M005: 0.05, M010: 0.10, M025: 0.25 };
+                                          const mult = multMap[lws[0].moeda || 'M001'] ?? 0.01;
+                                          return `x${mult.toString().replace('.', ',')}`;
+                                        })()}
                                       </p>
-                                      {/* Linha 2: Ent: AAA - BBB = CCC (Atual - Anterior = Diferença) */}
-                                      <p>
-                                        Ent: {lws[0].entradaNova || 0} - {lws[0].entradaAnterior || 0} = {(lws[0].entradaNova || 0) - (lws[0].entradaAnterior || 0)}
-                                      </p>
-                                      {/* Linha 3: Total entrada convertido */}
-                                      <p className="text-blue-700 font-medium">Total Entrada: {formatNumber(e)}</p>
-                                      {/* Linha 4: Saída: AAA - BBB = CCC */}
-                                      <p>
-                                        Saída: {lws[0].saidaNova || 0} - {lws[0].saidaAnterior || 0} = {(lws[0].saidaNova || 0) - (lws[0].saidaAnterior || 0)}
-                                      </p>
-                                      {/* Linha 5: Total saída convertido */}
-                                      <p className="text-red-700 font-medium">Total Saída: {formatNumber(s)}</p>
+                                      {/* Linha 2: Saldo (total entradas - total saídas × moeda) */}
+                                      <p className="font-medium">Saldo: {formatNumber(lws[0].saldo)}</p>
                                     </div>
                                   </div>
                                 );
