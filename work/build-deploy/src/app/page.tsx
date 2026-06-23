@@ -6070,19 +6070,49 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
           // Buscar imagem JÁ PRÉ-CARREGADA (síncrono, sem race condition)
           const img = imagensPorMaquinaId.get(id) || (m.codigo ? imagensPorCodigo.get(m.codigo) : undefined);
+          // Área da foto no card (180x180px)
+          const fotoX = padding + 10;
+          const fotoY = y + 10;
+          const fotoW = 180;
+          const fotoH = 180;
+
+          // Fundo cinza claro para preencher área não coberta pela foto (caso não seja quadrada)
+          ctx.fillStyle = '#f0f0f0';
+          ctx.fillRect(fotoX, fotoY, fotoW, fotoH);
+
           if (img && img.complete && img.naturalWidth > 0) {
-            // Imagem carregada — desenhar MANTENDO proporção (não distorce tarja)
-            // A tarja vermelha fica na parte inferior da imagem; ao desenhar
-            // escalonando para 180x180, ela continua visível na parte de baixo.
-            ctx.drawImage(img, padding + 10, y + 10, 180, 180);
+            // ⚠️ Desenhar MANTENDO PROPORÇÃO (object-fit: contain)
+            // Antes estava usando drawImage(img, x, y, w, h) que ESTICA a imagem
+            // para preencher 180x180 — isso cortava ou distorcia a tarja vermelha
+            // em fotos que não eram quadradas.
+            //
+            // Agora calcula dimensões mantendo aspect ratio da imagem original
+            // e centraliza dentro da área 180x180. Assim a tarja vermelha (que
+            // fica na parte inferior da foto) sempre aparece completa.
+            const natW = img.naturalWidth;
+            const natH = img.naturalHeight;
+            const aspectRatio = natW / natH;
+            let drawW = fotoW;
+            let drawH = fotoH;
+            if (aspectRatio > 1) {
+              // Imagem mais larga que alta — limita largura, calcula altura
+              drawW = fotoW;
+              drawH = Math.round(fotoW / aspectRatio);
+            } else {
+              // Imagem mais alta que larga (ou quadrada) — limita altura, calcula largura
+              drawH = fotoH;
+              drawW = Math.round(fotoH * aspectRatio);
+            }
+            // Centralizar dentro da área 180x180
+            const drawX = fotoX + Math.round((fotoW - drawW) / 2);
+            const drawY = fotoY + Math.round((fotoH - drawH) / 2);
+            ctx.drawImage(img, drawX, drawY, drawW, drawH);
           } else {
             // Sem foto: placeholder
-            ctx.fillStyle = '#f0f0f0';
-            ctx.fillRect(padding + 10, y + 10, 180, 180);
             ctx.fillStyle = '#999999';
             ctx.font = '14px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('sem foto', padding + 100, y + 100);
+            ctx.fillText('sem foto', fotoX + fotoW / 2, fotoY + fotoH / 2);
             ctx.textAlign = 'left';
           }
 
@@ -8822,10 +8852,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                                 const foto = segundaViaFotos.find(f => f.maquinaId === id || f.codigo === m.codigo);
                                 return (
                                   <div key={id} className="border border-gray-700 rounded p-2 flex gap-3">
-                                    {/* Miniatura da foto */}
+                                    {/* Miniatura da foto — object-contain para não cortar a tarja vermelha */}
                                     <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
                                       {foto ? (
-                                        <img src={foto.fotoBase64} alt={m.codigo} className="w-full h-full object-cover" />
+                                        <img src={foto.fotoBase64} alt={m.codigo} className="w-full h-full object-contain" />
                                       ) : (
                                         <span className="text-xs text-gray-500">sem foto</span>
                                       )}
