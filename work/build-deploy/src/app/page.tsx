@@ -5891,12 +5891,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   //   - Letra maior (legível)
   //   - Formato A4 (794 x 1123 px a 96 DPI)
   const gerarRelatorioImagem2aVia = async (): Promise<string | null> => {
-    return new Promise((resolve) => {
-      try {
-        if (!segundaViaDados || segundaViaDados.length === 0) {
-          resolve(null);
-          return;
-        }
+    try {
+      if (!segundaViaDados || segundaViaDados.length === 0) {
+        return null;
+      }
 
         // Formato A4 a 96 DPI (padrão web): 794 x 1123 px
         const A4_W = 794;
@@ -5905,7 +5903,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         canvas.width = A4_W;
         canvas.height = A4_H; // altura será ajustada dinamicamente
         const ctx = canvas.getContext('2d');
-        if (!ctx) { resolve(null); return; }
+        if (!ctx) { return null; }
 
         // Configurações de fonte (letra maior)
         const FONT_TITLE = 'bold 26px "Arial", sans-serif';
@@ -5948,6 +5946,43 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const entradaFinal = modo2via === 'COBRANCA' ? jogado : (temItensExtras ? totalReceitas : jogado);
         const saidaFinal = temItensExtras ? totalDespesas : 0;
         const fechamentoFinal = temItensExtras ? saidaFinal - entradaFinal : entradaFinal;
+
+        // ===== PRÉ-CARREGAR TODAS AS IMAGENS (assíncrono) =====
+        // Antes de renderizar o canvas, garantir que todas as fotos estejam
+        // totalmente carregadas em memória. Sem isso, ctx.drawImage() pode
+        // desenhar imagem parcial (sem a tarja vermelha, que fica no final
+        // do JPEG) ou não desenhar nada — causava fotos "sem tarja" no relatório.
+        const imagensPorMaquinaId = new Map<string, HTMLImageElement>();
+        const imagensPorCodigo = new Map<string, HTMLImageElement>();
+
+        const promessasCarregamento: Promise<void>[] = [];
+        for (const [id, lws] of maquinasArr) {
+          const m = lws[0].maquina;
+          const fotoObj = segundaViaFotos.find(f => f.maquinaId === id || f.codigo === m.codigo);
+          if (fotoObj) {
+            const promise = new Promise<void>((resolveImg) => {
+              const img = new Image();
+              img.onload = () => {
+                imagensPorMaquinaId.set(id, img);
+                if (m.codigo) imagensPorCodigo.set(m.codigo, img);
+                resolveImg();
+              };
+              img.onerror = () => {
+                // Falha ao carregar — não adiciona aos mapas (placeholder será usado)
+                console.warn('[Relatório 2a via] Falha ao carregar foto da máquina:', m.codigo);
+                resolveImg();
+              };
+              img.src = fotoObj.fotoBase64;
+            });
+            promessasCarregamento.push(promise);
+          }
+        }
+        // Aguardar todas as imagens carregarem (com timeout de segurança de 10s)
+        await Promise.race([
+          Promise.all(promessasCarregamento),
+          new Promise<void>((resolve) => setTimeout(resolve, 10000)),
+        ]);
+        console.log(`[Relatório 2a via] ${imagensPorMaquinaId.size} imagens pré-carregadas de ${maquinasArr.length} máquinas`);
 
         // ===== PRIMEIRO: calcular altura necessária =====
         let y = 0;
@@ -6033,24 +6068,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           ctx.lineWidth = 2;
           ctx.strokeRect(padding, y, A4_W - padding * 2, CARD_HEIGHT - 20);
 
-          // Buscar foto em miniatura (180x180px)
-          const fotoObj = segundaViaFotos.find(f => f.maquinaId === id || f.codigo === m.codigo);
-          if (fotoObj) {
-            const img = new Image();
-            img.src = fotoObj.fotoBase64;
-            // Tentar desenhar sincronamente (já carregada em memória)
-            try {
-              ctx.drawImage(img, padding + 10, y + 10, 180, 180);
-            } catch {
-              // Desenhar placeholder
-              ctx.fillStyle = '#f0f0f0';
-              ctx.fillRect(padding + 10, y + 10, 180, 180);
-              ctx.fillStyle = '#999999';
-              ctx.font = '14px Arial';
-              ctx.textAlign = 'center';
-              ctx.fillText('sem foto', padding + 100, y + 100);
-              ctx.textAlign = 'left';
-            }
+          // Buscar imagem JÁ PRÉ-CARREGADA (síncrono, sem race condition)
+          const img = imagensPorMaquinaId.get(id) || (m.codigo ? imagensPorCodigo.get(m.codigo) : undefined);
+          if (img && img.complete && img.naturalWidth > 0) {
+            // Imagem carregada — desenhar MANTENDO proporção (não distorce tarja)
+            // A tarja vermelha fica na parte inferior da imagem; ao desenhar
+            // escalonando para 180x180, ela continua visível na parte de baixo.
+            ctx.drawImage(img, padding + 10, y + 10, 180, 180);
           } else {
             // Sem foto: placeholder
             ctx.fillStyle = '#f0f0f0';
@@ -6216,12 +6240,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
         ctx.textAlign = 'left';
 
-        resolve(canvas.toDataURL('image/jpeg', 0.92));
+        return canvas.toDataURL('image/jpeg', 0.92);
       } catch (err) {
         console.error('Erro ao gerar relatório 2a via:', err);
-        resolve(null);
+        return null;
       }
-    });
   };
 
   const gerarExtratoImagem = (): Promise<string> => {
