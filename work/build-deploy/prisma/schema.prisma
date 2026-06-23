@@ -69,6 +69,8 @@ model Empresa {
   cieloEstabelecimento  String?   // Nome do estabelecimento para fatura
   // Configurações Telegram Bot
   telegramBotToken String?   // Token do bot Telegram para envio de fotos/extrato
+  // Configuração de operação
+  permitirDigitacaoLeitura Boolean @default(true)  // Permitir digitação manual da leitura atual? Se false, apenas preenchimento via OCR
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

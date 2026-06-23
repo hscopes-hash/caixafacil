@@ -51,6 +51,8 @@ export interface Empresa {
   // Mercado Pago
   mercadopagoAccessToken?: string;
   mercadopagoPublicKey?: string;
+  // Configuração de operação
+  permitirDigitacaoLeitura?: boolean;
 }
 
 interface AuthState {

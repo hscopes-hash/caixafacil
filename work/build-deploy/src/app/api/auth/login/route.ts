@@ -31,6 +31,7 @@ async function ensureSchema() {
     await db.$executeRawUnsafe(`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS "cieloEstabelecimento" TEXT`);
     await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "formaCobranca" TEXT`);
     await db.$executeRawUnsafe(`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS "telegramBotToken" TEXT`);
+  await db.$executeRawUnsafe(`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS "permitirDigitacaoLeitura" BOOLEAN DEFAULT true`);
     await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "telegramGroupId" TEXT`);
   } catch (e) { /* silencioso */ }
 }

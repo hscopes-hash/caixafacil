@@ -6136,12 +6136,25 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           const linha1 = `${m.codigo} - ${nomeMaquina} ${moedaStr}`;
           ctx.fillText(linha1, textX, y + 40);
 
-          // Linha 2: Saldo (total entradas - total saídas × moeda)
+          // Linha 2: Entrada — apenas números (Atual - Anterior = Diferença), sem prefixo "Ent:"
+          ctx.font = FONT_VALUE;
+          const entAtual = lws[0].entradaNova || 0;
+          const entAnt = lws[0].entradaAnterior || 0;
+          const entDif = entAtual - entAnt;
+          ctx.fillText(`${entAtual} - ${entAnt} = ${entDif}`, textX, y + 80);
+
+          // Linha 3: Saída — apenas números, sem prefixo "Saída:"
+          const saiAtual = lws[0].saidaNova || 0;
+          const saiAnt = lws[0].saidaAnterior || 0;
+          const saiDif = saiAtual - saiAnt;
+          ctx.fillText(`${saiAtual} - ${saiAnt} = ${saiDif}`, textX, y + 115);
+
+          // Linha 4: Saldo (total entradas - total saídas × moeda)
           // Saldo já vem calculado no objeto da leitura (lws[0].saldo) e representa
           // exatamente (diferencaEntrada - diferencaSaida) * multiplicador da moeda
           ctx.font = FONT_LABEL;
           ctx.fillStyle = '#000000';
-          ctx.fillText(`Saldo: ${formatNumber(lws[0].saldo)}`, textX, y + 80);
+          ctx.fillText(`Saldo: ${formatNumber(lws[0].saldo)}`, textX, y + 155);
 
           y += CARD_HEIGHT;
         }
@@ -6938,8 +6951,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       onChange={(e) => handleNovaEntrada(index, e.target.value)}
                       onBlur={() => validateNovaEntrada(index)}
                       ref={(el) => { entradaRefs.current[index] = el; }}
-                      className="bg-muted border-border text-foreground text-right pr-2 h-10 font-mono no-spinners"
+                      className={`bg-muted border-border text-foreground text-right pr-2 h-10 font-mono no-spinners ${empresa?.permitirDigitacaoLeitura === false ? 'opacity-70 cursor-not-allowed' : ''}`}
                       placeholder="0"
+                      readOnly={empresa?.permitirDigitacaoLeitura === false}
                     />
                     {modoOperacao !== 'AJUSTE' && (
                     <Input
@@ -6973,8 +6987,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       onChange={(e) => handleNovaSaida(index, e.target.value)}
                       onBlur={() => validateNovaSaida(index)}
                       ref={(el) => { saidaRefs.current[index] = el; }}
-                      className="bg-muted border-border text-foreground text-right pr-2 h-10 font-mono no-spinners"
+                      className={`bg-muted border-border text-foreground text-right pr-2 h-10 font-mono no-spinners ${empresa?.permitirDigitacaoLeitura === false ? 'opacity-70 cursor-not-allowed' : ''}`}
                       placeholder="0"
+                      readOnly={empresa?.permitirDigitacaoLeitura === false}
                     />
                     {modoOperacao !== 'AJUSTE' && (
                     <Input
@@ -8856,7 +8871,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                                           return `x${mult.toString().replace('.', ',')}`;
                                         })()}
                                       </p>
-                                      {/* Linha 2: Saldo (total entradas - total saídas × moeda) */}
+                                      {/* Linha 2: Entrada — apenas números, sem prefixo */}
+                                      <p>
+                                        {lws[0].entradaNova || 0} - {lws[0].entradaAnterior || 0} = {(lws[0].entradaNova || 0) - (lws[0].entradaAnterior || 0)}
+                                      </p>
+                                      {/* Linha 3: Saída — apenas números, sem prefixo */}
+                                      <p>
+                                        {lws[0].saidaNova || 0} - {lws[0].saidaAnterior || 0} = {(lws[0].saidaNova || 0) - (lws[0].saidaAnterior || 0)}
+                                      </p>
+                                      {/* Linha 4: Saldo (total entradas - total saídas × moeda) */}
                                       <p className="font-medium">Saldo: {formatNumber(lws[0].saldo)}</p>
                                     </div>
                                   </div>
@@ -9607,6 +9630,8 @@ interface EmpresaGestao {
   // MP (cobrador POS)
   mercadopagoAccessToken?: string;
   mercadopagoPublicKey?: string;
+  // Configuração de operação
+  permitirDigitacaoLeitura?: boolean;  // Permitir digitação manual? Se false, só OCR
 }
 
 // ============================================
@@ -9959,6 +9984,8 @@ function GestaoEmpresasPage({ adminEmail }: { adminEmail: string }) {
     pixBancoNome: '',
     // Telegram Bot
     telegramBotToken: '',
+    // Configuração de operação
+    permitirDigitacaoLeitura: true,
     // Cielo (Cartão)
     cieloMerchantId: '',
     cieloMerchantKey: '',
@@ -10104,6 +10131,7 @@ function GestaoEmpresasPage({ adminEmail }: { adminEmail: string }) {
       pixMerchantCidade: '',
       pixBancoNome: '',
       telegramBotToken: '',
+      permitirDigitacaoLeitura: true,
       cieloMerchantId: '',
       cieloMerchantKey: '',
       cieloAmbiente: 'sandbox' as 'sandbox' | 'production',
@@ -10137,6 +10165,7 @@ function GestaoEmpresasPage({ adminEmail }: { adminEmail: string }) {
       pixMerchantCidade: empresa.pixMerchantCidade || '',
       pixBancoNome: empresa.pixBancoNome || '',
       telegramBotToken: empresa.telegramBotToken || '',
+      permitirDigitacaoLeitura: empresa.permitirDigitacaoLeitura ?? true,
       cieloMerchantId: empresa.cieloMerchantId || '',
       cieloMerchantKey: empresa.cieloMerchantKey || '',
       cieloAmbiente: (empresa.cieloAmbiente as 'sandbox' | 'production') || 'sandbox',
@@ -10487,6 +10516,29 @@ function GestaoEmpresasPage({ adminEmail }: { adminEmail: string }) {
                   className="bg-muted border-border text-sm font-mono"
                 />
                 <p className="text-[10px] text-muted-foreground">Token do bot criado pelo @BotFather no Telegram. O bot precisa ser admin do grupo.</p>
+              </div>
+
+              {/* Permitir digitação da leitura atual */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Lock className="w-3 h-3" />Permitir digitação da leitura atual?
+                </Label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, permitirDigitacaoLeitura: !(formData.permitirDigitacaoLeitura ?? true) })}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${formData.permitirDigitacaoLeitura ?? true ? 'bg-amber-500' : 'bg-muted'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${formData.permitirDigitacaoLeitura ?? true ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                  <span className="text-xs text-foreground">
+                    {(formData.permitirDigitacaoLeitura ?? true) ? 'Sim — operador pode digitar/editar valores' : 'Não — apenas preenchimento via OCR da foto'}
+                  </span>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Se ativado, o operador pode editar manualmente os valores de entrada/saída na tela de leituras.
+                  Se desativado, os campos só serão preenchidos pelo processamento da foto (OCR) e não poderão ser modificados.
+                </p>
               </div>
 
               {/* ========== SEPARATOR — Cielo (Cartão) ========== */}

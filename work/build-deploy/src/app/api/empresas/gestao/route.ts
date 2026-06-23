@@ -106,6 +106,7 @@ export async function POST(request: NextRequest) {
       telegramBotToken,
       mercadopagoAccessToken,
       mercadopagoPublicKey,
+      permitirDigitacaoLeitura,
     } = body;
 
     // Verificar se é o admin master
@@ -158,6 +159,7 @@ export async function POST(request: NextRequest) {
         telegramBotToken: telegramBotToken || null,
         mercadopagoAccessToken: mercadopagoAccessToken || null,
         mercadopagoPublicKey: mercadopagoPublicKey || null,
+        permitirDigitacaoLeitura: permitirDigitacaoLeitura !== undefined ? Boolean(permitirDigitacaoLeitura) : true,
       }
     });
 

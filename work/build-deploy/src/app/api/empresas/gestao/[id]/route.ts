@@ -36,6 +36,7 @@ export async function PUT(
       mercadopagoAccessToken,
       mercadopagoPublicKey,
       permiteEditarLeituraAnterior,
+      permitirDigitacaoLeitura,
       cieloMerchantId,
       cieloMerchantKey,
       cieloAmbiente,
@@ -90,6 +91,7 @@ export async function PUT(
         telegramBotToken: telegramBotToken || null,
         mercadopagoAccessToken: mercadopagoAccessToken || null,
         mercadopagoPublicKey: mercadopagoPublicKey || null,
+        permitirDigitacaoLeitura: permitirDigitacaoLeitura !== undefined ? Boolean(permitirDigitacaoLeitura) : undefined,
       }
     });
 
