@@ -6250,12 +6250,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         ctx.fillText('TOTAIS', A4_W / 2, y);
         y += 30;
 
-        // 3 cards lado a lado: Entradas, Saídas, Resultado
+        // 3 cards lado a lado: Entradas Extras, Saídas Extras, Fechamento
         const cardW = (A4_W - padding * 2 - 20) / 3; // 3 cards com 10px gap
         const cardH = 100;
         const cardY = y;
 
-        // Card 1: Total Entradas (azul)
+        // Card 1: Total Entradas Extras (azul)
         ctx.strokeStyle = '#0066cc';
         ctx.lineWidth = 3;
         ctx.strokeRect(padding, cardY, cardW, cardH);
@@ -6266,9 +6266,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         ctx.textAlign = 'center';
         ctx.fillText('ENTRADAS', padding + cardW / 2, cardY + 35);
         ctx.font = FONT_TOTAL;
-        ctx.fillText(formatNumber(totalEntradas), padding + cardW / 2, cardY + 75);
+        ctx.fillText(formatNumber(totalReceitas), padding + cardW / 2, cardY + 75);
 
-        // Card 2: Total Saídas (vermelho)
+        // Card 2: Total Saídas Extras (vermelho)
         const card2X = padding + cardW + 10;
         ctx.strokeStyle = '#cc3300';
         ctx.strokeRect(card2X, cardY, cardW, cardH);
@@ -6278,21 +6278,37 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         ctx.font = FONT_LABEL;
         ctx.fillText('SAÍDAS', card2X + cardW / 2, cardY + 35);
         ctx.font = FONT_TOTAL;
-        ctx.fillText(formatNumber(totalSaidas), card2X + cardW / 2, cardY + 75);
+        ctx.fillText(formatNumber(totalDespesas), card2X + cardW / 2, cardY + 75);
 
-        // Card 3: Resultado (verde se positivo, vermelho se negativo)
+        // Card 3: Fechamento — título dinâmico (SOBROU/FECHOU/FALTOU) e cor conforme valor
         const card3X = padding + (cardW + 10) * 2;
-        const isPositivo = fechamentoFinal >= 0;
-        const cor3 = isPositivo ? '#008800' : '#cc0000';
-        const bg3 = isPositivo ? '#e6ffe6' : '#ffe6e6';
-        ctx.strokeStyle = cor3;
+        // Determinar título e cor baseado no valor do fechamento
+        // > 0 → SOBROU (verde)
+        // = 0 → FECHOU (azul)
+        // < 0 → FALTOU (vermelho)
+        let tituloFechamento: string;
+        let corFechamento: string;
+        let bgFechamento: string;
+        if (fechamentoFinal > 0) {
+          tituloFechamento = 'SOBROU';
+          corFechamento = '#008800';
+          bgFechamento = '#e6ffe6';
+        } else if (fechamentoFinal === 0) {
+          tituloFechamento = 'FECHOU';
+          corFechamento = '#0066cc';
+          bgFechamento = '#e6f0ff';
+        } else {
+          tituloFechamento = 'FALTOU';
+          corFechamento = '#cc0000';
+          bgFechamento = '#ffe6e6';
+        }
+        ctx.strokeStyle = corFechamento;
         ctx.strokeRect(card3X, cardY, cardW, cardH);
-        ctx.fillStyle = bg3;
+        ctx.fillStyle = bgFechamento;
         ctx.fillRect(card3X, cardY, cardW, cardH);
-        ctx.fillStyle = cor3;
+        ctx.fillStyle = corFechamento;
         ctx.font = FONT_LABEL;
-        const labelResultado = modo2via === 'COBRANCA' ? 'JOGADO' : (temItensExtras ? 'FECHAMENTO' : 'RESULTADO');
-        ctx.fillText(labelResultado, card3X + cardW / 2, cardY + 35);
+        ctx.fillText(tituloFechamento, card3X + cardW / 2, cardY + 35);
         ctx.font = FONT_TOTAL;
         ctx.fillText(formatNumber(fechamentoFinal), card3X + cardW / 2, cardY + 75);
 
@@ -8947,22 +8963,46 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                               </div>
                             )}
 
-                            {/* Cards de totais em molduras (3 lado a lado) */}
+                            {/* Cards de totais em molduras (3 lado a lado) — ENTRADAS EXTRAS, SAÍDAS EXTRAS, FECHAMENTO */}
                             <div className="grid grid-cols-3 gap-2 mt-3">
+                              {/* Card 1: Total Entradas Extras (azul) */}
                               <div className="border-2 border-blue-700 bg-blue-50 rounded p-2 text-center">
                                 <p className="font-bold text-blue-700 text-xs">ENTRADAS</p>
-                                <p className="font-bold text-base text-blue-900">{formatNumber(totalEntradas)}</p>
+                                <p className="font-bold text-base text-blue-900">{formatNumber(totalReceitas)}</p>
                               </div>
+                              {/* Card 2: Total Saídas Extras (vermelho) */}
                               <div className="border-2 border-red-700 bg-red-50 rounded p-2 text-center">
                                 <p className="font-bold text-red-700 text-xs">SAÍDAS</p>
-                                <p className="font-bold text-base text-red-900">{formatNumber(totalSaidas)}</p>
+                                <p className="font-bold text-base text-red-900">{formatNumber(totalDespesas)}</p>
                               </div>
-                              <div className={`border-2 rounded p-2 text-center ${fechamentoFinal >= 0 ? 'border-green-700 bg-green-50' : 'border-red-700 bg-red-50'}`}>
-                                <p className={`font-bold text-xs ${fechamentoFinal >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                                  {modo2via === 'COBRANCA' ? 'JOGADO' : (temItensExtras ? 'FECHAMENTO' : 'RESULTADO')}
-                                </p>
-                                <p className={`font-bold text-base ${fechamentoFinal >= 0 ? 'text-green-900' : 'text-red-900'}`}>{formatNumber(fechamentoFinal)}</p>
-                              </div>
+                              {/* Card 3: Fechamento — título dinâmico (SOBROU/FECHOU/FALTOU) e cor conforme valor */}
+                              {(() => {
+                                // > 0 → SOBROU (verde)
+                                // = 0 → FECHOU (azul)
+                                // < 0 → FALTOU (vermelho)
+                                if (fechamentoFinal > 0) {
+                                  return (
+                                    <div className="border-2 border-green-700 bg-green-50 rounded p-2 text-center">
+                                      <p className="font-bold text-green-700 text-xs">SOBROU</p>
+                                      <p className="font-bold text-base text-green-900">{formatNumber(fechamentoFinal)}</p>
+                                    </div>
+                                  );
+                                } else if (fechamentoFinal === 0) {
+                                  return (
+                                    <div className="border-2 border-blue-700 bg-blue-50 rounded p-2 text-center">
+                                      <p className="font-bold text-blue-700 text-xs">FECHOU</p>
+                                      <p className="font-bold text-base text-blue-900">{formatNumber(fechamentoFinal)}</p>
+                                    </div>
+                                  );
+                                } else {
+                                  return (
+                                    <div className="border-2 border-red-700 bg-red-50 rounded p-2 text-center">
+                                      <p className="font-bold text-red-700 text-xs">FALTOU</p>
+                                      <p className="font-bold text-base text-red-900">{formatNumber(fechamentoFinal)}</p>
+                                    </div>
+                                  );
+                                }
+                              })()}
                             </div>
 
                             {modo2via === 'COBRANCA' && (
