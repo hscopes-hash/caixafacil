@@ -6358,7 +6358,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         ctx.fillStyle = '#0066cc';
         ctx.font = FONT_LABEL;
         ctx.textAlign = 'center';
-        ctx.fillText('ENTRADAS', padding + cardW / 2, cardY + 35);
+        ctx.fillText('ENTRADA', padding + cardW / 2, cardY + 35);
         ctx.font = FONT_TOTAL;
         ctx.fillText(formatNumber(totalReceitas), padding + cardW / 2, cardY + 75);
 
@@ -6370,7 +6370,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         ctx.fillRect(card2X, cardY, cardW, cardH);
         ctx.fillStyle = '#cc3300';
         ctx.font = FONT_LABEL;
-        ctx.fillText('SAÍDAS', card2X + cardW / 2, cardY + 35);
+        ctx.fillText('SAÍDA', card2X + cardW / 2, cardY + 35);
         ctx.font = FONT_TOTAL;
         ctx.fillText(formatNumber(totalDespesas), card2X + cardW / 2, cardY + 75);
 
@@ -9062,16 +9062,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                               </div>
                             )}
 
-                            {/* Cards de totais em molduras (3 lado a lado) — ENTRADAS EXTRAS, SAÍDAS EXTRAS, FECHAMENTO */}
+                            {/* Cards de totais em molduras (3 lado a lado) — ENTRADA, SAÍDA, FECHAMENTO */}
                             <div className="grid grid-cols-3 gap-2 mt-3">
-                              {/* Card 1: Total Entradas Extras (azul) */}
+                              {/* Card 1: Total Entrada (azul) */}
                               <div className="border-2 border-blue-700 bg-blue-50 rounded p-2 text-center">
-                                <p className="font-bold text-blue-700 text-xs">ENTRADAS</p>
+                                <p className="font-bold text-blue-700 text-xs">ENTRADA</p>
                                 <p className="font-bold text-base text-blue-900">{formatNumber(totalReceitas)}</p>
                               </div>
-                              {/* Card 2: Total Saídas Extras (vermelho) */}
+                              {/* Card 2: Total Saída (vermelho) */}
                               <div className="border-2 border-red-700 bg-red-50 rounded p-2 text-center">
-                                <p className="font-bold text-red-700 text-xs">SAÍDAS</p>
+                                <p className="font-bold text-red-700 text-xs">SAÍDA</p>
                                 <p className="font-bold text-base text-red-900">{formatNumber(totalDespesas)}</p>
                               </div>
                               {/* Card 3: Fechamento — título dinâmico (SOBROU/FECHOU/FALTOU) e cor conforme valor */}
