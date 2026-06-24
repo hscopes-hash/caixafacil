@@ -5227,6 +5227,90 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     await enviarWhatsAppTextoSeguro(texto, phone);
   };
 
+  // 2a via: enviar RELATÓRIO (canvas A4) via WhatsApp — usa Web Share API com arquivo
+  // Funciona em Android Chrome e iOS Safari (PWA). Em desktop, faz download da imagem.
+  const enviarWhatsAppRelatorio2aVia = async () => {
+    if (!clienteSelecionado || segundaViaDados.length === 0) {
+      toast.error('Nenhum dado de fechamento para gerar relatório');
+      return;
+    }
+
+    toast.loading('Gerando relatório...', { id: 'relatorio-wa-2via' });
+
+    try {
+      // 1) Gerar imagem do relatório via canvas (mesma função do Telegram)
+      const relatorioImagem = await gerarRelatorioImagem2aVia();
+      if (!relatorioImagem) {
+        toast.dismiss('relatorio-wa-2via');
+        toast.error('Falha ao gerar relatório');
+        return;
+      }
+      console.log('[WhatsApp 2a via] Relatório gerado:', `${relatorioImagem.length} chars`);
+
+      // 2) Converter data URL para File (necessário para Web Share API)
+      const response = await fetch(relatorioImagem);
+      const blob = await response.blob();
+      const now = new Date();
+      const fileName = `relatorio_${clienteSelecionado.nome.replace(/\s+/g, '_')}_${now.getTime()}.jpg`;
+      const file = new File([blob], fileName, { type: 'image/jpeg' });
+
+      // 3) Texto de acompanhamento (caption)
+      const modo2via = clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANÇA' : 'LEITURA';
+      const caption = `RELATÓRIO DE ${modo2via} - ${clienteSelecionado.nome.toUpperCase()}\nData: ${segundaViaSelecionada?.data || ''}`;
+
+      // 4) Tentar Web Share API com arquivo (funciona em mobile)
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            title: `Relatório - ${clienteSelecionado.nome}`,
+            text: caption,
+            files: [file],
+          });
+          toast.dismiss('relatorio-wa-2via');
+          toast.success('Relatório enviado!');
+          return;
+        } catch (shareError: unknown) {
+          if (shareError instanceof Error && shareError.name === 'AbortError') {
+            toast.dismiss('relatorio-wa-2via');
+            return; // Usuário cancelou
+          }
+          console.warn('Web Share falhou, tentando fallback:', shareError);
+        }
+      }
+
+      // 5) Fallback 1: Web Share sem arquivo (apenas texto + abrir WhatsApp)
+      // + download automático da imagem para o usuário anexar manualmente
+      toast.dismiss('relatorio-wa-2via');
+      const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
+      const phone = clienteSelecionado.telefone?.replace(/\D/g, '') || '';
+
+      // Download da imagem
+      const downloadLink = document.createElement('a');
+      downloadLink.href = relatorioImagem;
+      downloadLink.download = fileName;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+
+      // Abrir WhatsApp
+      if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
+        const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
+        setTimeout(() => abrirWhatsAppLink(grupoUrl), 500);
+        toast.info('Relatório baixado! Anexe a imagem no grupo do WhatsApp.');
+      } else if (phone) {
+        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 500);
+        toast.info('Relatório baixado! Anexe a imagem no WhatsApp do cliente.');
+      } else {
+        // Sem WhatsApp cadastrado — só fez download
+        toast.success('Relatório baixado! Compartilhe manualmente.');
+      }
+    } catch (error) {
+      toast.dismiss('relatorio-wa-2via');
+      console.error('Erro ao gerar/enviar relatório WhatsApp:', error);
+      toast.error('Erro ao gerar relatório');
+    }
+  };
+
   // Comprimir imagem via canvas (reduz tamanho para envio via WhatsApp)
   const comprimirImagem = (blob: Blob, maxPx = 1200, qualidade = 0.7): Promise<Blob> => {
     return new Promise((resolve) => {
@@ -9035,11 +9119,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       Imprimir
                     </Button>
                     <Button
-                      onClick={gerarWhatsAppSegundaVia}
+                      onClick={segundaViaModo === 'RELATORIO' ? enviarWhatsAppRelatorio2aVia : gerarWhatsAppSegundaVia}
                       className="bg-gradient-to-r from-green-500 to-emerald-600"
                     >
                       <MessageCircle className="w-4 h-4 mr-2" />
-                      WhatsApp (Somente Extrato)
+                      {segundaViaModo === 'RELATORIO' ? 'WhatsApp (Relatório)' : 'WhatsApp (Somente Extrato)'}
                     </Button>
                     <Button
                       onClick={enviarTelegram2aVia}
