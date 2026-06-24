@@ -5971,23 +5971,34 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   // Layout:
   //   - Cabeçalho (cliente, data, operador)
   //   - Para cada máquina: card com foto em miniatura + valores (entrada/saída)
-  //   - Cards finais em molduras: Total Entradas, Total Saídas, Resultado
+  //   - Cards finais em molduras: Total Entrada, Total Saída, Resultado
   //   - Letra maior (legível)
-  //   - Formato A4 (794 x 1123 px a 96 DPI)
+  //   - Formato A4 (794 x 1123 px a 96 DPI) escalado 2x para alta resolução
+  //     (1588 x 2246 px) — necessário para manter legibilidade quando a imagem
+  //     é compartilhada via WhatsApp e exibida em telas de celular que reduzem
+  //     o tamanho pela metade.
   const gerarRelatorioImagem2aVia = async (): Promise<string | null> => {
     try {
       if (!segundaViaDados || segundaViaDados.length === 0) {
         return null;
       }
 
-        // Formato A4 a 96 DPI (padrão web): 794 x 1123 px
+        // === Alta resolução: 2x DPI para manter legibilidade no WhatsApp ===
+        // Canvas interno desenhado em coordenadas A4 padrão (794 x 1123) mas
+        // renderizado em resolução 2x (1588 x 2246) via ctx.scale(2, 2)
+        const SCALE = 2;
         const A4_W = 794;
         const A4_H = 1123;
         const canvas = document.createElement('canvas');
-        canvas.width = A4_W;
-        canvas.height = A4_H; // altura será ajustada dinamicamente
+        canvas.width = A4_W * SCALE;
+        canvas.height = A4_H * SCALE; // altura será ajustada dinamicamente
         const ctx = canvas.getContext('2d');
         if (!ctx) { return null; }
+        // Aplicar escala 2x — todas as coordenadas continuam em sistema A4 padrão
+        ctx.scale(SCALE, SCALE);
+        // Suavização de texto/imagens em alta resolução
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
 
         // Configurações de fonte (letra maior)
         const FONT_TITLE = 'bold 26px "Arial", sans-serif';
@@ -6104,7 +6115,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
         // Se passar de 1 página A4, multiplica altura
         const alturaFinal = Math.max(A4_H, y);
-        canvas.height = alturaFinal;
+        // canvas.height é em pixels reais (precisa multiplicar pelo SCALE)
+        // O ctx.scale(SCALE, SCALE) já foi aplicado, então as coordenadas
+        // de desenho continuam em sistema A4 padrão.
+        canvas.height = alturaFinal * SCALE;
+        // Re-aplicar escala após mudar canvas.height (reset do contexto)
+        ctx.scale(SCALE, SCALE);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
 
         // ===== RENDERIZAÇÃO =====
         // Fundo branco
