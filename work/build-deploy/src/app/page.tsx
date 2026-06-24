@@ -4063,7 +4063,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       if (data.success) {
         toast.success('Enviado para o Telegram!');
       } else {
-        toast.error(data.error || 'Erro ao enviar para Telegram');
+        toast.error(data.errorDetail || data.error || 'Erro ao enviar para Telegram', { duration: 8000 });
       }
     } catch (error) {
       toast.dismiss();
@@ -5416,9 +5416,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         toast.success(msg);
       } else {
         console.error('[Telegram 2a via] Erro:', data);
-        toast.error(data.error || 'Erro ao enviar para Telegram');
+        // Exibir mensagem detalhada do backend (errorDetail) ou mensagem genérica
+        const errorMsg = data.errorDetail || data.error || 'Erro ao enviar para Telegram';
+        toast.error(errorMsg, { duration: 8000 });
       }
-    } catch (error) { toast.dismiss('telegram-2via'); toast.error('Erro ao enviar para Telegram'); console.error('Erro Telegram 2a via:', error); }
+    } catch (error) {
+      toast.dismiss('telegram-2via');
+      const errMsg = error instanceof Error ? error.message : 'Erro ao enviar para Telegram';
+      console.error('Erro Telegram 2a via:', error);
+      toast.error(errMsg, { duration: 8000 });
+    }
   };
 
   // 2a via: enviar SOMENTE as fotos via Web Share (sem texto)
@@ -6548,12 +6555,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         setResumoTelegramEnviado(true);
       } else {
         console.error('[Telegram Resumo] Erro:', data);
-        toast.error(data.error || 'Erro ao enviar para Telegram');
+        toast.error(data.errorDetail || data.error || 'Erro ao enviar para Telegram', { duration: 8000 });
       }
     } catch (error) {
       toast.dismiss();
       console.error('Erro Telegram resumo:', error);
-      toast.error('Erro ao enviar. Verifique a conexão.');
+      toast.error(error instanceof Error ? error.message : 'Erro ao enviar. Verifique a conexão.', { duration: 8000 });
     }
   };
 
