@@ -5400,6 +5400,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           clienteId: clienteSelecionado?.id,
           mensagem: null, // não enviar mais texto — extrato/relatório vai como imagem
           fotos: fotosEnvio.length > 0 ? fotosEnvio : undefined,
+          // Se modo RELATÓRIO, primeira foto (relatório A4) é enviada como
+          // DOCUMENTO (sem compressão) para manter legibilidade do texto.
+          // Telegram comprime JPGs via sendPhoto, mas NÃO via sendDocument.
+          primeiraFotoComoDocumento: segundaViaModo === 'RELATORIO',
         }),
       });
       const data = await res.json();
