@@ -6000,13 +6000,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         maquinasArr.forEach(() => { y += CARD_HEIGHT + 20; });
         y += 30; // separador
 
-        // Receitas extras
-        if (modo2via !== 'COBRANCA' && receitasFinal.length > 0) {
-          y += receitasFinal.length * 30 + 40;
-        }
-        // Despesas extras
-        if (modo2via !== 'COBRANCA' && despesasFinal.length > 0) {
-          y += despesasFinal.length * 30 + 40;
+        // Receitas extras + Despesas extras (lado a lado com moldura)
+        // Altura necessária = máximo entre as duas listas (já que ficarão lado a lado)
+        const temReceitasExtras = modo2via !== 'COBRANCA' && receitasFinal.length > 0;
+        const temDespesasExtras = modo2via !== 'COBRANCA' && despesasFinal.length > 0;
+        if (temReceitasExtras || temDespesasExtras) {
+          const itensReceitas = temReceitasExtras ? receitasFinal.length : 0;
+          const itensDespesas = temDespesasExtras ? despesasFinal.length : 0;
+          const maxItens = Math.max(itensReceitas, itensDespesas);
+          // Cabeçalho (30) + itens (maxItens * 30) + total (40) + padding da moldura (20)
+          y += 30 + maxItens * 30 + 40 + 20;
         }
 
         // Cards de totais (3 molduras)
@@ -6169,38 +6172,75 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         ctx.stroke();
         y += 30;
 
-        // Receitas extras (se houver)
-        if (modo2via !== 'COBRANCA' && receitasFinal.length > 0) {
-          ctx.font = FONT_LABEL;
-          ctx.fillText('ENTRADAS EXTRAS:', padding, y);
-          y += 30;
-          ctx.font = FONT_VALUE;
-          receitasFinal.forEach((r) => {
-            ctx.fillText(`  ${r.descricao || 'OUTROS'}: ${formatNumber(r.valor)}`, padding, y);
-            y += 28;
-          });
-          ctx.font = FONT_LABEL;
-          ctx.fillStyle = '#0066cc';
-          ctx.fillText(`Total Entradas Extras: ${formatNumber(totalReceitas)}`, padding, y);
-          ctx.fillStyle = '#000000';
-          y += 40;
-        }
+        // Receitas extras + Despesas extras — lado a lado com moldura
+        if (temReceitasExtras || temDespesasExtras) {
+          // Largura de cada coluna (metade da largura útil, com gap de 20px)
+          const colW = (A4_W - padding * 2 - 20) / 2;
+          // Calcular altura da seção baseada no maior número de itens
+          const itensReceitas = temReceitasExtras ? receitasFinal.length : 0;
+          const itensDespesas = temDespesasExtras ? despesasFinal.length : 0;
+          const maxItens = Math.max(itensReceitas, itensDespesas);
+          const sectionH = 30 + maxItens * 30 + 40 + 20; // cabeçalho + itens + total + padding
 
-        // Despesas extras (se houver)
-        if (modo2via !== 'COBRANCA' && despesasFinal.length > 0) {
-          ctx.font = FONT_LABEL;
-          ctx.fillText('SAÍDAS EXTRAS:', padding, y);
-          y += 30;
-          ctx.font = FONT_VALUE;
-          despesasFinal.forEach((d) => {
-            ctx.fillText(`  ${d.descricao || 'OUTROS'}: ${formatNumber(d.valor)}`, padding, y);
-            y += 28;
-          });
-          ctx.font = FONT_LABEL;
-          ctx.fillStyle = '#cc3300';
-          ctx.fillText(`Total Saídas Extras: ${formatNumber(totalDespesas)}`, padding, y);
+          // === Coluna esquerda: ENTRADAS EXTRAS (moldura azul) ===
+          if (temReceitasExtras) {
+            // Moldura
+            ctx.strokeStyle = '#0066cc';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(padding, y, colW, sectionH);
+            ctx.fillStyle = '#e6f0ff';
+            ctx.fillRect(padding, y, colW, sectionH);
+
+            // Conteúdo
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#0066cc';
+            ctx.font = FONT_LABEL;
+            ctx.fillText('ENTRADAS EXTRAS', padding + 15, y + 30);
+
+            ctx.fillStyle = '#000000';
+            ctx.font = FONT_VALUE;
+            let yRec = y + 60;
+            receitasFinal.forEach((r) => {
+              ctx.fillText(`${r.descricao || 'OUTROS'}: ${formatNumber(r.valor)}`, padding + 15, yRec);
+              yRec += 30;
+            });
+
+            ctx.fillStyle = '#0066cc';
+            ctx.font = FONT_LABEL;
+            ctx.fillText(`Total: ${formatNumber(totalReceitas)}`, padding + 15, y + sectionH - 20);
+          }
+
+          // === Coluna direita: SAÍDAS EXTRAS (moldura vermelha) ===
+          if (temDespesasExtras) {
+            const col2X = padding + colW + 20;
+            // Moldura
+            ctx.strokeStyle = '#cc3300';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(col2X, y, colW, sectionH);
+            ctx.fillStyle = '#ffe6e6';
+            ctx.fillRect(col2X, y, colW, sectionH);
+
+            // Conteúdo
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#cc3300';
+            ctx.font = FONT_LABEL;
+            ctx.fillText('SAÍDAS EXTRAS', col2X + 15, y + 30);
+
+            ctx.fillStyle = '#000000';
+            ctx.font = FONT_VALUE;
+            let yDesp = y + 60;
+            despesasFinal.forEach((d) => {
+              ctx.fillText(`${d.descricao || 'OUTROS'}: ${formatNumber(d.valor)}`, col2X + 15, yDesp);
+              yDesp += 30;
+            });
+
+            ctx.fillStyle = '#cc3300';
+            ctx.font = FONT_LABEL;
+            ctx.fillText(`Total: ${formatNumber(totalDespesas)}`, col2X + 15, y + sectionH - 20);
+          }
+
+          y += sectionH + 20;
           ctx.fillStyle = '#000000';
-          y += 40;
         }
 
         // ===== TOTAIS FINAIS — 3 cards em moldura =====
@@ -8887,19 +8927,23 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                               })}
                             </div>
 
-                            {/* Receitas/Despesas extras */}
-                            {modo2via !== 'COBRANCA' && receitasFinal.length > 0 && (
-                              <div className="mb-2 text-sm">
-                                <p className="font-bold">ENTRADAS EXTRAS:</p>
-                                {receitasFinal.map((r, i) => <p key={i}>  {r.descricao}: {formatNumber(r.valor)}</p>)}
-                                <p className="font-bold text-blue-700">Total: {formatNumber(totalReceitas)}</p>
-                              </div>
-                            )}
-                            {modo2via !== 'COBRANCA' && despesasFinal.length > 0 && (
-                              <div className="mb-2 text-sm">
-                                <p className="font-bold">SAÍDAS EXTRAS:</p>
-                                {despesasFinal.map((d, i) => <p key={i}>  {d.descricao}: {formatNumber(d.valor)}</p>)}
-                                <p className="font-bold text-red-700">Total: {formatNumber(totalDespesas)}</p>
+                            {/* Receitas/Despesas extras — lado a lado com moldura */}
+                            {modo2via !== 'COBRANCA' && (receitasFinal.length > 0 || despesasFinal.length > 0) && (
+                              <div className="grid grid-cols-2 gap-2 mb-3">
+                                {receitasFinal.length > 0 && (
+                                  <div className="border-2 border-blue-700 bg-blue-50 rounded p-2 text-sm">
+                                    <p className="font-bold text-blue-700 mb-1">ENTRADAS EXTRAS</p>
+                                    {receitasFinal.map((r, i) => <p key={i}>  {r.descricao}: {formatNumber(r.valor)}</p>)}
+                                    <p className="font-bold text-blue-700 mt-1">Total: {formatNumber(totalReceitas)}</p>
+                                  </div>
+                                )}
+                                {despesasFinal.length > 0 && (
+                                  <div className="border-2 border-red-700 bg-red-50 rounded p-2 text-sm">
+                                    <p className="font-bold text-red-700 mb-1">SAÍDAS EXTRAS</p>
+                                    {despesasFinal.map((d, i) => <p key={i}>  {d.descricao}: {formatNumber(d.valor)}</p>)}
+                                    <p className="font-bold text-red-700 mt-1">Total: {formatNumber(totalDespesas)}</p>
+                                  </div>
+                                )}
                               </div>
                             )}
 
