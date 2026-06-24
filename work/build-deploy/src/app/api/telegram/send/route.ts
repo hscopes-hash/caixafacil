@@ -79,6 +79,7 @@ async function sendTelegramText(botToken: string, chatId: string, text: string):
 }
 
 // Enviar foto individual (aceita base64 data URL ou URL HTTP)
+// Implementação manual de multipart/form-data para compatibilidade Node.js.
 async function sendTelegramPhoto(
   botToken: string,
   chatId: string,
@@ -95,16 +96,40 @@ async function sendTelegramPhoto(
       const mimeMatch = photoSource.match(/data:(image\/\w+);/);
       const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
       const ext = mimeType === 'image/png' ? 'png' : 'jpg';
+      const fileName = `foto_${Date.now()}.${ext}`;
 
-      const formData = new FormData();
-      formData.append('chat_id', chatId);
-      const blob = new Blob([buffer], { type: mimeType });
-      formData.append('photo', blob, `foto_${Date.now()}.${ext}`);
-      if (caption) formData.append('caption', caption);
+      // Construir multipart/form-data manualmente
+      const boundary = `----CaixaFacilBoundary${Date.now()}`;
+      const parts: Buffer[] = [];
+
+      parts.push(Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${chatId}\r\n`
+      ));
+
+      if (caption) {
+        parts.push(Buffer.from(
+          `--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${caption}\r\n`
+        ));
+      }
+
+      parts.push(Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="${fileName}"\r\nContent-Type: ${mimeType}\r\n\r\n`
+      ));
+      parts.push(buffer);
+      parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+      const body = Buffer.concat(parts);
 
       const resp = await fetch(
         `https://api.telegram.org/bot${botToken}/sendPhoto`,
-        { method: 'POST', body: formData }
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': `multipart/form-data; boundary=${boundary}`,
+            'Content-Length': body.length.toString(),
+          },
+          body,
+        }
       );
       const data = await resp.json();
       if (!data.ok) {
@@ -114,7 +139,7 @@ async function sendTelegramPhoto(
       return true;
     }
 
-    // Se é URL HTTP, usar directly
+    // Se é URL HTTP, usar directly (sem multipart)
     const formData = new FormData();
     formData.append('chat_id', chatId);
     formData.append('photo', photoSource);
@@ -139,6 +164,9 @@ async function sendTelegramPhoto(
 // Enviar documento (arquivo) — NÃO comprime a imagem.
 // Usado para relatórios com texto que precisam manter legibilidade.
 // O Telegram recebe o arquivo original e o usuário pode ampliar/zoom sem perda.
+//
+// Implementação manual de multipart/form-data (em vez de FormData/Blob nativos)
+// para garantir compatibilidade com Node.js runtime do Vercel serverless.
 async function sendTelegramDocument(
   botToken: string,
   chatId: string,
@@ -158,17 +186,43 @@ async function sendTelegramDocument(
     const mimeMatch = photoSource.match(/data:(image\/\w+);/);
     const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
     const ext = mimeType === 'image/png' ? 'png' : 'jpg';
+    const fileName = `relatorio_${Date.now()}.${ext}`;
 
-    const formData = new FormData();
-    formData.append('chat_id', chatId);
-    const blob = new Blob([buffer], { type: mimeType });
-    // Nome do arquivo com timestamp para evitar colisões
-    formData.append('document', blob, `relatorio_${Date.now()}.${ext}`);
-    if (caption) formData.append('caption', caption);
+    // Construir multipart/form-data manualmente (compatível com Node 18+)
+    const boundary = `----CaixaFacilBoundary${Date.now()}`;
+    const parts: Buffer[] = [];
+
+    // Campo chat_id
+    parts.push(Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${chatId}\r\n`
+    ));
+
+    // Campo caption (opcional)
+    if (caption) {
+      parts.push(Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${caption}\r\n`
+      ));
+    }
+
+    // Campo document (arquivo)
+    parts.push(Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="document"; filename="${fileName}"\r\nContent-Type: ${mimeType}\r\n\r\n`
+    ));
+    parts.push(buffer);
+    parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+    const body = Buffer.concat(parts);
 
     const resp = await fetch(
       `https://api.telegram.org/bot${botToken}/sendDocument`,
-      { method: 'POST', body: formData }
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Length': body.length.toString(),
+        },
+        body,
+      }
     );
     const data = await resp.json();
     if (!data.ok) {
@@ -180,7 +234,12 @@ async function sendTelegramDocument(
     return true;
   } catch (error) {
     console.error('[Telegram] sendDocument exception:', error);
-    return false;
+    // Fallback para sendPhoto em caso de exceção
+    try {
+      return await sendTelegramPhoto(botToken, chatId, photoSource, caption);
+    } catch {
+      return false;
+    }
   }
 }
 
