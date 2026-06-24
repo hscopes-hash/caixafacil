@@ -6124,7 +6124,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           ctx.fillStyle = '#000000';
 
           // Linha 1: Código + Nome + Moeda convertida (ex: "x0,25" em vez de "[M025]")
-          ctx.font = FONT_LABEL;
+          // Código e nome em negrito; moeda em peso normal (sem negrito)
           const nomeMaquina = (m.tipo?.descricao || '').toUpperCase();
           const moeda = lws[0].moeda || 'M001';
           // Mapear código de moeda para multiplicador legível
@@ -6136,8 +6136,18 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           };
           const multiplicador = multiplicadoresMoeda[moeda] ?? 0.01;
           const moedaStr = `x${multiplicador.toString().replace('.', ',')}`;
-          const linha1 = `${m.codigo} - ${nomeMaquina} ${moedaStr}`;
-          ctx.fillText(linha1, textX, y + 40);
+          const parteNegrito = `${m.codigo} - ${nomeMaquina} `;
+          const parteNormal = moedaStr;
+
+          // Renderizar parte em negrito
+          ctx.font = FONT_LABEL; // bold 20px
+          ctx.fillStyle = '#000000';
+          ctx.fillText(parteNegrito, textX, y + 40);
+          // Medir largura da parte em negrito para posicionar a moeda logo após
+          const larguraNegrito = ctx.measureText(parteNegrito).width;
+          // Renderizar moeda sem negrito (mesmo tamanho, peso normal)
+          ctx.font = '20px "Arial", sans-serif';
+          ctx.fillText(parteNormal, textX + larguraNegrito, y + 40);
 
           // Linha 2: Entrada — apenas números (Atual - Anterior = Diferença), sem prefixo "Ent:"
           ctx.font = FONT_VALUE;
@@ -6182,7 +6192,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           const maxItens = Math.max(itensReceitas, itensDespesas);
           const sectionH = 30 + maxItens * 30 + 40 + 20; // cabeçalho + itens + total + padding
 
-          // === Coluna esquerda: ENTRADAS EXTRAS (moldura azul) ===
+          // === Coluna esquerda: ENTRADA (moldura azul) ===
           if (temReceitasExtras) {
             // Moldura
             ctx.strokeStyle = '#0066cc';
@@ -6195,7 +6205,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             ctx.textAlign = 'left';
             ctx.fillStyle = '#0066cc';
             ctx.font = FONT_LABEL;
-            ctx.fillText('ENTRADAS EXTRAS', padding + 15, y + 30);
+            ctx.fillText('ENTRADA', padding + 15, y + 30);
 
             ctx.fillStyle = '#000000';
             ctx.font = FONT_VALUE;
@@ -6210,7 +6220,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             ctx.fillText(`Total: ${formatNumber(totalReceitas)}`, padding + 15, y + sectionH - 20);
           }
 
-          // === Coluna direita: SAÍDAS EXTRAS (moldura vermelha) ===
+          // === Coluna direita: SAÍDA (moldura vermelha) ===
           if (temDespesasExtras) {
             const col2X = padding + colW + 20;
             // Moldura
@@ -6224,7 +6234,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             ctx.textAlign = 'left';
             ctx.fillStyle = '#cc3300';
             ctx.font = FONT_LABEL;
-            ctx.fillText('SAÍDAS EXTRAS', col2X + 15, y + 30);
+            ctx.fillText('SAÍDA', col2X + 15, y + 30);
 
             ctx.fillStyle = '#000000';
             ctx.font = FONT_VALUE;
@@ -6250,12 +6260,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         ctx.fillText('TOTAIS', A4_W / 2, y);
         y += 30;
 
-        // 3 cards lado a lado: Entradas Extras, Saídas Extras, Fechamento
+        // 3 cards lado a lado: Entrada, Saída, Fechamento
         const cardW = (A4_W - padding * 2 - 20) / 3; // 3 cards com 10px gap
         const cardH = 100;
         const cardY = y;
 
-        // Card 1: Total Entradas Extras (azul)
+        // Card 1: Total Entrada (azul)
         ctx.strokeStyle = '#0066cc';
         ctx.lineWidth = 3;
         ctx.strokeRect(padding, cardY, cardW, cardH);
@@ -6268,7 +6278,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         ctx.font = FONT_TOTAL;
         ctx.fillText(formatNumber(totalReceitas), padding + cardW / 2, cardY + 75);
 
-        // Card 2: Total Saídas Extras (vermelho)
+        // Card 2: Total Saída (vermelho)
         const card2X = padding + cardW + 10;
         ctx.strokeStyle = '#cc3300';
         ctx.strokeRect(card2X, cardY, cardW, cardH);
@@ -8919,13 +8929,18 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                                     </div>
                                     {/* Dados da máquina */}
                                     <div className="flex-1 text-sm">
-                                      {/* Linha 1: Código + Nome + Moeda convertida (ex: "x0,25" em vez de "[M025]") */}
-                                      <p className="font-bold text-base">
-                                        {m.codigo} - {(m.tipo?.descricao || '').toUpperCase()} {(() => {
-                                          const multMap: Record<string, number> = { M001: 0.01, M005: 0.05, M010: 0.10, M025: 0.25 };
-                                          const mult = multMap[lws[0].moeda || 'M001'] ?? 0.01;
-                                          return `x${mult.toString().replace('.', ',')}`;
-                                        })()}
+                                      {/* Linha 1: Código + Nome (negrito) + Moeda (sem negrito) */}
+                                      <p className="text-base">
+                                        <span className="font-bold">
+                                          {m.codigo} - {(m.tipo?.descricao || '').toUpperCase()}
+                                        </span>{' '}
+                                        <span className="font-normal">
+                                          {(() => {
+                                            const multMap: Record<string, number> = { M001: 0.01, M005: 0.05, M010: 0.10, M025: 0.25 };
+                                            const mult = multMap[lws[0].moeda || 'M001'] ?? 0.01;
+                                            return `x${mult.toString().replace('.', ',')}`;
+                                          })()}
+                                        </span>
                                       </p>
                                       {/* Linha 2: Entrada — apenas números, sem prefixo */}
                                       <p>
@@ -8948,14 +8963,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                               <div className="grid grid-cols-2 gap-2 mb-3">
                                 {receitasFinal.length > 0 && (
                                   <div className="border-2 border-blue-700 bg-blue-50 rounded p-2 text-sm">
-                                    <p className="font-bold text-blue-700 mb-1">ENTRADAS EXTRAS</p>
+                                    <p className="font-bold text-blue-700 mb-1">ENTRADA</p>
                                     {receitasFinal.map((r, i) => <p key={i}>  {r.descricao}: {formatNumber(r.valor)}</p>)}
                                     <p className="font-bold text-blue-700 mt-1">Total: {formatNumber(totalReceitas)}</p>
                                   </div>
                                 )}
                                 {despesasFinal.length > 0 && (
                                   <div className="border-2 border-red-700 bg-red-50 rounded p-2 text-sm">
-                                    <p className="font-bold text-red-700 mb-1">SAÍDAS EXTRAS</p>
+                                    <p className="font-bold text-red-700 mb-1">SAÍDA</p>
                                     {despesasFinal.map((d, i) => <p key={i}>  {d.descricao}: {formatNumber(d.valor)}</p>)}
                                     <p className="font-bold text-red-700 mt-1">Total: {formatNumber(totalDespesas)}</p>
                                   </div>
