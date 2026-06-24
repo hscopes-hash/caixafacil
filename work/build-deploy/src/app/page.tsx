@@ -5391,34 +5391,77 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       if (extratoImagem) fotosEnvio.push(extratoImagem);
       fotosEnvio.push(...fotos);
 
-      // 4) Enviar para Telegram
-      const res = await fetch('/api/telegram/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          empresaId: empresa?.id,
-          clienteId: clienteSelecionado?.id,
-          mensagem: null, // não enviar mais texto — extrato/relatório vai como imagem
-          fotos: fotosEnvio.length > 0 ? fotosEnvio : undefined,
-          // Se modo RELATÓRIO, primeira foto (relatório A4) é enviada como
-          // DOCUMENTO (sem compressão) para manter legibilidade do texto.
-          // Telegram comprime JPGs via sendPhoto, mas NÃO via sendDocument.
-          primeiraFotoComoDocumento: segundaViaModo === 'RELATORIO',
-        }),
-      });
-      const data = await res.json();
+      // Helper: parse JSON robusto (captura respostas não-JSON como "Request Entity Too Large")
+      const parseJsonSafe = async (res: Response) => {
+        try {
+          return await res.json();
+        } catch {
+          const text = await res.text().catch(() => '');
+          return { success: false, error: `HTTP ${res.status}: ${text.substring(0, 200) || res.statusText}` };
+        }
+      };
+
+      // 4) Enviar para Telegram em 2 requisições separadas para evitar
+      //    "Request Entity Too Large" (limite 4.5MB do Vercel Hobby)
+      let sucessoTotal = true;
+      let errosTotal: string[] = [];
+
+      // 4a) Primeira requisição: relatório/extrato (1 imagem) como documento
+      if (extratoImagem) {
+        console.log('[Telegram 2a via] Enviando relatório/extrato (req 1/2)...');
+        const res1 = await fetch('/api/telegram/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            empresaId: empresa?.id,
+            clienteId: clienteSelecionado?.id,
+            mensagem: null,
+            fotos: [extratoImagem],
+            primeiraFotoComoDocumento: segundaViaModo === 'RELATORIO',
+          }),
+        });
+        const data1 = await parseJsonSafe(res1);
+        if (!res1.ok || !data1.success) {
+          sucessoTotal = false;
+          errosTotal.push(data1.errorDetail || data1.error || `HTTP ${res1.status}`);
+          console.error('[Telegram 2a via] Erro req 1 (relatório):', data1);
+        } else {
+          console.log('[Telegram 2a via] Relatório enviado OK');
+        }
+      }
+
+      // 4b) Segunda requisição: fotos das máquinas (sem o relatório)
+      if (fotos.length > 0) {
+        console.log(`[Telegram 2a via] Enviando ${fotos.length} foto(s) (req 2/2)...`);
+        const res2 = await fetch('/api/telegram/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            empresaId: empresa?.id,
+            clienteId: clienteSelecionado?.id,
+            mensagem: null,
+            fotos: fotos,
+            primeiraFotoComoDocumento: false, // fotos normais via sendPhoto
+          }),
+        });
+        const data2 = await parseJsonSafe(res2);
+        if (!res2.ok || !data2.success) {
+          sucessoTotal = false;
+          errosTotal.push(data2.errorDetail || data2.error || `HTTP ${res2.status}`);
+          console.error('[Telegram 2a via] Erro req 2 (fotos):', data2);
+        } else {
+          console.log('[Telegram 2a via] Fotos enviadas OK');
+        }
+      }
+
       toast.dismiss('telegram-2via');
-      if (res.ok && data.success) {
+      if (sucessoTotal) {
         const tipoLabel = segundaViaModo === 'RELATORIO' ? 'Relatório A4' : 'Extrato';
-        const msg = fotosEnvio.length > 0
-          ? `${tipoLabel} (${extratoImagem ? '1 imagem' : '0'}) + ${fotos.length} foto(s) enviados!`
-          : `${tipoLabel} enviado!`;
+        const msg = `${tipoLabel} + ${fotos.length} foto(s) enviados!`;
         toast.success(msg);
       } else {
-        console.error('[Telegram 2a via] Erro:', data);
-        // Exibir mensagem detalhada do backend (errorDetail) ou mensagem genérica
-        const errorMsg = data.errorDetail || data.error || 'Erro ao enviar para Telegram';
-        toast.error(errorMsg, { duration: 8000 });
+        const errorMsg = errosTotal.join('; ');
+        toast.error(errorMsg, { duration: 10000 });
       }
     } catch (error) {
       toast.dismiss('telegram-2via');
@@ -6448,7 +6491,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
         ctx.textAlign = 'left';
 
-        return canvas.toDataURL('image/jpeg', 0.92);
+        return canvas.toDataURL('image/jpeg', 0.82);
       } catch (err) {
         console.error('Erro ao gerar relatório 2a via:', err);
         return null;
