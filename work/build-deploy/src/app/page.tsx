@@ -5430,7 +5430,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       }
 
       // 4b) Segunda requisição: fotos das máquinas (sem o relatório)
-      if (fotos.length > 0) {
+      // No modo RELATÓRIO, as fotos já estão incluídas no relatório A4 em
+      // miniatura com boa resolução — não precisamos enviar fotos separadas.
+      // No modo EXTRATO, o extrato é só texto, então enviamos as fotos separadas.
+      if (fotos.length > 0 && segundaViaModo !== 'RELATORIO') {
         console.log(`[Telegram 2a via] Enviando ${fotos.length} foto(s) (req 2/2)...`);
         const res2 = await fetch('/api/telegram/send', {
           method: 'POST',
@@ -5455,8 +5458,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       toast.dismiss('telegram-2via');
       if (sucessoTotal) {
-        const tipoLabel = segundaViaModo === 'RELATORIO' ? `Relatório (${imagensRelatorio.length} partes)` : 'Extrato';
-        const msg = `${tipoLabel} + ${fotos.length} foto(s) enviados!`;
+        const tipoLabel = segundaViaModo === 'RELATORIO'
+          ? `Relatório (${imagensRelatorio.length} partes)`
+          : 'Extrato';
+        const fotosLabel = segundaViaModo === 'RELATORIO'
+          ? ''  // no modo RELATÓRIO, fotos já estão no relatório
+          : ` + ${fotos.length} foto(s)`;
+        const msg = `${tipoLabel}${fotosLabel} enviados!`;
         toast.success(msg);
       } else {
         const errorMsg = errosTotal.join('; ');
@@ -6497,24 +6505,29 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
         const partes: string[] = [];
 
-        // Parte 1: metade superior
+        // Parte 1: metade superior (cabeçalho + primeiros cards)
         const canvas1 = document.createElement('canvas');
         canvas1.width = canvas.width;
         canvas1.height = meioY;
         const ctx1 = canvas1.getContext('2d');
         if (ctx1) {
+          // Desabilitar suavização — cópia 1:1, não deve alterar pixels
+          ctx1.imageSmoothingEnabled = false;
           ctx1.drawImage(canvas, 0, 0, canvas.width, meioY, 0, 0, canvas.width, meioY);
-          partes.push(canvas1.toDataURL('image/jpeg', 0.82));
+          partes.push(canvas1.toDataURL('image/jpeg', 0.85));
         }
 
-        // Parte 2: metade inferior
+        // Parte 2: metade inferior (últimos cards + totais — tem fotos das máquinas)
+        // Usa qualidade JPEG MAIOR (0.92) porque esta parte contém fotos que
+        // precisam de nitidez para zoom. Qualidade 0.82 degradava as fotos.
         const canvas2 = document.createElement('canvas');
         canvas2.width = canvas.width;
         canvas2.height = alturaRenderizada - meioY;
         const ctx2 = canvas2.getContext('2d');
         if (ctx2) {
+          ctx2.imageSmoothingEnabled = false;
           ctx2.drawImage(canvas, 0, meioY, canvas.width, alturaRenderizada - meioY, 0, 0, canvas.width, alturaRenderizada - meioY);
-          partes.push(canvas2.toDataURL('image/jpeg', 0.82));
+          partes.push(canvas2.toDataURL('image/jpeg', 0.92));
         }
 
         console.log(`[Relatório 2a via] Canvas dividido em ${partes.length} partes (${canvas.width}x${meioY} + ${canvas.width}x${alturaRenderizada - meioY})`);
