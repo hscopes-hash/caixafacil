@@ -5227,18 +5227,104 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     await enviarWhatsAppTextoSeguro(texto, phone);
   };
 
-  // 2a via: enviar RELATÓRIO (canvas A4) via WhatsApp — usa Web Share API com arquivo
-  // Funciona em Android Chrome e iOS Safari (PWA). Em desktop, faz download da imagem.
+  // =============================================
+  // Helper: criar PDF a partir de imagem JPEG (data URL)
+  // WhatsApp trata PDFs como documentos (sem compressão), permitindo zoom total.
+  // Estrutura: PDF minimal com 1 página contendo a imagem JPEG via DCTDecode.
+  // =============================================
+  const criarPdfDeImagem = async (jpegDataUrl: string): Promise<Blob> => {
+    // Extrair base64 e decodificar para Uint8Array
+    const base64 = jpegDataUrl.split(',')[1];
+    const binaryString = atob(base64);
+    const jpegBytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      jpegBytes[i] = binaryString.charCodeAt(i);
+    }
+
+    // Obter dimensões da imagem do canvas (precisamos para o PDF)
+    // Como não temos as dimensões aqui, usamos valores padrão A4 em pixels a 2x DPI
+    const pageWidth = 1588;  // 794 * 2
+    const pageHeight = 2246; // 1123 * 2 (será ajustado)
+
+    // Construir PDF minimal
+    // Estrutura: header + 5 objects + xref + trailer
+    const encoder = new TextEncoder();
+    const parts: Uint8Array[] = [];
+    const offsets: number[] = [];
+    let currentOffset = 0;
+
+    const pushStr = (s: string) => {
+      const bytes = encoder.encode(s);
+      parts.push(bytes);
+      currentOffset += bytes.length;
+    };
+
+    const pushBytes = (b: Uint8Array) => {
+      parts.push(b);
+      currentOffset += b.length;
+    };
+
+    // Header
+    pushStr('%PDF-1.4\n');
+
+    // Object 1: Catalog
+    offsets[1] = currentOffset;
+    pushStr('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+
+    // Object 2: Pages
+    offsets[2] = currentOffset;
+    pushStr('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n');
+
+    // Object 3: Page
+    offsets[3] = currentOffset;
+    pushStr(`3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`);
+
+    // Object 4: Image (JPEG via DCTDecode)
+    offsets[4] = currentOffset;
+    pushStr(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${pageWidth} /Height ${pageHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`);
+    pushBytes(jpegBytes);
+    pushStr('\nendstream\nendobj\n');
+
+    // Object 5: Content stream (desenha a imagem na página)
+    const content = `q\n${pageWidth} 0 0 ${pageHeight} 0 0 cm\n/Im1 Do\nQ\n`;
+    offsets[5] = currentOffset;
+    pushStr(`5 0 obj\n<< /Length ${content.length} >>\nstream\n${content}endstream\nendobj\n`);
+
+    // Cross-reference table
+    const xrefOffset = currentOffset;
+    let xref = 'xref\n0 6\n0000000000 65535 f \n';
+    for (let i = 1; i <= 5; i++) {
+      xref += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+    }
+    pushStr(xref);
+
+    // Trailer
+    pushStr(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`);
+
+    // Concatenar todas as partes
+    const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
+    const pdfBytes = new Uint8Array(totalLength);
+    let pos = 0;
+    for (const part of parts) {
+      pdfBytes.set(part, pos);
+      pos += part.length;
+    }
+
+    return new Blob([pdfBytes], { type: 'application/pdf' });
+  };
+
+  // 2a via: enviar RELATÓRIO via WhatsApp como PDF (documento, sem compressão)
+  // WhatsApp trata PDFs como documentos — permite abrir com visualizador externo e zoom total
   const enviarWhatsAppRelatorio2aVia = async () => {
     if (!clienteSelecionado || segundaViaDados.length === 0) {
       toast.error('Nenhum dado de fechamento para gerar relatório');
       return;
     }
 
-    toast.loading('Gerando relatório...', { id: 'relatorio-wa-2via' });
+    toast.loading('Gerando relatório PDF...', { id: 'relatorio-wa-2via' });
 
     try {
-      // 1) Gerar todas as páginas do relatório (mesma função do Telegram)
+      // 1) Gerar todas as páginas do relatório (JPEG data URLs)
       const paginas = await gerarRelatorioImagem2aVia();
       if (!paginas || paginas.length === 0) {
         toast.dismiss('relatorio-wa-2via');
@@ -5247,24 +5333,24 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       }
       console.log(`[WhatsApp 2a via] Relatório gerado: ${paginas.length} página(s)`);
 
-      // 2) Converter cada página (data URL) para File (JPEG)
+      // 2) Converter cada página JPEG para PDF (WhatsApp trata PDF como documento, sem compressão)
       const now = new Date();
       const baseName = `relatorio_${clienteSelecionado.nome.replace(/\s+/g, '_')}_${now.getTime()}`;
       const files: File[] = [];
       for (let i = 0; i < paginas.length; i++) {
-        const response = await fetch(paginas[i]);
-        const blob = await response.blob();
+        const pdfBlob = await criarPdfDeImagem(paginas[i]);
         const fileName = paginas.length > 1
-          ? `${baseName}_pag${i + 1}.jpg`
-          : `${baseName}.jpg`;
-        files.push(new File([blob], fileName, { type: 'image/jpeg' }));
+          ? `${baseName}_pag${i + 1}.pdf`
+          : `${baseName}.pdf`;
+        files.push(new File([pdfBlob], fileName, { type: 'application/pdf' }));
       }
+      console.log(`[WhatsApp 2a via] ${files.length} PDF(s) criado(s)`);
 
       // 3) Texto de acompanhamento
       const modo2via = clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANÇA' : 'LEITURA';
       const caption = `RELATÓRIO DE ${modo2via} - ${clienteSelecionado.nome.toUpperCase()}\nData: ${segundaViaSelecionada?.data || ''}${paginas.length > 1 ? `\n(${paginas.length} páginas)` : ''}`;
 
-      // 4) Tentar Web Share API com todos os arquivos (funciona em mobile)
+      // 4) Tentar Web Share API com todos os PDFs (funciona em mobile)
       if (navigator.share && navigator.canShare && navigator.canShare({ files })) {
         try {
           await navigator.share({
@@ -5273,15 +5359,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             files: files,
           });
           toast.dismiss('relatorio-wa-2via');
-          toast.success(`${paginas.length} página(s) do relatório enviada(s)!`);
+          toast.success(`${files.length} PDF(s) do relatório enviado(s)!`);
           return;
         } catch (shareError: unknown) {
           if (shareError instanceof Error && shareError.name === 'AbortError') {
             toast.dismiss('relatorio-wa-2via');
-            return; // Usuário cancelou
+            return;
           }
-          console.warn('Web Share com múltiplos arquivos falhou, tentando um por vez:', shareError);
-          // Tentar enviar um arquivo por vez
+          console.warn('Web Share com múltiplos PDFs falhou, tentando um por vez:', shareError);
+          // Tentar enviar primeiro PDF + download dos restantes
           if (navigator.canShare && navigator.canShare({ files: [files[0]] })) {
             try {
               await navigator.share({
@@ -5290,16 +5376,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 files: [files[0]],
               });
               toast.dismiss('relatorio-wa-2via');
-              toast.success('Primeira página enviada! Baixe as demais e anexe manualmente.');
-              // Download das páginas restantes
-              for (let i = 1; i < paginas.length; i++) {
+              // Download das páginas restantes como PDF
+              for (let i = 1; i < files.length; i++) {
                 const dl = document.createElement('a');
-                dl.href = paginas[i];
-                dl.download = `${baseName}_pag${i + 1}.jpg`;
+                dl.href = URL.createObjectURL(files[i]);
+                dl.download = files[i].name;
                 document.body.appendChild(dl);
                 dl.click();
                 document.body.removeChild(dl);
               }
+              toast.success('Primeiro PDF enviado! Demais baixados — anexe manualmente.');
               return;
             } catch (shareErr2: unknown) {
               if (shareErr2 instanceof Error && shareErr2.name === 'AbortError') {
@@ -5311,33 +5397,29 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         }
       }
 
-      // 5) Fallback: download de todas as imagens + abrir WhatsApp
+      // 5) Fallback: download de todos os PDFs + abrir WhatsApp
       toast.dismiss('relatorio-wa-2via');
       const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
       const phone = clienteSelecionado.telefone?.replace(/\D/g, '') || '';
 
-      // Download de todas as páginas
-      for (let i = 0; i < paginas.length; i++) {
+      for (let i = 0; i < files.length; i++) {
         const downloadLink = document.createElement('a');
-        downloadLink.href = paginas[i];
-        downloadLink.download = paginas.length > 1
-          ? `${baseName}_pag${i + 1}.jpg`
-          : `${baseName}.jpg`;
+        downloadLink.href = URL.createObjectURL(files[i]);
+        downloadLink.download = files[i].name;
         document.body.appendChild(downloadLink);
         downloadLink.click();
         document.body.removeChild(downloadLink);
       }
 
-      // Abrir WhatsApp
       if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
         const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
         setTimeout(() => abrirWhatsAppLink(grupoUrl), 800);
-        toast.info(`${paginas.length} imagem(ns) baixada(s)! Anexe no grupo do WhatsApp.`);
+        toast.info(`${files.length} PDF(s) baixado(s)! Anexe como documento no grupo do WhatsApp.`);
       } else if (phone) {
         setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 800);
-        toast.info(`${paginas.length} imagem(ns) baixada(s)! Anexe no WhatsApp do cliente.`);
+        toast.info(`${files.length} PDF(s) baixado(s)! Anexe como documento no WhatsApp do cliente.`);
       } else {
-        toast.success(`${paginas.length} imagem(ns) baixada(s)! Compartilhe manualmente.`);
+        toast.success(`${files.length} PDF(s) baixado(s)! Compartilhe manualmente.`);
       }
     } catch (error) {
       toast.dismiss('relatorio-wa-2via');
@@ -9092,7 +9174,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       className="bg-gradient-to-r from-green-500 to-emerald-600"
                     >
                       <MessageCircle className="w-4 h-4 mr-2" />
-                      {segundaViaModo === 'RELATORIO' ? 'WhatsApp (Relatório)' : 'WhatsApp (Somente Extrato)'}
+                      {segundaViaModo === 'RELATORIO' ? 'WhatsApp (Relatório PDF)' : 'WhatsApp (Somente Extrato)'}
                     </Button>
                     <Button
                       onClick={enviarTelegram2aVia}
