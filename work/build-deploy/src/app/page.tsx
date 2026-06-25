@@ -5344,12 +5344,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       toast.loading('Enviando para Telegram...', { id: 'telegram-2via' });
 
       // 1) Gerar imagem do extrato OU relatório (conforme modo ativo)
-      // Relatório retorna { partes: string[], completa: string }
-      let resultadoRelatorio: { partes: string[]; completa: string } | null = null;
+      // Relatório retorna string[] (páginas paginadas com máx 8 cards cada)
+      let paginasRelatorio: string[] | null = null;
       let extratoImagem: string | null = null;
       if (segundaViaModo === 'RELATORIO') {
-        resultadoRelatorio = await gerarRelatorioImagem2aVia();
-        console.log('[Telegram 2a via] Relatório gerado:', resultadoRelatorio ? `${resultadoRelatorio.partes.length} partes + 1 completa` : 'null');
+        paginasRelatorio = await gerarRelatorioImagem2aVia();
+        console.log('[Telegram 2a via] Relatório gerado:', paginasRelatorio ? `${paginasRelatorio.length} página(s)` : 'null');
       } else {
         extratoImagem = await gerarExtratoImagemSegundaVia();
         console.log('[Telegram 2a via] Extrato gerado:', extratoImagem ? `${extratoImagem.length} chars` : 'null');
@@ -5403,10 +5403,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       let sucessoTotal = true;
       let errosTotal: string[] = [];
 
-      // 4a) Primeira requisição: partes do relatório (2 imagens) OU extrato (1 imagem) como documento
-      const imagensRelatorio: string[] = resultadoRelatorio?.partes || (extratoImagem ? [extratoImagem] : []);
+      // 4a) Primeira requisição: páginas do relatório OU extrato (1 imagem) como documento
+      const imagensRelatorio: string[] = paginasRelatorio || (extratoImagem ? [extratoImagem] : []);
       if (imagensRelatorio.length > 0) {
-        console.log(`[Telegram 2a via] Enviando ${imagensRelatorio.length} parte(s) do relatório/extrato...`);
+        console.log(`[Telegram 2a via] Enviando ${imagensRelatorio.length} página(s) do relatório/extrato...`);
         const res1 = await fetch('/api/telegram/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -5424,38 +5424,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           errosTotal.push(data1.errorDetail || data1.error || `HTTP ${res1.status}`);
           console.error('[Telegram 2a via] Erro req relatório:', data1);
         } else {
-          console.log('[Telegram 2a via] Partes do relatório enviadas OK');
+          console.log('[Telegram 2a via] Páginas do relatório enviadas OK');
         }
       }
 
-      // 4b) Segunda requisição: imagem COMPLETA do relatório (sem dividir)
-      // Enviada após as 2 partes para ter uma visão geral do relatório inteiro
-      if (resultadoRelatorio?.completa) {
-        console.log('[Telegram 2a via] Enviando imagem completa do relatório...');
-        const resCompleta = await fetch('/api/telegram/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            empresaId: empresa?.id,
-            clienteId: clienteSelecionado?.id,
-            mensagem: null,
-            fotos: [resultadoRelatorio.completa],
-            primeiraFotoComoDocumento: true, // sempre como documento (sem compressão)
-          }),
-        });
-        const dataCompleta = await parseJsonSafe(resCompleta);
-        if (!resCompleta.ok || !dataCompleta.success) {
-          // Erro na imagem completa não é crítico (as partes já foram enviadas)
-          console.warn('[Telegram 2a via] Aviso: imagem completa falhou:', dataCompleta.error || dataCompleta.errorDetail);
-        } else {
-          console.log('[Telegram 2a via] Imagem completa enviada OK');
-        }
-      }
-
-      // 4b) Segunda requisição: fotos das máquinas (sem o relatório)
-      // No modo RELATÓRIO, as fotos já estão incluídas no relatório A4 em
-      // miniatura com boa resolução — não precisamos enviar fotos separadas.
-      // No modo EXTRATO, o extrato é só texto, então enviamos as fotos separadas.
+      // 4b) Fotos das máquinas (apenas no modo EXTRATO)
       if (fotos.length > 0 && segundaViaModo !== 'RELATORIO') {
         console.log(`[Telegram 2a via] Enviando ${fotos.length} foto(s) (req 2/2)...`);
         const res2 = await fetch('/api/telegram/send', {
@@ -5482,7 +5455,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       toast.dismiss('telegram-2via');
       if (sucessoTotal) {
         const tipoLabel = segundaViaModo === 'RELATORIO'
-          ? `Relatório (${imagensRelatorio.length} partes + 1 completa)`
+          ? `Relatório (${imagensRelatorio.length} página(s))`
           : 'Extrato';
         const fotosLabel = segundaViaModo === 'RELATORIO'
           ? ''  // no modo RELATÓRIO, fotos já estão no relatório
@@ -6052,46 +6025,26 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   };
 
   // Gerar RELATÓRIO 2a via em formato A4 com fotos em miniatura
-  // Layout:
-  //   - Cabeçalho (cliente, data, operador)
-  //   - Para cada máquina: card com foto em miniatura + valores (entrada/saída)
-  //   - Cards finais em molduras: Total Entrada, Total Saída, Resultado
-  //   - Letra maior (legível)
-  //   - Formato A4 (794 x 1123 px a 96 DPI) escalado 2x para alta resolução
-  //     (1588 x 2246 px) — necessário para manter legibilidade quando a imagem
-  //     é compartilhada via WhatsApp e exibida em telas de celular que reduzem
-  //     o tamanho pela metade.
-  const gerarRelatorioImagem2aVia = async (): Promise<{ partes: string[]; completa: string } | null> => {
+  // Layout paginado: máximo 8 cards de máquinas por página
+  // Cada página é uma imagem separada (melhora zoom no Telegram)
+  const gerarRelatorioImagem2aVia = async (): Promise<string[] | null> => {
     try {
       if (!segundaViaDados || segundaViaDados.length === 0) {
         return null;
       }
 
-        // === Alta resolução: 2x DPI para manter legibilidade no WhatsApp ===
-        // Canvas interno desenhado em coordenadas A4 padrão (794 x 1123) mas
-        // renderizado em resolução 2x (1588 x 2246) via ctx.scale(2, 2)
         const SCALE = 2;
         const A4_W = 794;
-        const A4_H = 1123;
-        const canvas = document.createElement('canvas');
-        canvas.width = A4_W * SCALE;
-        canvas.height = A4_H * SCALE; // altura será ajustada dinamicamente
-        const ctx = canvas.getContext('2d');
-        if (!ctx) { return null; }
-        // Aplicar escala 2x — todas as coordenadas continuam em sistema A4 padrão
-        ctx.scale(SCALE, SCALE);
-        // Suavização de texto/imagens em alta resolução
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
+        const padding = 40;
 
-        // Configurações de fonte (letra maior)
+        // Configurações de fonte
         const FONT_TITLE = 'bold 26px "Arial", sans-serif';
         const FONT_SUBTITLE = '18px "Arial", sans-serif';
         const FONT_LABEL = 'bold 20px "Arial", sans-serif';
         const FONT_VALUE = '20px "Arial", sans-serif';
         const FONT_TOTAL = 'bold 28px "Arial", sans-serif';
 
-        // Pré-processar dados (mesma lógica do extrato)
+        // Pré-processar dados
         const modo2via = clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANCA' : 'LEITURA';
         const porMaquina = new Map<string, any[]>();
         const despesaItens: { descricao: string; valor: number }[] = [];
@@ -6126,14 +6079,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const saidaFinal = temItensExtras ? totalDespesas : 0;
         const fechamentoFinal = temItensExtras ? saidaFinal - entradaFinal : entradaFinal;
 
-        // ===== PRÉ-CARREGAR TODAS AS IMAGENS (assíncrono) =====
-        // Antes de renderizar o canvas, garantir que todas as fotos estejam
-        // totalmente carregadas em memória. Sem isso, ctx.drawImage() pode
-        // desenhar imagem parcial (sem a tarja vermelha, que fica no final
-        // do JPEG) ou não desenhar nada — causava fotos "sem tarja" no relatório.
+        // Pré-carregar imagens
         const imagensPorMaquinaId = new Map<string, HTMLImageElement>();
         const imagensPorCodigo = new Map<string, HTMLImageElement>();
-
         const promessasCarregamento: Promise<void>[] = [];
         for (const [id, lws] of maquinasArr) {
           const m = lws[0].maquina;
@@ -6141,419 +6089,263 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           if (fotoObj) {
             const promise = new Promise<void>((resolveImg) => {
               const img = new Image();
-              img.onload = () => {
-                imagensPorMaquinaId.set(id, img);
-                if (m.codigo) imagensPorCodigo.set(m.codigo, img);
-                resolveImg();
-              };
-              img.onerror = () => {
-                // Falha ao carregar — não adiciona aos mapas (placeholder será usado)
-                console.warn('[Relatório 2a via] Falha ao carregar foto da máquina:', m.codigo);
-                resolveImg();
-              };
+              img.onload = () => { imagensPorMaquinaId.set(id, img); if (m.codigo) imagensPorCodigo.set(m.codigo, img); resolveImg(); };
+              img.onerror = () => { resolveImg(); };
               img.src = fotoObj.fotoBase64;
             });
             promessasCarregamento.push(promise);
           }
         }
-        // Aguardar todas as imagens carregarem (com timeout de segurança de 10s)
-        await Promise.race([
-          Promise.all(promessasCarregamento),
-          new Promise<void>((resolve) => setTimeout(resolve, 10000)),
-        ]);
-        console.log(`[Relatório 2a via] ${imagensPorMaquinaId.size} imagens pré-carregadas de ${maquinasArr.length} máquinas`);
+        await Promise.race([Promise.all(promessasCarregamento), new Promise<void>((resolve) => setTimeout(resolve, 10000))]);
 
-        // ===== PRIMEIRO: calcular altura necessária =====
-        let y = 0;
-        const padding = 40;
-        y += padding; // margem topo
-        y += 40; // título
-        y += 30; // nome cliente
-        y += 30; // data
         const operadores = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => l.usuario.nome));
-        if (operadores.size > 0) y += 30; // operador
-        y += 30; // separador
-
-        // Cada máquina: card de ~280px de altura (foto 200px + texto)
         const CARD_HEIGHT = 280;
-        maquinasArr.forEach(() => { y += CARD_HEIGHT + 20; });
-        y += 30; // separador
+        const MAX_CARDS_POR_PAGINA = 8;
 
-        // Receitas extras + Despesas extras (lado a lado com moldura)
-        // Altura necessária = máximo entre as duas listas (já que ficarão lado a lado)
+        // Dividir máquinas em páginas
+        const paginas: typeof maquinasArr[] = [];
+        for (let i = 0; i < maquinasArr.length; i += MAX_CARDS_POR_PAGINA) {
+          paginas.push(maquinasArr.slice(i, i + MAX_CARDS_POR_PAGINA));
+        }
+        // Se não há máquinas, criar pelo menos 1 página (para totais)
+        if (paginas.length === 0) paginas.push([]);
+
         const temReceitasExtras = modo2via !== 'COBRANCA' && receitasFinal.length > 0;
         const temDespesasExtras = modo2via !== 'COBRANCA' && despesasFinal.length > 0;
-        if (temReceitasExtras || temDespesasExtras) {
-          const itensReceitas = temReceitasExtras ? receitasFinal.length : 0;
-          const itensDespesas = temDespesasExtras ? despesasFinal.length : 0;
-          const maxItens = Math.max(itensReceitas, itensDespesas);
-          // Cabeçalho (30) + itens (maxItens * 30) + total (40) + padding da moldura (20)
-          y += 30 + maxItens * 30 + 40 + 20;
-        }
-
-        // Cards de totais (3 molduras)
-        y += 60; // título "TOTAIS"
-        y += 140; // 3 cards (largura, não altura — vamos colocar lado a lado)
-        y += 40; // detalhe COBRANCA
-        y += padding; // margem inferior
-
-        // Se passar de 1 página A4, multiplica altura
-        const alturaFinal = Math.max(A4_H, y);
-        // canvas.height é em pixels reais (precisa multiplicar pelo SCALE)
-        // O ctx.scale(SCALE, SCALE) já foi aplicado, então as coordenadas
-        // de desenho continuam em sistema A4 padrão.
-        canvas.height = alturaFinal * SCALE;
-        // Re-aplicar escala após mudar canvas.height (reset do contexto)
-        ctx.scale(SCALE, SCALE);
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-
-        // ===== RENDERIZAÇÃO =====
-        // Fundo branco
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, A4_W, alturaFinal);
-
-        // Cabeçalho
-        y = padding;
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#000000';
-        ctx.font = FONT_TITLE;
         const titulo = modo2via === 'COBRANCA' ? 'RELATÓRIO DE COBRANÇA' : 'RELATÓRIO DE LEITURA';
-        ctx.fillText(titulo, A4_W / 2, y);
-        y += 35;
+        const nomeCliente = clienteSelecionado?.nome?.toUpperCase() || '';
+        const dataRelatorio = segundaViaSelecionada?.data || '';
+        const operadoresStr = operadores.size > 0 ? Array.from(operadores).join(', ') : '';
 
-        ctx.font = FONT_SUBTITLE;
-        ctx.fillText(clienteSelecionado?.nome?.toUpperCase() || '', A4_W / 2, y);
-        y += 30;
+        // Função helper para desenhar o cabeçalho em uma página
+        const desenharCabecalho = (ctxPag: CanvasRenderingContext2D, numPagina: number, totalPaginas: number): number => {
+          let yp = padding;
+          ctxPag.textAlign = 'center';
+          ctxPag.fillStyle = '#000000';
+          ctxPag.font = FONT_TITLE;
+          ctxPag.fillText(titulo, A4_W / 2, yp);
+          yp += 35;
+          ctxPag.font = FONT_SUBTITLE;
+          ctxPag.fillText(nomeCliente, A4_W / 2, yp);
+          yp += 30;
+          ctxPag.font = FONT_VALUE;
+          ctxPag.fillText(`Data: ${dataRelatorio}`, A4_W / 2, yp);
+          yp += 30;
+          if (operadoresStr) { ctxPag.fillText(`Operador(es): ${operadoresStr}`, A4_W / 2, yp); yp += 30; }
+          // Indicador de página
+          if (totalPaginas > 1) {
+            ctxPag.font = '14px Arial';
+            ctxPag.fillText(`Página ${numPagina} de ${totalPaginas}`, A4_W / 2, yp);
+            yp += 20;
+          }
+          // Separador
+          yp += 10;
+          ctxPag.strokeStyle = '#000000';
+          ctxPag.lineWidth = 2;
+          ctxPag.beginPath();
+          ctxPag.moveTo(padding, yp);
+          ctxPag.lineTo(A4_W - padding, yp);
+          ctxPag.stroke();
+          yp += 30;
+          return yp;
+        };
 
-        ctx.font = FONT_VALUE;
-        ctx.fillText(`Data: ${segundaViaSelecionada?.data || ''}`, A4_W / 2, y);
-        y += 30;
-
-        if (operadores.size > 0) {
-          ctx.fillText(`Operador(es): ${Array.from(operadores).join(', ')}`, A4_W / 2, y);
-          y += 30;
-        }
-
-        // Linha separadora
-        y += 10;
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(padding, y);
-        ctx.lineTo(A4_W - padding, y);
-        ctx.stroke();
-        y += 30;
-
-        // Cards de cada máquina com foto em miniatura
-        ctx.textAlign = 'left';
-        for (const [id, lws] of maquinasArr) {
+        // Função helper para desenhar um card de máquina
+        const desenharCardMaquina = (ctxPag: CanvasRenderingContext2D, id: string, lws: any[], yCard: number): number => {
           const m = lws[0].maquina;
           const e = calcularValor(lws[0].moeda, lws[0].diferencaEntrada);
           const s = calcularValor(lws[0].moeda, lws[0].diferencaSaida);
 
-          // Moldura do card
-          ctx.strokeStyle = '#333333';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(padding, y, A4_W - padding * 2, CARD_HEIGHT - 20);
+          ctxPag.strokeStyle = '#333333';
+          ctxPag.lineWidth = 2;
+          ctxPag.strokeRect(padding, yCard, A4_W - padding * 2, CARD_HEIGHT - 20);
 
-          // Buscar imagem JÁ PRÉ-CARREGADA (síncrono, sem race condition)
           const img = imagensPorMaquinaId.get(id) || (m.codigo ? imagensPorCodigo.get(m.codigo) : undefined);
-          // Área da foto no card (180x180px)
           const fotoX = padding + 10;
-          const fotoY = y + 10;
+          const fotoY = yCard + 10;
           const fotoW = 180;
           const fotoH = 180;
 
-          // Fundo cinza claro para preencher área não coberta pela foto (caso não seja quadrada)
-          ctx.fillStyle = '#f0f0f0';
-          ctx.fillRect(fotoX, fotoY, fotoW, fotoH);
+          ctxPag.fillStyle = '#f0f0f0';
+          ctxPag.fillRect(fotoX, fotoY, fotoW, fotoH);
 
           if (img && img.complete && img.naturalWidth > 0) {
-            // ⚠️ Desenhar MANTENDO PROPORÇÃO (object-fit: contain)
-            // Antes estava usando drawImage(img, x, y, w, h) que ESTICA a imagem
-            // para preencher 180x180 — isso cortava ou distorcia a tarja vermelha
-            // em fotos que não eram quadradas.
-            //
-            // Agora calcula dimensões mantendo aspect ratio da imagem original
-            // e centraliza dentro da área 180x180. Assim a tarja vermelha (que
-            // fica na parte inferior da foto) sempre aparece completa.
             const natW = img.naturalWidth;
             const natH = img.naturalHeight;
             const aspectRatio = natW / natH;
-            let drawW = fotoW;
-            let drawH = fotoH;
-            if (aspectRatio > 1) {
-              // Imagem mais larga que alta — limita largura, calcula altura
-              drawW = fotoW;
-              drawH = Math.round(fotoW / aspectRatio);
-            } else {
-              // Imagem mais alta que larga (ou quadrada) — limita altura, calcula largura
-              drawH = fotoH;
-              drawW = Math.round(fotoH * aspectRatio);
-            }
-            // Centralizar dentro da área 180x180
+            let drawW = fotoW, drawH = fotoH;
+            if (aspectRatio > 1) { drawW = fotoW; drawH = Math.round(fotoW / aspectRatio); }
+            else { drawH = fotoH; drawW = Math.round(fotoH * aspectRatio); }
             const drawX = fotoX + Math.round((fotoW - drawW) / 2);
             const drawY = fotoY + Math.round((fotoH - drawH) / 2);
-            ctx.drawImage(img, drawX, drawY, drawW, drawH);
+            ctxPag.drawImage(img, drawX, drawY, drawW, drawH);
           } else {
-            // Sem foto: placeholder
-            ctx.fillStyle = '#999999';
-            ctx.font = '14px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('sem foto', fotoX + fotoW / 2, fotoY + fotoH / 2);
-            ctx.textAlign = 'left';
+            ctxPag.fillStyle = '#999999';
+            ctxPag.font = '14px Arial';
+            ctxPag.textAlign = 'center';
+            ctxPag.fillText('sem foto', fotoX + fotoW / 2, fotoY + fotoH / 2);
           }
 
-          // Texto ao lado da foto
           const textX = padding + 210;
-          ctx.fillStyle = '#000000';
-
-          // Linha 1: Código + Nome + Moeda convertida (ex: "x0,25" em vez de "[M025]")
-          // Código e nome em negrito; moeda em peso normal (sem negrito)
+          ctxPag.fillStyle = '#000000';
           const nomeMaquina = (m.tipo?.descricao || '').toUpperCase();
           const moeda = lws[0].moeda || 'M001';
-          // Mapear código de moeda para multiplicador legível
-          const multiplicadoresMoeda: Record<string, number> = {
-            M001: 0.01,
-            M005: 0.05,
-            M010: 0.10,
-            M025: 0.25,
-          };
+          const multiplicadoresMoeda: Record<string, number> = { M001: 0.01, M005: 0.05, M010: 0.10, M025: 0.25 };
           const multiplicador = multiplicadoresMoeda[moeda] ?? 0.01;
           const moedaStr = `x${multiplicador.toString().replace('.', ',')}`;
           const parteNegrito = `${m.codigo} - ${nomeMaquina} `;
-          const parteNormal = moedaStr;
+          ctxPag.font = FONT_LABEL;
+          ctxPag.textAlign = 'left';
+          ctxPag.fillText(parteNegrito, textX, yCard + 40);
+          const larguraNegrito = ctxPag.measureText(parteNegrito).width;
+          ctxPag.font = '20px "Arial", sans-serif';
+          ctxPag.fillText(moedaStr, textX + larguraNegrito, yCard + 40);
 
-          // Renderizar parte em negrito
-          ctx.font = FONT_LABEL; // bold 20px
-          ctx.fillStyle = '#000000';
-          ctx.fillText(parteNegrito, textX, y + 40);
-          // Medir largura da parte em negrito para posicionar a moeda logo após
-          const larguraNegrito = ctx.measureText(parteNegrito).width;
-          // Renderizar moeda sem negrito (mesmo tamanho, peso normal)
-          ctx.font = '20px "Arial", sans-serif';
-          ctx.fillText(parteNormal, textX + larguraNegrito, y + 40);
-
-          // Linha 2: Entrada — apenas números (Atual - Anterior = Diferença), sem prefixo "Ent:"
-          ctx.font = FONT_VALUE;
+          ctxPag.font = FONT_VALUE;
           const entAtual = lws[0].entradaNova || 0;
           const entAnt = lws[0].entradaAnterior || 0;
-          const entDif = entAtual - entAnt;
-          ctx.fillText(`${entAtual} - ${entAnt} = ${entDif}`, textX, y + 80);
-
-          // Linha 3: Saída — apenas números, sem prefixo "Saída:"
+          ctxPag.fillText(`${entAtual} - ${entAnt} = ${entAtual - entAnt}`, textX, yCard + 80);
           const saiAtual = lws[0].saidaNova || 0;
           const saiAnt = lws[0].saidaAnterior || 0;
-          const saiDif = saiAtual - saiAnt;
-          ctx.fillText(`${saiAtual} - ${saiAnt} = ${saiDif}`, textX, y + 115);
+          ctxPag.fillText(`${saiAtual} - ${saiAnt} = ${saiAtual - saiAnt}`, textX, yCard + 115);
+          ctxPag.font = FONT_LABEL;
+          ctxPag.fillStyle = '#000000';
+          ctxPag.fillText(`Saldo: ${formatNumber(lws[0].saldo)}`, textX, yCard + 155);
 
-          // Linha 4: Saldo (total entradas - total saídas × moeda)
-          // Saldo já vem calculado no objeto da leitura (lws[0].saldo) e representa
-          // exatamente (diferencaEntrada - diferencaSaida) * multiplicador da moeda
-          ctx.font = FONT_LABEL;
-          ctx.fillStyle = '#000000';
-          ctx.fillText(`Saldo: ${formatNumber(lws[0].saldo)}`, textX, y + 155);
+          return yCard + CARD_HEIGHT;
+        };
 
-          y += CARD_HEIGHT;
-        }
+        // Função helper para desenhar totais finais
+        const desenharTotais = (ctxPag: CanvasRenderingContext2D, yTotais: number): number => {
+          let yt = yTotais + 10;
+          // Extras (lado a lado)
+          if (temReceitasExtras || temDespesasExtras) {
+            const colW = (A4_W - padding * 2 - 20) / 2;
+            const itensReceitas = temReceitasExtras ? receitasFinal.length : 0;
+            const itensDespesas = temDespesasExtras ? despesasFinal.length : 0;
+            const maxItens = Math.max(itensReceitas, itensDespesas);
+            const sectionH = 30 + maxItens * 30 + 40 + 20;
 
-        // Separador
-        y += 10;
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(padding, y);
-        ctx.lineTo(A4_W - padding, y);
-        ctx.stroke();
-        y += 30;
-
-        // Receitas extras + Despesas extras — lado a lado com moldura
-        if (temReceitasExtras || temDespesasExtras) {
-          // Largura de cada coluna (metade da largura útil, com gap de 20px)
-          const colW = (A4_W - padding * 2 - 20) / 2;
-          // Calcular altura da seção baseada no maior número de itens
-          const itensReceitas = temReceitasExtras ? receitasFinal.length : 0;
-          const itensDespesas = temDespesasExtras ? despesasFinal.length : 0;
-          const maxItens = Math.max(itensReceitas, itensDespesas);
-          const sectionH = 30 + maxItens * 30 + 40 + 20; // cabeçalho + itens + total + padding
-
-          // === Coluna esquerda: ENTRADA (moldura azul) ===
-          if (temReceitasExtras) {
-            // Moldura
-            ctx.strokeStyle = '#0066cc';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(padding, y, colW, sectionH);
-            ctx.fillStyle = '#e6f0ff';
-            ctx.fillRect(padding, y, colW, sectionH);
-
-            // Conteúdo
-            ctx.textAlign = 'left';
-            ctx.fillStyle = '#0066cc';
-            ctx.font = FONT_LABEL;
-            ctx.fillText('ENTRADA', padding + 15, y + 30);
-
-            ctx.fillStyle = '#000000';
-            ctx.font = FONT_VALUE;
-            let yRec = y + 60;
-            receitasFinal.forEach((r) => {
-              ctx.fillText(`${r.descricao || 'OUTROS'}: ${formatNumber(r.valor)}`, padding + 15, yRec);
-              yRec += 30;
-            });
-
-            ctx.fillStyle = '#0066cc';
-            ctx.font = FONT_LABEL;
-            ctx.fillText(`Total: ${formatNumber(totalReceitas)}`, padding + 15, y + sectionH - 20);
+            if (temReceitasExtras) {
+              ctxPag.strokeStyle = '#0066cc'; ctxPag.lineWidth = 3;
+              ctxPag.strokeRect(padding, yt, colW, sectionH);
+              ctxPag.fillStyle = '#e6f0ff'; ctxPag.fillRect(padding, yt, colW, sectionH);
+              ctxPag.textAlign = 'left'; ctxPag.fillStyle = '#0066cc'; ctxPag.font = FONT_LABEL;
+              ctxPag.fillText('ENTRADA', padding + 15, yt + 30);
+              ctxPag.fillStyle = '#000000'; ctxPag.font = FONT_VALUE;
+              let yRec = yt + 60;
+              receitasFinal.forEach((r) => { ctxPag.fillText(`${r.descricao || 'OUTROS'}: ${formatNumber(r.valor)}`, padding + 15, yRec); yRec += 30; });
+              ctxPag.fillStyle = '#0066cc'; ctxPag.font = FONT_LABEL;
+              ctxPag.fillText(`Total: ${formatNumber(totalReceitas)}`, padding + 15, yt + sectionH - 20);
+            }
+            if (temDespesasExtras) {
+              const col2X = padding + colW + 20;
+              ctxPag.strokeStyle = '#cc3300'; ctxPag.strokeRect(col2X, yt, colW, sectionH);
+              ctxPag.fillStyle = '#ffe6e6'; ctxPag.fillRect(col2X, yt, colW, sectionH);
+              ctxPag.textAlign = 'left'; ctxPag.fillStyle = '#cc3300'; ctxPag.font = FONT_LABEL;
+              ctxPag.fillText('SAÍDA', col2X + 15, yt + 30);
+              ctxPag.fillStyle = '#000000'; ctxPag.font = FONT_VALUE;
+              let yDesp = yt + 60;
+              despesasFinal.forEach((d) => { ctxPag.fillText(`${d.descricao || 'OUTROS'}: ${formatNumber(d.valor)}`, col2X + 15, yDesp); yDesp += 30; });
+              ctxPag.fillStyle = '#cc3300'; ctxPag.font = FONT_LABEL;
+              ctxPag.fillText(`Total: ${formatNumber(totalDespesas)}`, col2X + 15, yt + sectionH - 20);
+            }
+            yt += sectionH + 20;
+            ctxPag.fillStyle = '#000000';
           }
 
-          // === Coluna direita: SAÍDA (moldura vermelha) ===
-          if (temDespesasExtras) {
-            const col2X = padding + colW + 20;
-            // Moldura
-            ctx.strokeStyle = '#cc3300';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(col2X, y, colW, sectionH);
-            ctx.fillStyle = '#ffe6e6';
-            ctx.fillRect(col2X, y, colW, sectionH);
+          // 3 cards de totais
+          yt += 10;
+          ctxPag.font = FONT_TITLE; ctxPag.textAlign = 'center';
+          ctxPag.fillText('TOTAIS', A4_W / 2, yt); yt += 30;
+          const cardW = (A4_W - padding * 2 - 20) / 3;
+          const cardH = 100; const cardY = yt;
+          // Card 1
+          ctxPag.strokeStyle = '#0066cc'; ctxPag.lineWidth = 3;
+          ctxPag.strokeRect(padding, cardY, cardW, cardH);
+          ctxPag.fillStyle = '#e6f0ff'; ctxPag.fillRect(padding, cardY, cardW, cardH);
+          ctxPag.fillStyle = '#0066cc'; ctxPag.font = FONT_LABEL; ctxPag.textAlign = 'center';
+          ctxPag.fillText('ENTRADA', padding + cardW / 2, cardY + 35);
+          ctxPag.font = FONT_TOTAL; ctxPag.fillText(formatNumber(totalReceitas), padding + cardW / 2, cardY + 75);
+          // Card 2
+          const c2X = padding + cardW + 10;
+          ctxPag.strokeStyle = '#cc3300'; ctxPag.strokeRect(c2X, cardY, cardW, cardH);
+          ctxPag.fillStyle = '#ffe6e6'; ctxPag.fillRect(c2X, cardY, cardW, cardH);
+          ctxPag.fillStyle = '#cc3300'; ctxPag.font = FONT_LABEL;
+          ctxPag.fillText('SAÍDA', c2X + cardW / 2, cardY + 35);
+          ctxPag.font = FONT_TOTAL; ctxPag.fillText(formatNumber(totalDespesas), c2X + cardW / 2, cardY + 75);
+          // Card 3
+          const c3X = padding + (cardW + 10) * 2;
+          let tituloFech: string, corFech: string, bgFech: string;
+          if (fechamentoFinal > 0) { tituloFech = 'SOBROU'; corFech = '#008800'; bgFech = '#e6ffe6'; }
+          else if (fechamentoFinal === 0) { tituloFech = 'FECHOU'; corFech = '#0066cc'; bgFech = '#e6f0ff'; }
+          else { tituloFech = 'FALTOU'; corFech = '#cc0000'; bgFech = '#ffe6e6'; }
+          ctxPag.strokeStyle = corFech; ctxPag.strokeRect(c3X, cardY, cardW, cardH);
+          ctxPag.fillStyle = bgFech; ctxPag.fillRect(c3X, cardY, cardW, cardH);
+          ctxPag.fillStyle = corFech; ctxPag.font = FONT_LABEL;
+          ctxPag.fillText(tituloFech, c3X + cardW / 2, cardY + 35);
+          ctxPag.font = FONT_TOTAL; ctxPag.fillText(formatNumber(fechamentoFinal), c3X + cardW / 2, cardY + 75);
+          yt = cardY + cardH + 20;
 
-            // Conteúdo
-            ctx.textAlign = 'left';
-            ctx.fillStyle = '#cc3300';
-            ctx.font = FONT_LABEL;
-            ctx.fillText('SAÍDA', col2X + 15, y + 30);
+          if (modo2via === 'COBRANCA') {
+            ctxPag.textAlign = 'left'; ctxPag.font = FONT_VALUE; ctxPag.fillStyle = '#000000';
+            ctxPag.fillText(`Cliente (${acertoPct}%): ${formatNumber(valorCliente)}`, padding, yt); yt += 30;
+          }
+          return yt + padding;
+        };
 
-            ctx.fillStyle = '#000000';
-            ctx.font = FONT_VALUE;
-            let yDesp = y + 60;
-            despesasFinal.forEach((d) => {
-              ctx.fillText(`${d.descricao || 'OUTROS'}: ${formatNumber(d.valor)}`, col2X + 15, yDesp);
-              yDesp += 30;
-            });
+        // === Gerar cada página ===
+        const imagens: string[] = [];
+        for (let pagIdx = 0; pagIdx < paginas.length; pagIdx++) {
+          const maquinasPagina = paginas[pagIdx];
+          const isUltimaPagina = pagIdx === paginas.length - 1;
 
-            ctx.fillStyle = '#cc3300';
-            ctx.font = FONT_LABEL;
-            ctx.fillText(`Total: ${formatNumber(totalDespesas)}`, col2X + 15, y + sectionH - 20);
+          // Calcular altura da página
+          let alturaPagina = padding + 40 + 30 + 30 + (operadoresStr ? 30 : 0) + (paginas.length > 1 ? 20 : 0) + 10 + 30;
+          alturaPagina += maquinasPagina.length * (CARD_HEIGHT + 20);
+          if (isUltimaPagina) {
+            if (temReceitasExtras || temDespesasExtras) {
+              const maxItens = Math.max(temReceitasExtras ? receitasFinal.length : 0, temDespesasExtras ? despesasFinal.length : 0);
+              alturaPagina += 30 + maxItens * 30 + 40 + 20 + 20;
+            }
+            alturaPagina += 60 + 140 + 40 + padding;
+          } else {
+            alturaPagina += padding;
           }
 
-          y += sectionH + 20;
-          ctx.fillStyle = '#000000';
+          const canvasPag = document.createElement('canvas');
+          canvasPag.width = A4_W * SCALE;
+          canvasPag.height = alturaPagina * SCALE;
+          const ctxPag = canvasPag.getContext('2d');
+          if (!ctxPag) continue;
+          ctxPag.scale(SCALE, SCALE);
+          ctxPag.imageSmoothingEnabled = true;
+          ctxPag.imageSmoothingQuality = 'high';
+
+          // Fundo branco
+          ctxPag.fillStyle = '#ffffff';
+          ctxPag.fillRect(0, 0, A4_W, alturaPagina);
+
+          // Cabeçalho
+          let y = desenharCabecalho(ctxPag, pagIdx + 1, paginas.length);
+
+          // Cards de máquinas
+          ctxPag.textAlign = 'left';
+          for (const [id, lws] of maquinasPagina) {
+            y = desenharCardMaquina(ctxPag, id, lws, y);
+            y += 20;
+          }
+
+          // Totais (apenas na última página)
+          if (isUltimaPagina) {
+            y = desenharTotais(ctxPag, y);
+          }
+
+          imagens.push(canvasPag.toDataURL('image/jpeg', 0.92));
         }
 
-        // ===== TOTAIS FINAIS — 3 cards em moldura =====
-        y += 10;
-        ctx.font = FONT_TITLE;
-        ctx.textAlign = 'center';
-        ctx.fillText('TOTAIS', A4_W / 2, y);
-        y += 30;
-
-        // 3 cards lado a lado: Entrada, Saída, Fechamento
-        const cardW = (A4_W - padding * 2 - 20) / 3; // 3 cards com 10px gap
-        const cardH = 100;
-        const cardY = y;
-
-        // Card 1: Total Entrada (azul)
-        ctx.strokeStyle = '#0066cc';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(padding, cardY, cardW, cardH);
-        ctx.fillStyle = '#e6f0ff';
-        ctx.fillRect(padding, cardY, cardW, cardH);
-        ctx.fillStyle = '#0066cc';
-        ctx.font = FONT_LABEL;
-        ctx.textAlign = 'center';
-        ctx.fillText('ENTRADA', padding + cardW / 2, cardY + 35);
-        ctx.font = FONT_TOTAL;
-        ctx.fillText(formatNumber(totalReceitas), padding + cardW / 2, cardY + 75);
-
-        // Card 2: Total Saída (vermelho)
-        const card2X = padding + cardW + 10;
-        ctx.strokeStyle = '#cc3300';
-        ctx.strokeRect(card2X, cardY, cardW, cardH);
-        ctx.fillStyle = '#ffe6e6';
-        ctx.fillRect(card2X, cardY, cardW, cardH);
-        ctx.fillStyle = '#cc3300';
-        ctx.font = FONT_LABEL;
-        ctx.fillText('SAÍDA', card2X + cardW / 2, cardY + 35);
-        ctx.font = FONT_TOTAL;
-        ctx.fillText(formatNumber(totalDespesas), card2X + cardW / 2, cardY + 75);
-
-        // Card 3: Fechamento — título dinâmico (SOBROU/FECHOU/FALTOU) e cor conforme valor
-        const card3X = padding + (cardW + 10) * 2;
-        // Determinar título e cor baseado no valor do fechamento
-        // > 0 → SOBROU (verde)
-        // = 0 → FECHOU (azul)
-        // < 0 → FALTOU (vermelho)
-        let tituloFechamento: string;
-        let corFechamento: string;
-        let bgFechamento: string;
-        if (fechamentoFinal > 0) {
-          tituloFechamento = 'SOBROU';
-          corFechamento = '#008800';
-          bgFechamento = '#e6ffe6';
-        } else if (fechamentoFinal === 0) {
-          tituloFechamento = 'FECHOU';
-          corFechamento = '#0066cc';
-          bgFechamento = '#e6f0ff';
-        } else {
-          tituloFechamento = 'FALTOU';
-          corFechamento = '#cc0000';
-          bgFechamento = '#ffe6e6';
-        }
-        ctx.strokeStyle = corFechamento;
-        ctx.strokeRect(card3X, cardY, cardW, cardH);
-        ctx.fillStyle = bgFechamento;
-        ctx.fillRect(card3X, cardY, cardW, cardH);
-        ctx.fillStyle = corFechamento;
-        ctx.font = FONT_LABEL;
-        ctx.fillText(tituloFechamento, card3X + cardW / 2, cardY + 35);
-        ctx.font = FONT_TOTAL;
-        ctx.fillText(formatNumber(fechamentoFinal), card3X + cardW / 2, cardY + 75);
-
-        y = cardY + cardH + 20;
-
-        // Detalhe COBRANCA
-        if (modo2via === 'COBRANCA') {
-          ctx.textAlign = 'left';
-          ctx.font = FONT_VALUE;
-          ctx.fillStyle = '#000000';
-          ctx.fillText(`Cliente (${acertoPct}%): ${formatNumber(valorCliente)}`, padding, y);
-          y += 30;
-        }
-
-        ctx.textAlign = 'left';
-
-        // === Imagem completa (sem dividir) — enviada por último como documento ===
-        const imagemCompleta = canvas.toDataURL('image/jpeg', 0.85);
-
-        // === Dividir canvas em 2 partes (melhora zoom no Telegram/WhatsApp) ===
-        const alturaRenderizada = alturaFinal * SCALE;
-        const meioY = Math.floor(alturaRenderizada / 2);
-
-        const partes: string[] = [];
-
-        // Parte 1: metade superior
-        const canvas1 = document.createElement('canvas');
-        canvas1.width = canvas.width;
-        canvas1.height = meioY;
-        const ctx1 = canvas1.getContext('2d');
-        if (ctx1) {
-          ctx1.imageSmoothingEnabled = false;
-          ctx1.drawImage(canvas, 0, 0, canvas.width, meioY, 0, 0, canvas.width, meioY);
-          partes.push(canvas1.toDataURL('image/jpeg', 0.85));
-        }
-
-        // Parte 2: metade inferior
-        const canvas2 = document.createElement('canvas');
-        canvas2.width = canvas.width;
-        canvas2.height = alturaRenderizada - meioY;
-        const ctx2 = canvas2.getContext('2d');
-        if (ctx2) {
-          ctx2.imageSmoothingEnabled = false;
-          ctx2.drawImage(canvas, 0, meioY, canvas.width, alturaRenderizada - meioY, 0, 0, canvas.width, alturaRenderizada - meioY);
-          partes.push(canvas2.toDataURL('image/jpeg', 0.92));
-        }
-
-        console.log(`[Relatório 2a via] Canvas dividido em ${partes.length} partes + 1 completa`);
-        return { partes, completa: imagemCompleta };
+        console.log(`[Relatório 2a via] ${imagens.length} página(s) geradas (${maquinasArr.length} máquinas, máx ${MAX_CARDS_POR_PAGINA} por página)`);
+        return imagens.length > 0 ? imagens : null;
       } catch (err) {
         console.error('Erro ao gerar relatório 2a via:', err);
         return null;
@@ -6561,11 +6353,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   };
 
   // Gerar UMA imagem única do relatório (para WhatsApp)
-  // Retorna a imagem completa (não dividida)
+  // Retorna a primeira página
   const gerarRelatorioImagemUnica = async (): Promise<string | null> => {
-    const resultado = await gerarRelatorioImagem2aVia();
-    if (!resultado) return null;
-    return resultado.completa;
+    const imagens = await gerarRelatorioImagem2aVia();
+    if (!imagens || imagens.length === 0) return null;
+    return imagens[0];
   };
 
   const gerarExtratoImagem = (): Promise<string> => {
