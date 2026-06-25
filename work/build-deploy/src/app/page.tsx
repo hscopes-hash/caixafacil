@@ -5238,8 +5238,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     toast.loading('Gerando relatório...', { id: 'relatorio-wa-2via' });
 
     try {
-      // 1) Gerar imagem do relatório via canvas (mesma função do Telegram)
-      const relatorioImagem = await gerarRelatorioImagem2aVia();
+      // 1) Gerar imagem do relatório via canvas (primeira parte para WhatsApp)
+      const relatorioImagem = await gerarRelatorioImagemUnica();
       if (!relatorioImagem) {
         toast.dismiss('relatorio-wa-2via');
         toast.error('Falha ao gerar relatório');
@@ -5344,10 +5344,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       toast.loading('Enviando para Telegram...', { id: 'telegram-2via' });
 
       // 1) Gerar imagem do extrato OU relatório (conforme modo ativo)
+      // Relatório é dividido em 2 partes (array); extrato é 1 imagem (string)
+      let partesRelatorio: string[] | null = null;
       let extratoImagem: string | null = null;
       if (segundaViaModo === 'RELATORIO') {
-        extratoImagem = await gerarRelatorioImagem2aVia();
-        console.log('[Telegram 2a via] Relatório (A4) gerado:', extratoImagem ? `${extratoImagem.length} chars` : 'null');
+        partesRelatorio = await gerarRelatorioImagem2aVia();
+        console.log('[Telegram 2a via] Relatório (A4) gerado:', partesRelatorio ? `${partesRelatorio.length} partes` : 'null');
       } else {
         extratoImagem = await gerarExtratoImagemSegundaVia();
         console.log('[Telegram 2a via] Extrato gerado:', extratoImagem ? `${extratoImagem.length} chars` : 'null');
@@ -5386,11 +5388,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       }
       console.log('[Telegram 2a via] Total de fotos coletadas:', fotos.length);
 
-      // 3) Montar lista final: extrato/relatório (imagem) + fotos
-      const fotosEnvio: string[] = [];
-      if (extratoImagem) fotosEnvio.push(extratoImagem);
-      fotosEnvio.push(...fotos);
-
       // Helper: parse JSON robusto (captura respostas não-JSON como "Request Entity Too Large")
       const parseJsonSafe = async (res: Response) => {
         try {
@@ -5401,14 +5398,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         }
       };
 
-      // 4) Enviar para Telegram em 2 requisições separadas para evitar
+      // 4) Enviar para Telegram em requisições separadas para evitar
       //    "Request Entity Too Large" (limite 4.5MB do Vercel Hobby)
       let sucessoTotal = true;
       let errosTotal: string[] = [];
 
-      // 4a) Primeira requisição: relatório/extrato (1 imagem) como documento
-      if (extratoImagem) {
-        console.log('[Telegram 2a via] Enviando relatório/extrato (req 1/2)...');
+      // 4a) Primeira requisição: partes do relatório (2 imagens) OU extrato (1 imagem) como documento
+      const imagensRelatorio: string[] = partesRelatorio || (extratoImagem ? [extratoImagem] : []);
+      if (imagensRelatorio.length > 0) {
+        console.log(`[Telegram 2a via] Enviando ${imagensRelatorio.length} parte(s) do relatório/extrato...`);
         const res1 = await fetch('/api/telegram/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -5416,7 +5414,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             empresaId: empresa?.id,
             clienteId: clienteSelecionado?.id,
             mensagem: null,
-            fotos: [extratoImagem],
+            fotos: imagensRelatorio,
+            // No modo RELATÓRIO, TODAS as partes são enviadas como documento (alta resolução)
             primeiraFotoComoDocumento: segundaViaModo === 'RELATORIO',
           }),
         });
@@ -5424,7 +5423,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         if (!res1.ok || !data1.success) {
           sucessoTotal = false;
           errosTotal.push(data1.errorDetail || data1.error || `HTTP ${res1.status}`);
-          console.error('[Telegram 2a via] Erro req 1 (relatório):', data1);
+          console.error('[Telegram 2a via] Erro req relatório:', data1);
         } else {
           console.log('[Telegram 2a via] Relatório enviado OK');
         }
@@ -5456,7 +5455,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       toast.dismiss('telegram-2via');
       if (sucessoTotal) {
-        const tipoLabel = segundaViaModo === 'RELATORIO' ? 'Relatório A4' : 'Extrato';
+        const tipoLabel = segundaViaModo === 'RELATORIO' ? `Relatório (${imagensRelatorio.length} partes)` : 'Extrato';
         const msg = `${tipoLabel} + ${fotos.length} foto(s) enviados!`;
         toast.success(msg);
       } else {
@@ -6031,7 +6030,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   //     (1588 x 2246 px) — necessário para manter legibilidade quando a imagem
   //     é compartilhada via WhatsApp e exibida em telas de celular que reduzem
   //     o tamanho pela metade.
-  const gerarRelatorioImagem2aVia = async (): Promise<string | null> => {
+  const gerarRelatorioImagem2aVia = async (): Promise<string[] | null> => {
     try {
       if (!segundaViaDados || segundaViaDados.length === 0) {
         return null;
@@ -6491,11 +6490,48 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
         ctx.textAlign = 'left';
 
-        return canvas.toDataURL('image/jpeg', 0.82);
+        // === Dividir canvas em 2 partes (melhora zoom no Telegram/WhatsApp) ===
+        // Canvas é 2x DPI (1588xalturaFinal*2). Dividir em 2 imagens verticais.
+        const alturaRenderizada = alturaFinal * SCALE; // altura real em pixels
+        const meioY = Math.floor(alturaRenderizada / 2);
+
+        const partes: string[] = [];
+
+        // Parte 1: metade superior
+        const canvas1 = document.createElement('canvas');
+        canvas1.width = canvas.width;
+        canvas1.height = meioY;
+        const ctx1 = canvas1.getContext('2d');
+        if (ctx1) {
+          ctx1.drawImage(canvas, 0, 0, canvas.width, meioY, 0, 0, canvas.width, meioY);
+          partes.push(canvas1.toDataURL('image/jpeg', 0.82));
+        }
+
+        // Parte 2: metade inferior
+        const canvas2 = document.createElement('canvas');
+        canvas2.width = canvas.width;
+        canvas2.height = alturaRenderizada - meioY;
+        const ctx2 = canvas2.getContext('2d');
+        if (ctx2) {
+          ctx2.drawImage(canvas, 0, meioY, canvas.width, alturaRenderizada - meioY, 0, 0, canvas.width, alturaRenderizada - meioY);
+          partes.push(canvas2.toDataURL('image/jpeg', 0.82));
+        }
+
+        console.log(`[Relatório 2a via] Canvas dividido em ${partes.length} partes (${canvas.width}x${meioY} + ${canvas.width}x${alturaRenderizada - meioY})`);
+        return partes.length > 0 ? partes : null;
       } catch (err) {
         console.error('Erro ao gerar relatório 2a via:', err);
         return null;
       }
+  };
+
+  // Gerar UMA imagem única do relatório (para WhatsApp e modo EXTRATO)
+  // Reaproveita gerarRelatorioImagem2aVia() e retorna apenas a primeira parte
+  // (ou a imagem inteira se não houver divisão).
+  const gerarRelatorioImagemUnica = async (): Promise<string | null> => {
+    const partes = await gerarRelatorioImagem2aVia();
+    if (!partes || partes.length === 0) return null;
+    return partes[0]; // primeira parte para compatibilidade
   };
 
   const gerarExtratoImagem = (): Promise<string> => {
