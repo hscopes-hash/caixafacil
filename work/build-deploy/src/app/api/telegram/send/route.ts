@@ -357,16 +357,16 @@ export async function POST(request: NextRequest) {
       const caption = undefined; // sempre undefined (já enviamos imagem em vez de texto)
 
       if (primeiraFotoComoDocumento && fotos.length > 0) {
-        console.log(`[Telegram] Modo documento: enviando foto 1/${fotos.length} como documento`);
-        const docResult = await sendTelegramDocument(botToken, groupId, fotos[0], caption);
-        resultados.push({ tipo: 'documento_1', success: docResult.success, error: docResult.error });
-
-        // Demais fotos como photo normal
-        for (let i = 1; i < fotos.length; i++) {
-          console.log(`[Telegram] Enviando foto ${i + 1}/${fotos.length} como photo`);
-          const photoResult = await sendTelegramPhoto(botToken, groupId, fotos[i]);
-          resultados.push({ tipo: `foto_${i + 1}`, success: photoResult.success, error: photoResult.error });
-          await new Promise(r => setTimeout(r, 500));
+        // TODAS as fotos enviadas como documento (sem compressão)
+        // Usado para relatórios A4 divididos em partes — cada parte precisa
+        // manter legibilidade, então todas vão como sendDocument.
+        for (let i = 0; i < fotos.length; i++) {
+          console.log(`[Telegram] Modo documento: enviando foto ${i + 1}/${fotos.length} como documento`);
+          const docResult = await sendTelegramDocument(botToken, groupId, fotos[i], i === 0 ? caption : undefined);
+          resultados.push({ tipo: `documento_${i + 1}`, success: docResult.success, error: docResult.error });
+          if (i < fotos.length - 1) {
+            await new Promise(r => setTimeout(r, 500));
+          }
         }
       } else {
         // Comportamento padrão: todas via sendPhoto
