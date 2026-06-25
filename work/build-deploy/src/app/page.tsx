@@ -5238,71 +5238,106 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     toast.loading('Gerando relatório...', { id: 'relatorio-wa-2via' });
 
     try {
-      // 1) Gerar imagem do relatório via canvas (primeira parte para WhatsApp)
-      const relatorioImagem = await gerarRelatorioImagemUnica();
-      if (!relatorioImagem) {
+      // 1) Gerar todas as páginas do relatório (mesma função do Telegram)
+      const paginas = await gerarRelatorioImagem2aVia();
+      if (!paginas || paginas.length === 0) {
         toast.dismiss('relatorio-wa-2via');
         toast.error('Falha ao gerar relatório');
         return;
       }
-      console.log('[WhatsApp 2a via] Relatório gerado:', `${relatorioImagem.length} chars`);
+      console.log(`[WhatsApp 2a via] Relatório gerado: ${paginas.length} página(s)`);
 
-      // 2) Converter data URL para File (necessário para Web Share API)
-      const response = await fetch(relatorioImagem);
-      const blob = await response.blob();
+      // 2) Converter cada página (data URL) para File (JPEG)
       const now = new Date();
-      const fileName = `relatorio_${clienteSelecionado.nome.replace(/\s+/g, '_')}_${now.getTime()}.jpg`;
-      const file = new File([blob], fileName, { type: 'image/jpeg' });
+      const baseName = `relatorio_${clienteSelecionado.nome.replace(/\s+/g, '_')}_${now.getTime()}`;
+      const files: File[] = [];
+      for (let i = 0; i < paginas.length; i++) {
+        const response = await fetch(paginas[i]);
+        const blob = await response.blob();
+        const fileName = paginas.length > 1
+          ? `${baseName}_pag${i + 1}.jpg`
+          : `${baseName}.jpg`;
+        files.push(new File([blob], fileName, { type: 'image/jpeg' }));
+      }
 
-      // 3) Texto de acompanhamento (caption)
+      // 3) Texto de acompanhamento
       const modo2via = clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANÇA' : 'LEITURA';
-      const caption = `RELATÓRIO DE ${modo2via} - ${clienteSelecionado.nome.toUpperCase()}\nData: ${segundaViaSelecionada?.data || ''}`;
+      const caption = `RELATÓRIO DE ${modo2via} - ${clienteSelecionado.nome.toUpperCase()}\nData: ${segundaViaSelecionada?.data || ''}${paginas.length > 1 ? `\n(${paginas.length} páginas)` : ''}`;
 
-      // 4) Tentar Web Share API com arquivo (funciona em mobile)
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      // 4) Tentar Web Share API com todos os arquivos (funciona em mobile)
+      if (navigator.share && navigator.canShare && navigator.canShare({ files })) {
         try {
           await navigator.share({
             title: `Relatório - ${clienteSelecionado.nome}`,
             text: caption,
-            files: [file],
+            files: files,
           });
           toast.dismiss('relatorio-wa-2via');
-          toast.success('Relatório enviado!');
+          toast.success(`${paginas.length} página(s) do relatório enviada(s)!`);
           return;
         } catch (shareError: unknown) {
           if (shareError instanceof Error && shareError.name === 'AbortError') {
             toast.dismiss('relatorio-wa-2via');
             return; // Usuário cancelou
           }
-          console.warn('Web Share falhou, tentando fallback:', shareError);
+          console.warn('Web Share com múltiplos arquivos falhou, tentando um por vez:', shareError);
+          // Tentar enviar um arquivo por vez
+          if (navigator.canShare && navigator.canShare({ files: [files[0]] })) {
+            try {
+              await navigator.share({
+                title: `Relatório - ${clienteSelecionado.nome}`,
+                text: caption,
+                files: [files[0]],
+              });
+              toast.dismiss('relatorio-wa-2via');
+              toast.success('Primeira página enviada! Baixe as demais e anexe manualmente.');
+              // Download das páginas restantes
+              for (let i = 1; i < paginas.length; i++) {
+                const dl = document.createElement('a');
+                dl.href = paginas[i];
+                dl.download = `${baseName}_pag${i + 1}.jpg`;
+                document.body.appendChild(dl);
+                dl.click();
+                document.body.removeChild(dl);
+              }
+              return;
+            } catch (shareErr2: unknown) {
+              if (shareErr2 instanceof Error && shareErr2.name === 'AbortError') {
+                toast.dismiss('relatorio-wa-2via');
+                return;
+              }
+            }
+          }
         }
       }
 
-      // 5) Fallback 1: Web Share sem arquivo (apenas texto + abrir WhatsApp)
-      // + download automático da imagem para o usuário anexar manualmente
+      // 5) Fallback: download de todas as imagens + abrir WhatsApp
       toast.dismiss('relatorio-wa-2via');
       const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
       const phone = clienteSelecionado.telefone?.replace(/\D/g, '') || '';
 
-      // Download da imagem
-      const downloadLink = document.createElement('a');
-      downloadLink.href = relatorioImagem;
-      downloadLink.download = fileName;
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      document.body.removeChild(downloadLink);
+      // Download de todas as páginas
+      for (let i = 0; i < paginas.length; i++) {
+        const downloadLink = document.createElement('a');
+        downloadLink.href = paginas[i];
+        downloadLink.download = paginas.length > 1
+          ? `${baseName}_pag${i + 1}.jpg`
+          : `${baseName}.jpg`;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+      }
 
       // Abrir WhatsApp
       if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
         const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
-        setTimeout(() => abrirWhatsAppLink(grupoUrl), 500);
-        toast.info('Relatório baixado! Anexe a imagem no grupo do WhatsApp.');
+        setTimeout(() => abrirWhatsAppLink(grupoUrl), 800);
+        toast.info(`${paginas.length} imagem(ns) baixada(s)! Anexe no grupo do WhatsApp.`);
       } else if (phone) {
-        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 500);
-        toast.info('Relatório baixado! Anexe a imagem no WhatsApp do cliente.');
+        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 800);
+        toast.info(`${paginas.length} imagem(ns) baixada(s)! Anexe no WhatsApp do cliente.`);
       } else {
-        // Sem WhatsApp cadastrado — só fez download
-        toast.success('Relatório baixado! Compartilhe manualmente.');
+        toast.success(`${paginas.length} imagem(ns) baixada(s)! Compartilhe manualmente.`);
       }
     } catch (error) {
       toast.dismiss('relatorio-wa-2via');
