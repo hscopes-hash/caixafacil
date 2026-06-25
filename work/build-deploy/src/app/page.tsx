@@ -5313,6 +5313,110 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     return new Blob([pdfBytes], { type: 'application/pdf' });
   };
 
+  // =============================================
+  // Helper: criar PDF com MÚLTIPLAS páginas a partir de array de JPEGs
+  // Cada JPEG vira uma página do PDF. Retorna Blob PDF único.
+  // =============================================
+  const criarPdfMultiplo = async (jpegDataUrls: string[]): Promise<Blob> => {
+    if (jpegDataUrls.length === 0) {
+      return new Blob([], { type: 'application/pdf' });
+    }
+    if (jpegDataUrls.length === 1) {
+      return criarPdfDeImagem(jpegDataUrls[0]);
+    }
+
+    const pageWidth = 1588;
+    const pageHeight = 2246;
+    const encoder = new TextEncoder();
+    const parts: Uint8Array[] = [];
+    const offsets: number[] = [];
+    let currentOffset = 0;
+
+    const pushStr = (s: string) => {
+      const bytes = encoder.encode(s);
+      parts.push(bytes);
+      currentOffset += bytes.length;
+    };
+    const pushBytes = (b: Uint8Array) => {
+      parts.push(b);
+      currentOffset += b.length;
+    };
+
+    // Calcular número total de objetos:
+    // 1 = Catalog
+    // 2 = Pages
+    // Para cada página: 3 objetos (Page, Image, Content)
+    const numPages = jpegDataUrls.length;
+    const totalObjects = 2 + numPages * 3;
+
+    // Header
+    pushStr('%PDF-1.4\n');
+
+    // Object 1: Catalog
+    offsets[1] = currentOffset;
+    pushStr('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+
+    // Object 2: Pages (kids = todas as páginas)
+    const kids: string[] = [];
+    for (let p = 0; p < numPages; p++) {
+      kids.push(`${3 + p * 3} 0 R`);
+    }
+    offsets[2] = currentOffset;
+    pushStr(`2 0 obj\n<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${numPages} >>\nendobj\n`);
+
+    // Para cada página: Page + Image + Content
+    for (let p = 0; p < numPages; p++) {
+      const pageObjNum = 3 + p * 3;
+      const imageObjNum = 4 + p * 3;
+      const contentObjNum = 5 + p * 3;
+
+      // Decodificar JPEG
+      const base64 = jpegDataUrls[p].split(',')[1];
+      const binaryString = atob(base64);
+      const jpegBytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        jpegBytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // Page object
+      offsets[pageObjNum] = currentOffset;
+      pushStr(`${pageObjNum} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im${p + 1} ${imageObjNum} 0 R >> >> /Contents ${contentObjNum} 0 R >>\nendobj\n`);
+
+      // Image object (JPEG via DCTDecode)
+      offsets[imageObjNum] = currentOffset;
+      pushStr(`${imageObjNum} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${pageWidth} /Height ${pageHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`);
+      pushBytes(jpegBytes);
+      pushStr('\nendstream\nendobj\n');
+
+      // Content stream
+      const content = `q\n${pageWidth} 0 0 ${pageHeight} 0 0 cm\n/Im${p + 1} Do\nQ\n`;
+      offsets[contentObjNum] = currentOffset;
+      pushStr(`${contentObjNum} 0 obj\n<< /Length ${content.length} >>\nstream\n${content}endstream\nendobj\n`);
+    }
+
+    // Cross-reference table
+    const xrefOffset = currentOffset;
+    let xref = `xref\n0 ${totalObjects + 1}\n0000000000 65535 f \n`;
+    for (let i = 1; i <= totalObjects; i++) {
+      xref += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+    }
+    pushStr(xref);
+
+    // Trailer
+    pushStr(`trailer\n<< /Size ${totalObjects + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`);
+
+    // Concatenar
+    const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
+    const pdfBytes = new Uint8Array(totalLength);
+    let pos = 0;
+    for (const part of parts) {
+      pdfBytes.set(part, pos);
+      pos += part.length;
+    }
+
+    return new Blob([pdfBytes], { type: 'application/pdf' });
+  };
+
   // 2a via: enviar RELATÓRIO via WhatsApp como PDF (documento, sem compressão)
   // WhatsApp trata PDFs como documentos — permite abrir com visualizador externo e zoom total
   const enviarWhatsAppRelatorio2aVia = async () => {
@@ -5520,10 +5624,75 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       let sucessoTotal = true;
       let errosTotal: string[] = [];
 
-      // 4a) Primeira requisição: páginas do relatório OU extrato (1 imagem) como documento
+      // 4a) Primeira requisição: páginas do relatório como PDFs (documento, sem compressão)
+      // No modo RELATÓRIO, converte cada página JPEG para PDF antes de enviar
       const imagensRelatorio: string[] = paginasRelatorio || (extratoImagem ? [extratoImagem] : []);
-      if (imagensRelatorio.length > 0) {
-        console.log(`[Telegram 2a via] Enviando ${imagensRelatorio.length} página(s) do relatório/extrato...`);
+      if (imagensRelatorio.length > 0 && segundaViaModo === 'RELATORIO') {
+        console.log(`[Telegram 2a via] Convertendo ${imagensRelatorio.length} página(s) para PDF...`);
+        // Converter cada página JPEG para PDF (data URL)
+        const pdfsDataUrls: string[] = [];
+        for (let i = 0; i < imagensRelatorio.length; i++) {
+          const pdfBlob = await criarPdfDeImagem(imagensRelatorio[i]);
+          // Converter Blob para data URL
+          const reader = new FileReader();
+          const dataUrl = await new Promise<string>((resolve) => {
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(pdfBlob);
+          });
+          pdfsDataUrls.push(dataUrl);
+        }
+        console.log(`[Telegram 2a via] Enviando ${pdfsDataUrls.length} PDF(s) individual(is)...`);
+        const res1 = await fetch('/api/telegram/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            empresaId: empresa?.id,
+            clienteId: clienteSelecionado?.id,
+            mensagem: null,
+            fotos: pdfsDataUrls,
+            primeiraFotoComoDocumento: true,
+          }),
+        });
+        const data1 = await parseJsonSafe(res1);
+        if (!res1.ok || !data1.success) {
+          sucessoTotal = false;
+          errosTotal.push(data1.errorDetail || data1.error || `HTTP ${res1.status}`);
+          console.error('[Telegram 2a via] Erro req PDFs individuais:', data1);
+        } else {
+          console.log('[Telegram 2a via] PDFs individuais enviados OK');
+        }
+
+        // 4b) Enviar PDF COMPLETO (todas as páginas em um único arquivo) para teste
+        if (imagensRelatorio.length > 1) {
+          console.log('[Telegram 2a via] Criando PDF completo com todas as páginas...');
+          const pdfCompletoBlob = await criarPdfMultiplo(imagensRelatorio);
+          const readerCompleto = new FileReader();
+          const pdfCompletoDataUrl = await new Promise<string>((resolve) => {
+            readerCompleto.onloadend = () => resolve(readerCompleto.result as string);
+            readerCompleto.readAsDataURL(pdfCompletoBlob);
+          });
+          console.log(`[Telegram 2a via] Enviando PDF completo (${pdfCompletoDataUrl.length} chars)...`);
+          const resCompleto = await fetch('/api/telegram/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              empresaId: empresa?.id,
+              clienteId: clienteSelecionado?.id,
+              mensagem: null,
+              fotos: [pdfCompletoDataUrl],
+              primeiraFotoComoDocumento: true,
+            }),
+          });
+          const dataCompleto = await parseJsonSafe(resCompleto);
+          if (!resCompleto.ok || !dataCompleto.success) {
+            console.warn('[Telegram 2a via] Aviso: PDF completo falhou:', dataCompleto.error || dataCompleto.errorDetail);
+          } else {
+            console.log('[Telegram 2a via] PDF completo enviado OK');
+          }
+        }
+      } else if (imagensRelatorio.length > 0) {
+        // Modo EXTRATO: envia como imagem normal (JPEG)
+        console.log(`[Telegram 2a via] Enviando ${imagensRelatorio.length} imagem(ns) do extrato...`);
         const res1 = await fetch('/api/telegram/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -5532,16 +5701,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             clienteId: clienteSelecionado?.id,
             mensagem: null,
             fotos: imagensRelatorio,
-            primeiraFotoComoDocumento: segundaViaModo === 'RELATORIO',
+            primeiraFotoComoDocumento: false,
           }),
         });
         const data1 = await parseJsonSafe(res1);
         if (!res1.ok || !data1.success) {
           sucessoTotal = false;
           errosTotal.push(data1.errorDetail || data1.error || `HTTP ${res1.status}`);
-          console.error('[Telegram 2a via] Erro req relatório:', data1);
+          console.error('[Telegram 2a via] Erro req extrato:', data1);
         } else {
-          console.log('[Telegram 2a via] Páginas do relatório enviadas OK');
+          console.log('[Telegram 2a via] Extrato enviado OK');
         }
       }
 

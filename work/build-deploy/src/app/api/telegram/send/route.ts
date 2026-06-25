@@ -129,9 +129,9 @@ async function sendTelegramPhoto(
       const buffer = Buffer.from(base64Data, 'base64');
       console.log(`[Telegram] sendPhoto base64: ${buffer.length} bytes`);
 
-      const mimeMatch = photoSource.match(/data:(image\/\w+);/);
+      const mimeMatch = photoSource.match(/data:([\w\/.+]+);/);
       const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-      const ext = mimeType === 'image/png' ? 'png' : 'jpg';
+      const ext = mimeType === 'image/png' ? 'png' : mimeType === 'application/pdf' ? 'pdf' : 'jpg';
       const fileName = `foto_${Date.now()}.${ext}`;
 
       const fields: Array<{ name: string; value: string | Buffer; filename?: string; contentType?: string }> = [
@@ -210,9 +210,9 @@ async function sendTelegramDocument(
     const buffer = Buffer.from(base64Data, 'base64');
     console.log(`[Telegram] sendDocument base64: ${buffer.length} bytes`);
 
-    const mimeMatch = photoSource.match(/data:(image\/\w+);/);
+    const mimeMatch = photoSource.match(/data:([\w\/.+]+);/);
     const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-    const ext = mimeType === 'image/png' ? 'png' : 'jpg';
+    const ext = mimeType === 'image/png' ? 'png' : mimeType === 'application/pdf' ? 'pdf' : 'jpg';
     const fileName = `relatorio_${Date.now()}.${ext}`;
 
     const fields: Array<{ name: string; value: string | Buffer; filename?: string; contentType?: string }> = [
