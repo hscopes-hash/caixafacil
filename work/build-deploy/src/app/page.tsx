@@ -5344,12 +5344,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       toast.loading('Enviando para Telegram...', { id: 'telegram-2via' });
 
       // 1) Gerar imagem do extrato OU relatório (conforme modo ativo)
-      // Relatório é dividido em 2 partes (array); extrato é 1 imagem (string)
-      let partesRelatorio: string[] | null = null;
+      // Relatório retorna { partes: string[], completa: string }
+      let resultadoRelatorio: { partes: string[]; completa: string } | null = null;
       let extratoImagem: string | null = null;
       if (segundaViaModo === 'RELATORIO') {
-        partesRelatorio = await gerarRelatorioImagem2aVia();
-        console.log('[Telegram 2a via] Relatório (A4) gerado:', partesRelatorio ? `${partesRelatorio.length} partes` : 'null');
+        resultadoRelatorio = await gerarRelatorioImagem2aVia();
+        console.log('[Telegram 2a via] Relatório gerado:', resultadoRelatorio ? `${resultadoRelatorio.partes.length} partes + 1 completa` : 'null');
       } else {
         extratoImagem = await gerarExtratoImagemSegundaVia();
         console.log('[Telegram 2a via] Extrato gerado:', extratoImagem ? `${extratoImagem.length} chars` : 'null');
@@ -5404,7 +5404,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       let errosTotal: string[] = [];
 
       // 4a) Primeira requisição: partes do relatório (2 imagens) OU extrato (1 imagem) como documento
-      const imagensRelatorio: string[] = partesRelatorio || (extratoImagem ? [extratoImagem] : []);
+      const imagensRelatorio: string[] = resultadoRelatorio?.partes || (extratoImagem ? [extratoImagem] : []);
       if (imagensRelatorio.length > 0) {
         console.log(`[Telegram 2a via] Enviando ${imagensRelatorio.length} parte(s) do relatório/extrato...`);
         const res1 = await fetch('/api/telegram/send', {
@@ -5415,7 +5415,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             clienteId: clienteSelecionado?.id,
             mensagem: null,
             fotos: imagensRelatorio,
-            // No modo RELATÓRIO, TODAS as partes são enviadas como documento (alta resolução)
             primeiraFotoComoDocumento: segundaViaModo === 'RELATORIO',
           }),
         });
@@ -5425,7 +5424,31 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           errosTotal.push(data1.errorDetail || data1.error || `HTTP ${res1.status}`);
           console.error('[Telegram 2a via] Erro req relatório:', data1);
         } else {
-          console.log('[Telegram 2a via] Relatório enviado OK');
+          console.log('[Telegram 2a via] Partes do relatório enviadas OK');
+        }
+      }
+
+      // 4b) Segunda requisição: imagem COMPLETA do relatório (sem dividir)
+      // Enviada após as 2 partes para ter uma visão geral do relatório inteiro
+      if (resultadoRelatorio?.completa) {
+        console.log('[Telegram 2a via] Enviando imagem completa do relatório...');
+        const resCompleta = await fetch('/api/telegram/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            empresaId: empresa?.id,
+            clienteId: clienteSelecionado?.id,
+            mensagem: null,
+            fotos: [resultadoRelatorio.completa],
+            primeiraFotoComoDocumento: true, // sempre como documento (sem compressão)
+          }),
+        });
+        const dataCompleta = await parseJsonSafe(resCompleta);
+        if (!resCompleta.ok || !dataCompleta.success) {
+          // Erro na imagem completa não é crítico (as partes já foram enviadas)
+          console.warn('[Telegram 2a via] Aviso: imagem completa falhou:', dataCompleta.error || dataCompleta.errorDetail);
+        } else {
+          console.log('[Telegram 2a via] Imagem completa enviada OK');
         }
       }
 
@@ -5459,7 +5482,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       toast.dismiss('telegram-2via');
       if (sucessoTotal) {
         const tipoLabel = segundaViaModo === 'RELATORIO'
-          ? `Relatório (${imagensRelatorio.length} partes)`
+          ? `Relatório (${imagensRelatorio.length} partes + 1 completa)`
           : 'Extrato';
         const fotosLabel = segundaViaModo === 'RELATORIO'
           ? ''  // no modo RELATÓRIO, fotos já estão no relatório
@@ -6038,7 +6061,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   //     (1588 x 2246 px) — necessário para manter legibilidade quando a imagem
   //     é compartilhada via WhatsApp e exibida em telas de celular que reduzem
   //     o tamanho pela metade.
-  const gerarRelatorioImagem2aVia = async (): Promise<string[] | null> => {
+  const gerarRelatorioImagem2aVia = async (): Promise<{ partes: string[]; completa: string } | null> => {
     try {
       if (!segundaViaDados || segundaViaDados.length === 0) {
         return null;
@@ -6498,28 +6521,27 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
         ctx.textAlign = 'left';
 
+        // === Imagem completa (sem dividir) — enviada por último como documento ===
+        const imagemCompleta = canvas.toDataURL('image/jpeg', 0.85);
+
         // === Dividir canvas em 2 partes (melhora zoom no Telegram/WhatsApp) ===
-        // Canvas é 2x DPI (1588xalturaFinal*2). Dividir em 2 imagens verticais.
-        const alturaRenderizada = alturaFinal * SCALE; // altura real em pixels
+        const alturaRenderizada = alturaFinal * SCALE;
         const meioY = Math.floor(alturaRenderizada / 2);
 
         const partes: string[] = [];
 
-        // Parte 1: metade superior (cabeçalho + primeiros cards)
+        // Parte 1: metade superior
         const canvas1 = document.createElement('canvas');
         canvas1.width = canvas.width;
         canvas1.height = meioY;
         const ctx1 = canvas1.getContext('2d');
         if (ctx1) {
-          // Desabilitar suavização — cópia 1:1, não deve alterar pixels
           ctx1.imageSmoothingEnabled = false;
           ctx1.drawImage(canvas, 0, 0, canvas.width, meioY, 0, 0, canvas.width, meioY);
           partes.push(canvas1.toDataURL('image/jpeg', 0.85));
         }
 
-        // Parte 2: metade inferior (últimos cards + totais — tem fotos das máquinas)
-        // Usa qualidade JPEG MAIOR (0.92) porque esta parte contém fotos que
-        // precisam de nitidez para zoom. Qualidade 0.82 degradava as fotos.
+        // Parte 2: metade inferior
         const canvas2 = document.createElement('canvas');
         canvas2.width = canvas.width;
         canvas2.height = alturaRenderizada - meioY;
@@ -6530,21 +6552,20 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           partes.push(canvas2.toDataURL('image/jpeg', 0.92));
         }
 
-        console.log(`[Relatório 2a via] Canvas dividido em ${partes.length} partes (${canvas.width}x${meioY} + ${canvas.width}x${alturaRenderizada - meioY})`);
-        return partes.length > 0 ? partes : null;
+        console.log(`[Relatório 2a via] Canvas dividido em ${partes.length} partes + 1 completa`);
+        return { partes, completa: imagemCompleta };
       } catch (err) {
         console.error('Erro ao gerar relatório 2a via:', err);
         return null;
       }
   };
 
-  // Gerar UMA imagem única do relatório (para WhatsApp e modo EXTRATO)
-  // Reaproveita gerarRelatorioImagem2aVia() e retorna apenas a primeira parte
-  // (ou a imagem inteira se não houver divisão).
+  // Gerar UMA imagem única do relatório (para WhatsApp)
+  // Retorna a imagem completa (não dividida)
   const gerarRelatorioImagemUnica = async (): Promise<string | null> => {
-    const partes = await gerarRelatorioImagem2aVia();
-    if (!partes || partes.length === 0) return null;
-    return partes[0]; // primeira parte para compatibilidade
+    const resultado = await gerarRelatorioImagem2aVia();
+    if (!resultado) return null;
+    return resultado.completa;
   };
 
   const gerarExtratoImagem = (): Promise<string> => {
