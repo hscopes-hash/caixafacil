@@ -6537,11 +6537,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const A4_W = 794;
       const padding = 40;
 
-      const FONT_TITLE = 'bold 26px "Arial", sans-serif';
-      const FONT_SUBTITLE = '18px "Arial", sans-serif';
-      const FONT_LABEL = 'bold 20px "Arial", sans-serif';
-      const FONT_VALUE = '20px "Arial", sans-serif';
-      const FONT_TOTAL = 'bold 28px "Arial", sans-serif';
+      const FONT_TITLE = 'bold 30px "Arial", sans-serif';
+      const FONT_SUBTITLE = '22px "Arial", sans-serif';
+      const FONT_LABEL = 'bold 24px "Arial", sans-serif';
+      const FONT_VALUE = '24px "Arial", sans-serif';
+      const FONT_TOTAL = 'bold 32px "Arial", sans-serif';
 
       const modo2via = clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANCA' : 'LEITURA';
       const porMaquina = new Map<string, any[]>();
@@ -6589,7 +6589,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       await Promise.race([Promise.all(promessas), new Promise<void>(r => setTimeout(r, 10000))]);
 
       const operadores = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => l.usuario.nome));
-      const CARD_HEIGHT = 380;
+      const CARD_HEIGHT = 320;
       const temReceitasExtras = modo2via !== 'COBRANCA' && receitasFinal.length > 0;
       const temDespesasExtras = modo2via !== 'COBRANCA' && despesasFinal.length > 0;
 
@@ -6658,15 +6658,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const mult = multMap[moeda] ?? 0.01;
         const moedaStr = `x${mult.toString().replace('.', ',')}`;
         const parteNegrito = `${m.codigo} - ${nomeMaquina} `;
-        ctx.font = FONT_LABEL; ctx.fillText(parteNegrito, textX, y + 50);
+        ctx.font = FONT_LABEL; ctx.fillText(parteNegrito, textX, y + 40);
         const larguraNegrito = ctx.measureText(parteNegrito).width;
-        ctx.font = '20px "Arial", sans-serif'; ctx.fillText(moedaStr, textX + larguraNegrito, y + 50);
+        ctx.font = '24px "Arial", sans-serif'; ctx.fillText(moedaStr, textX + larguraNegrito, y + 40);
         ctx.font = FONT_VALUE;
-        ctx.fillText(`${lws[0].entradaNova || 0} - ${lws[0].entradaAnterior || 0} = ${(lws[0].entradaNova || 0) - (lws[0].entradaAnterior || 0)}`, textX, y + 90);
-        ctx.fillText(`${lws[0].saidaNova || 0} - ${lws[0].saidaAnterior || 0} = ${(lws[0].saidaNova || 0) - (lws[0].saidaAnterior || 0)}`, textX, y + 125);
+        ctx.fillText(`${lws[0].entradaNova || 0} - ${lws[0].entradaAnterior || 0} = ${(lws[0].entradaNova || 0) - (lws[0].entradaAnterior || 0)}`, textX, y + 80);
+        ctx.fillText(`${lws[0].saidaNova || 0} - ${lws[0].saidaAnterior || 0} = ${(lws[0].saidaNova || 0) - (lws[0].saidaAnterior || 0)}`, textX, y + 115);
         ctx.font = FONT_LABEL; ctx.fillStyle = '#000000';
-        ctx.fillText(`Saldo: ${formatNumber(lws[0].saldo)}`, textX, y + 165);
-        y += CARD_HEIGHT + 20;
+        ctx.fillText(`Saldo: ${formatNumber(lws[0].saldo)}`, textX, y + 155);
+        y += CARD_HEIGHT + 10;
       }
 
       // Separador
