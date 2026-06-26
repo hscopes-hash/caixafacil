@@ -5417,113 +5417,75 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     return new Blob([pdfBytes], { type: 'application/pdf' });
   };
 
-  // 2a via: enviar RELATÓRIO via WhatsApp como PDF (documento, sem compressão)
-  // WhatsApp trata PDFs como documentos — permite abrir com visualizador externo e zoom total
+  // 2a via: enviar RELATÓRIO via WhatsApp como PDF único (todas as páginas em 1 arquivo)
   const enviarWhatsAppRelatorio2aVia = async () => {
     if (!clienteSelecionado || segundaViaDados.length === 0) {
       toast.error('Nenhum dado de fechamento para gerar relatório');
       return;
     }
 
-    toast.loading('Gerando relatório PDF...', { id: 'relatorio-wa-2via' });
+    toast.loading('Gerando PDF do relatório...', { id: 'relatorio-wa-2via' });
 
     try {
-      // 1) Gerar todas as páginas do relatório (JPEG data URLs)
+      // 1) Gerar páginas do relatório (JPEG data URLs, máx 8 cards por página)
       const paginas = await gerarRelatorioImagem2aVia();
       if (!paginas || paginas.length === 0) {
         toast.dismiss('relatorio-wa-2via');
         toast.error('Falha ao gerar relatório');
         return;
       }
-      console.log(`[WhatsApp 2a via] Relatório gerado: ${paginas.length} página(s)`);
 
-      // 2) Converter cada página JPEG para PDF (WhatsApp trata PDF como documento, sem compressão)
+      // 2) Criar UM PDF com todas as páginas
+      const pdfBlob = await criarPdfMultiplo(paginas);
       const now = new Date();
-      const baseName = `relatorio_${clienteSelecionado.nome.replace(/\s+/g, '_')}_${now.getTime()}`;
-      const files: File[] = [];
-      for (let i = 0; i < paginas.length; i++) {
-        const pdfBlob = await criarPdfDeImagem(paginas[i]);
-        const fileName = paginas.length > 1
-          ? `${baseName}_pag${i + 1}.pdf`
-          : `${baseName}.pdf`;
-        files.push(new File([pdfBlob], fileName, { type: 'application/pdf' }));
-      }
-      console.log(`[WhatsApp 2a via] ${files.length} PDF(s) criado(s)`);
+      const fileName = `relatorio_${clienteSelecionado.nome.replace(/\s+/g, '_')}_${now.getTime()}.pdf`;
+      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+      console.log(`[WhatsApp 2a via] PDF criado: ${file.size} bytes, ${paginas.length} página(s)`);
 
-      // 3) Texto de acompanhamento
+      // 3) Caption
       const modo2via = clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANÇA' : 'LEITURA';
-      const caption = `RELATÓRIO DE ${modo2via} - ${clienteSelecionado.nome.toUpperCase()}\nData: ${segundaViaSelecionada?.data || ''}${paginas.length > 1 ? `\n(${paginas.length} páginas)` : ''}`;
+      const caption = `RELATÓRIO DE ${modo2via} - ${clienteSelecionado.nome.toUpperCase()}\nData: ${segundaViaSelecionada?.data || ''}`;
 
-      // 4) Tentar Web Share API com todos os PDFs (funciona em mobile)
-      if (navigator.share && navigator.canShare && navigator.canShare({ files })) {
+      // 4) Web Share API com o PDF (funciona em mobile)
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
           await navigator.share({
             title: `Relatório - ${clienteSelecionado.nome}`,
             text: caption,
-            files: files,
+            files: [file],
           });
           toast.dismiss('relatorio-wa-2via');
-          toast.success(`${files.length} PDF(s) do relatório enviado(s)!`);
+          toast.success('PDF do relatório enviado!');
           return;
         } catch (shareError: unknown) {
           if (shareError instanceof Error && shareError.name === 'AbortError') {
             toast.dismiss('relatorio-wa-2via');
             return;
           }
-          console.warn('Web Share com múltiplos PDFs falhou, tentando um por vez:', shareError);
-          // Tentar enviar primeiro PDF + download dos restantes
-          if (navigator.canShare && navigator.canShare({ files: [files[0]] })) {
-            try {
-              await navigator.share({
-                title: `Relatório - ${clienteSelecionado.nome}`,
-                text: caption,
-                files: [files[0]],
-              });
-              toast.dismiss('relatorio-wa-2via');
-              // Download das páginas restantes como PDF
-              for (let i = 1; i < files.length; i++) {
-                const dl = document.createElement('a');
-                dl.href = URL.createObjectURL(files[i]);
-                dl.download = files[i].name;
-                document.body.appendChild(dl);
-                dl.click();
-                document.body.removeChild(dl);
-              }
-              toast.success('Primeiro PDF enviado! Demais baixados — anexe manualmente.');
-              return;
-            } catch (shareErr2: unknown) {
-              if (shareErr2 instanceof Error && shareErr2.name === 'AbortError') {
-                toast.dismiss('relatorio-wa-2via');
-                return;
-              }
-            }
-          }
         }
       }
 
-      // 5) Fallback: download de todos os PDFs + abrir WhatsApp
+      // 5) Fallback: download do PDF + abrir WhatsApp
       toast.dismiss('relatorio-wa-2via');
       const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
       const phone = clienteSelecionado.telefone?.replace(/\D/g, '') || '';
 
-      for (let i = 0; i < files.length; i++) {
-        const downloadLink = document.createElement('a');
-        downloadLink.href = URL.createObjectURL(files[i]);
-        downloadLink.download = files[i].name;
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        document.body.removeChild(downloadLink);
-      }
+      const downloadLink = document.createElement('a');
+      downloadLink.href = URL.createObjectURL(file);
+      downloadLink.download = fileName;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
 
       if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
         const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
-        setTimeout(() => abrirWhatsAppLink(grupoUrl), 800);
-        toast.info(`${files.length} PDF(s) baixado(s)! Anexe como documento no grupo do WhatsApp.`);
+        setTimeout(() => abrirWhatsAppLink(grupoUrl), 500);
+        toast.info('PDF baixado! Anexe como documento no grupo do WhatsApp.');
       } else if (phone) {
-        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 800);
-        toast.info(`${files.length} PDF(s) baixado(s)! Anexe como documento no WhatsApp do cliente.`);
+        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 500);
+        toast.info('PDF baixado! Anexe como documento no WhatsApp do cliente.');
       } else {
-        toast.success(`${files.length} PDF(s) baixado(s)! Compartilhe manualmente.`);
+        toast.success('PDF baixado! Compartilhe manualmente.');
       }
     } catch (error) {
       toast.dismiss('relatorio-wa-2via');
@@ -5562,195 +5524,99 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       return;
     }
     try {
-      toast.loading('Enviando para Telegram...', { id: 'telegram-2via' });
+      toast.loading('Gerando PDF do relatório...', { id: 'telegram-2via' });
 
-      // 1) Gerar imagem do extrato OU relatório (conforme modo ativo)
-      // Relatório retorna string[] (páginas paginadas com máx 8 cards cada)
-      let paginasRelatorio: string[] | null = null;
-      let extratoImagem: string | null = null;
-      if (segundaViaModo === 'RELATORIO') {
-        paginasRelatorio = await gerarRelatorioImagem2aVia();
-        console.log('[Telegram 2a via] Relatório gerado:', paginasRelatorio ? `${paginasRelatorio.length} página(s)` : 'null');
-      } else {
-        extratoImagem = await gerarExtratoImagemSegundaVia();
-        console.log('[Telegram 2a via] Extrato gerado:', extratoImagem ? `${extratoImagem.length} chars` : 'null');
-      }
-
-      // 2) Buscar fotos do GCS para TODAS as leituras que têm fotoGcsPath
-      // (não apenas a primeira — bug anterior: find() retornava só 1 leitura)
-      const fotos: string[] = [];
-      const gcsPathsUnicos = new Set<string>();
-      segundaViaDados.forEach((l: any) => {
-        if (l.fotoGcsPath) gcsPathsUnicos.add(l.fotoGcsPath);
-      });
-      console.log('[Telegram 2a via] GCS paths únicos:', gcsPathsUnicos.size);
-
-      const token = useAuthStore.getState().token;
-      for (const gcsPath of gcsPathsUnicos) {
-        try {
-          const fotoRes = await fetch(`/api/leituras/download-fotos?gcsPath=${encodeURIComponent(gcsPath)}`, { headers: { 'Authorization': `Bearer ${token}` } });
-          if (fotoRes.ok) {
-            const fotoData = await fotoRes.json();
-            if (fotoData.fotos && Array.isArray(fotoData.fotos)) {
-              fotoData.fotos.forEach((f: any) => {
-                if (f.fotoBase64) {
-                  // Garantir que é data URL
-                  const dataUrl = f.fotoBase64.startsWith('data:')
-                    ? f.fotoBase64
-                    : `data:image/jpeg;base64,${f.fotoBase64}`;
-                  fotos.push(dataUrl);
-                }
-              });
-            }
-          } else {
-            console.warn('[Telegram 2a via] Erro ao baixar fotos do GCS:', gcsPath, fotoRes.status);
-          }
-        } catch (e) { console.warn('Erro ao buscar fotos 2a via:', gcsPath, e); }
-      }
-      console.log('[Telegram 2a via] Total de fotos coletadas:', fotos.length);
-
-      // Helper: parse JSON robusto (captura respostas não-JSON como "Request Entity Too Large")
+      // Helper: parse JSON robusto
       const parseJsonSafe = async (res: Response) => {
-        try {
-          return await res.json();
-        } catch {
-          const text = await res.text().catch(() => '');
-          return { success: false, error: `HTTP ${res.status}: ${text.substring(0, 200) || res.statusText}` };
-        }
+        try { return await res.json(); }
+        catch { const text = await res.text().catch(() => ''); return { success: false, error: `HTTP ${res.status}: ${text.substring(0, 200) || res.statusText}` }; }
       };
 
-      // 4) Enviar para Telegram em requisições separadas para evitar
-      //    "Request Entity Too Large" (limite 4.5MB do Vercel Hobby)
-      let sucessoTotal = true;
-      let errosTotal: string[] = [];
-
-      // 4a) Primeira requisição: páginas do relatório como PDFs (documento, sem compressão)
-      // No modo RELATÓRIO, converte cada página JPEG para PDF antes de enviar
-      const imagensRelatorio: string[] = paginasRelatorio || (extratoImagem ? [extratoImagem] : []);
-      if (imagensRelatorio.length > 0 && segundaViaModo === 'RELATORIO') {
-        console.log(`[Telegram 2a via] Convertendo ${imagensRelatorio.length} página(s) para PDF...`);
-        // Converter cada página JPEG para PDF (data URL)
-        const pdfsDataUrls: string[] = [];
-        for (let i = 0; i < imagensRelatorio.length; i++) {
-          const pdfBlob = await criarPdfDeImagem(imagensRelatorio[i]);
-          // Converter Blob para data URL
-          const reader = new FileReader();
-          const dataUrl = await new Promise<string>((resolve) => {
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.readAsDataURL(pdfBlob);
-          });
-          pdfsDataUrls.push(dataUrl);
+      if (segundaViaModo === 'RELATORIO') {
+        // === MODO RELATÓRIO: gerar UM PDF com todas as páginas ===
+        const paginas = await gerarRelatorioImagem2aVia();
+        if (!paginas || paginas.length === 0) {
+          toast.dismiss('telegram-2via');
+          toast.error('Falha ao gerar relatório');
+          return;
         }
-        console.log(`[Telegram 2a via] Enviando ${pdfsDataUrls.length} PDF(s) individual(is)...`);
-        const res1 = await fetch('/api/telegram/send', {
+
+        // Criar PDF único (multi-página) a partir das páginas JPEG
+        const pdfBlob = await criarPdfMultiplo(paginas);
+        // Converter Blob para data URL
+        const reader = new FileReader();
+        const pdfDataUrl = await new Promise<string>((resolve) => {
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(pdfBlob);
+        });
+        console.log(`[Telegram 2a via] PDF criado: ${pdfDataUrl.length} chars, ${paginas.length} página(s)`);
+
+        // Enviar PDF como documento (sem compressão)
+        const res = await fetch('/api/telegram/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             empresaId: empresa?.id,
             clienteId: clienteSelecionado?.id,
             mensagem: null,
-            fotos: pdfsDataUrls,
+            fotos: [pdfDataUrl],
             primeiraFotoComoDocumento: true,
           }),
         });
-        const data1 = await parseJsonSafe(res1);
-        if (!res1.ok || !data1.success) {
-          sucessoTotal = false;
-          errosTotal.push(data1.errorDetail || data1.error || `HTTP ${res1.status}`);
-          console.error('[Telegram 2a via] Erro req PDFs individuais:', data1);
+        const data = await parseJsonSafe(res);
+        toast.dismiss('telegram-2via');
+        if (res.ok && data.success) {
+          toast.success('PDF do relatório enviado!');
         } else {
-          console.log('[Telegram 2a via] PDFs individuais enviados OK');
+          toast.error(data.errorDetail || data.error || 'Erro ao enviar PDF', { duration: 10000 });
+        }
+      } else {
+        // === MODO EXTRATO: enviar imagem do extrato + fotos das máquinas ===
+        const extratoImagem = await gerarExtratoImagemSegundaVia();
+
+        // Buscar fotos do GCS
+        const fotos: string[] = [];
+        const gcsPathsUnicos = new Set<string>();
+        segundaViaDados.forEach((l: any) => { if (l.fotoGcsPath) gcsPathsUnicos.add(l.fotoGcsPath); });
+        const token = useAuthStore.getState().token;
+        for (const gcsPath of gcsPathsUnicos) {
+          try {
+            const fotoRes = await fetch(`/api/leituras/download-fotos?gcsPath=${encodeURIComponent(gcsPath)}`, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (fotoRes.ok) {
+              const fotoData = await fotoRes.json();
+              if (fotoData.fotos && Array.isArray(fotoData.fotos)) {
+                fotoData.fotos.forEach((f: any) => {
+                  if (f.fotoBase64) {
+                    fotos.push(f.fotoBase64.startsWith('data:') ? f.fotoBase64 : `data:image/jpeg;base64,${f.fotoBase64}`);
+                  }
+                });
+              }
+            }
+          } catch (e) { console.warn('Erro ao buscar fotos 2a via:', e); }
         }
 
-        // 4b) Enviar PDF COMPLETO (todas as páginas em um único arquivo) para teste
-        if (imagensRelatorio.length > 1) {
-          console.log('[Telegram 2a via] Criando PDF completo com todas as páginas...');
-          const pdfCompletoBlob = await criarPdfMultiplo(imagensRelatorio);
-          const readerCompleto = new FileReader();
-          const pdfCompletoDataUrl = await new Promise<string>((resolve) => {
-            readerCompleto.onloadend = () => resolve(readerCompleto.result as string);
-            readerCompleto.readAsDataURL(pdfCompletoBlob);
-          });
-          console.log(`[Telegram 2a via] Enviando PDF completo (${pdfCompletoDataUrl.length} chars)...`);
-          const resCompleto = await fetch('/api/telegram/send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              empresaId: empresa?.id,
-              clienteId: clienteSelecionado?.id,
-              mensagem: null,
-              fotos: [pdfCompletoDataUrl],
-              primeiraFotoComoDocumento: true,
-            }),
-          });
-          const dataCompleto = await parseJsonSafe(resCompleto);
-          if (!resCompleto.ok || !dataCompleto.success) {
-            console.warn('[Telegram 2a via] Aviso: PDF completo falhou:', dataCompleto.error || dataCompleto.errorDetail);
-          } else {
-            console.log('[Telegram 2a via] PDF completo enviado OK');
-          }
-        }
-      } else if (imagensRelatorio.length > 0) {
-        // Modo EXTRATO: envia como imagem normal (JPEG)
-        console.log(`[Telegram 2a via] Enviando ${imagensRelatorio.length} imagem(ns) do extrato...`);
-        const res1 = await fetch('/api/telegram/send', {
+        const fotosEnvio: string[] = [];
+        if (extratoImagem) fotosEnvio.push(extratoImagem);
+        fotosEnvio.push(...fotos);
+
+        const res = await fetch('/api/telegram/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             empresaId: empresa?.id,
             clienteId: clienteSelecionado?.id,
             mensagem: null,
-            fotos: imagensRelatorio,
+            fotos: fotosEnvio,
             primeiraFotoComoDocumento: false,
           }),
         });
-        const data1 = await parseJsonSafe(res1);
-        if (!res1.ok || !data1.success) {
-          sucessoTotal = false;
-          errosTotal.push(data1.errorDetail || data1.error || `HTTP ${res1.status}`);
-          console.error('[Telegram 2a via] Erro req extrato:', data1);
+        const data = await parseJsonSafe(res);
+        toast.dismiss('telegram-2via');
+        if (res.ok && data.success) {
+          toast.success(`Extrato + ${fotos.length} foto(s) enviados!`);
         } else {
-          console.log('[Telegram 2a via] Extrato enviado OK');
+          toast.error(data.errorDetail || data.error || 'Erro ao enviar para Telegram', { duration: 10000 });
         }
-      }
-
-      // 4b) Fotos das máquinas (apenas no modo EXTRATO)
-      if (fotos.length > 0 && segundaViaModo !== 'RELATORIO') {
-        console.log(`[Telegram 2a via] Enviando ${fotos.length} foto(s) (req 2/2)...`);
-        const res2 = await fetch('/api/telegram/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            empresaId: empresa?.id,
-            clienteId: clienteSelecionado?.id,
-            mensagem: null,
-            fotos: fotos,
-            primeiraFotoComoDocumento: false, // fotos normais via sendPhoto
-          }),
-        });
-        const data2 = await parseJsonSafe(res2);
-        if (!res2.ok || !data2.success) {
-          sucessoTotal = false;
-          errosTotal.push(data2.errorDetail || data2.error || `HTTP ${res2.status}`);
-          console.error('[Telegram 2a via] Erro req 2 (fotos):', data2);
-        } else {
-          console.log('[Telegram 2a via] Fotos enviadas OK');
-        }
-      }
-
-      toast.dismiss('telegram-2via');
-      if (sucessoTotal) {
-        const tipoLabel = segundaViaModo === 'RELATORIO'
-          ? `Relatório (${imagensRelatorio.length} página(s))`
-          : 'Extrato';
-        const fotosLabel = segundaViaModo === 'RELATORIO'
-          ? ''  // no modo RELATÓRIO, fotos já estão no relatório
-          : ` + ${fotos.length} foto(s)`;
-        const msg = `${tipoLabel}${fotosLabel} enviados!`;
-        toast.success(msg);
-      } else {
-        const errorMsg = errosTotal.join('; ');
-        toast.error(errorMsg, { duration: 10000 });
       }
     } catch (error) {
       toast.dismiss('telegram-2via');
