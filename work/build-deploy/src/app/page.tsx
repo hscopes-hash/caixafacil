@@ -4370,6 +4370,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               );
 
               // ⚠️ Guardar foto processada (com tarja vermelha) na máquina
+              // SEMPRE setar fotoProcessada, independentemente dos valores serem iguais
+              // O thumbnail deve aparecer sempre que houver foto processada
               try {
                 const nowTs = new Date();
                 const dataStrTarja = `${nowTs.getDate().toString().padStart(2, '0')}/${(nowTs.getMonth() + 1).toString().padStart(2, '0')}/${nowTs.getFullYear().toString().slice(-2)} ${nowTs.getHours().toString().padStart(2, '0')}:${nowTs.getMinutes().toString().padStart(2, '0')}`;
@@ -4381,11 +4383,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   data.saida ?? null,
                   foto.origem || 'LOTE'
                 );
-                maquinaAtualizada.fotoProcessada = fotoComTarja;
-                console.log(`[Lote] Tarja aplicada à máquina ${data.codigoMaquina}`);
+                // Garantir que é uma NOVA string (forçar mudança de referência)
+                maquinaAtualizada.fotoProcessada = fotoComTarja + '';
+                console.log(`[Lote] Tarja aplicada à máquina ${data.codigoMaquina}, foto: ${maquinaAtualizada.fotoProcessada?.length || 0} chars`);
               } catch (err) {
                 console.warn(`[Lote] Falha ao aplicar tarja na máquina ${data.codigoMaquina}:`, err);
-                maquinaAtualizada.fotoProcessada = foto.imagem;
+                maquinaAtualizada.fotoProcessada = foto.imagem + '';
               }
 
               novasMaquinas[indexMaquina] = maquinaAtualizada;
@@ -8397,6 +8400,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     <Button
                       data-close-lote-modal="true"
                       onClick={() => {
+                        // Forçar re-render criando novos objetos
+                        setMaquinas(prev => prev.map(m => ({ ...m })));
                         setLoteModalOpen(false);
                         setFotosLote([]);
                         setLoteProgresso(0);
