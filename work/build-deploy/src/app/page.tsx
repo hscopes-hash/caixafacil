@@ -8394,10 +8394,20 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     <Button
                       data-close-lote-modal="true"
                       onClick={() => {
-                        // Forçar re-render das máquinas para atualizar thumbnails
-                        // (setMaquinas durante processarLote pode não ter disparado re-render
-                        //  se o modal estava aberto e React batched as atualizações)
-                        setMaquinas(prev => prev.map(m => ({ ...m })));
+                        // Log para debug — verificar se fotoProcessada está no estado
+                        console.log('[CONCLUIR] Estado atual das máquinas:', maquinas.map(m => ({
+                          codigo: m.codigo,
+                          fotoProcessada: m.fotoProcessada ? `${m.fotoProcessada.substring(0, 50)}...` : 'NULL',
+                          novaEntrada: m.novaEntrada,
+                        })));
+                        // Forçar re-render
+                        setMaquinas(prev => {
+                          console.log('[CONCLUIR] prev maquinas:', prev.map(m => ({
+                            codigo: m.codigo,
+                            hasFoto: !!m.fotoProcessada,
+                          })));
+                          return prev.map(m => ({ ...m }));
+                        });
                         setLoteModalOpen(false);
                         setFotosLote([]);
                         setLoteProgresso(0);
