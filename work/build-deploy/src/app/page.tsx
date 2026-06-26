@@ -8378,17 +8378,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       <p className="text-xs text-muted-foreground mt-1">Valores aplicados as maquinas correspondentes</p>
                     </div>
 
-                    {/* Botao Enviar Lote WhatsApp */}
-                    {clienteSelecionado?.whatsapp && fotosLote.some(f => f.status === 'concluido' && f.resultado?.codigoReconhecido) && (
-                      <Button
-                        onClick={enviarLoteWhatsApp}
-                        className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
-                      >
-                        <MessageCircle className="w-4 h-4 mr-2" />
-                        ENVIAR {fotosLote.filter(f => f.status === 'concluido' && f.resultado?.codigoReconhecido).length} FOTO(S) PARA O GRUPO
-                      </Button>
-                    )}
-
                     <Button
                       data-close-lote-modal="true"
                       onClick={() => {
