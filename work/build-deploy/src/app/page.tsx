@@ -5241,10 +5241,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       jpegBytes[i] = binaryString.charCodeAt(i);
     }
 
-    // Obter dimensões da imagem do canvas (precisamos para o PDF)
-    // Como não temos as dimensões aqui, usamos valores padrão A4 em pixels a 2x DPI
-    const pageWidth = 1588;  // 794 * 2
-    const pageHeight = 2246; // 1123 * 2 (será ajustado)
+    // Obter dimensões REAIS da imagem via Image element
+    const img = new Image();
+    await new Promise<void>((resolve) => {
+      img.onload = () => resolve();
+      img.onerror = () => resolve();
+      img.src = jpegDataUrl;
+    });
+    const pageWidth = img.naturalWidth || 1588;
+    const pageHeight = img.naturalHeight || 2246;
 
     // Construir PDF minimal
     // Estrutura: header + 5 objects + xref + trailer
@@ -5315,7 +5320,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
   // =============================================
   // Helper: criar PDF com MÚLTIPLAS páginas a partir de array de JPEGs
-  // Cada JPEG vira uma página do PDF. Retorna Blob PDF único.
+  // Cada JPEG vira uma página do PDF com suas DIMENSÕES REAIS (não hardcoded).
+  // Retorna Blob PDF único.
   // =============================================
   const criarPdfMultiplo = async (jpegDataUrls: string[]): Promise<Blob> => {
     if (jpegDataUrls.length === 0) {
@@ -5325,8 +5331,30 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       return criarPdfDeImagem(jpegDataUrls[0]);
     }
 
-    const pageWidth = 1588;
-    const pageHeight = 2246;
+    // Pré-carregar todas as imagens para obter dimensões reais (width/height)
+    const dimensoes: Array<{ width: number; height: number; bytes: Uint8Array }> = [];
+    for (let p = 0; p < jpegDataUrls.length; p++) {
+      // Decodificar JPEG bytes
+      const base64 = jpegDataUrls[p].split(',')[1];
+      const binaryString = atob(base64);
+      const jpegBytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        jpegBytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // Obter dimensões reais da imagem via Image element
+      const img = new Image();
+      await new Promise<void>((resolve) => {
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+        img.src = jpegDataUrls[p];
+      });
+      const width = img.naturalWidth || 1588;
+      const height = img.naturalHeight || 2246;
+      dimensoes.push({ width, height, bytes: jpegBytes });
+      console.log(`[PDF] Página ${p + 1}: ${width}x${height} px, ${jpegBytes.length} bytes`);
+    }
+
     const encoder = new TextEncoder();
     const parts: Uint8Array[] = [];
     const offsets: number[] = [];
@@ -5342,11 +5370,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       currentOffset += b.length;
     };
 
-    // Calcular número total de objetos:
-    // 1 = Catalog
-    // 2 = Pages
-    // Para cada página: 3 objetos (Page, Image, Content)
-    const numPages = jpegDataUrls.length;
+    const numPages = dimensoes.length;
     const totalObjects = 2 + numPages * 3;
 
     // Header
@@ -5356,7 +5380,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     offsets[1] = currentOffset;
     pushStr('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
 
-    // Object 2: Pages (kids = todas as páginas)
+    // Object 2: Pages
     const kids: string[] = [];
     for (let p = 0; p < numPages; p++) {
       kids.push(`${3 + p * 3} 0 R`);
@@ -5364,32 +5388,25 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     offsets[2] = currentOffset;
     pushStr(`2 0 obj\n<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${numPages} >>\nendobj\n`);
 
-    // Para cada página: Page + Image + Content
+    // Para cada página: Page + Image + Content (com dimensões REAIS)
     for (let p = 0; p < numPages; p++) {
       const pageObjNum = 3 + p * 3;
       const imageObjNum = 4 + p * 3;
       const contentObjNum = 5 + p * 3;
+      const { width: imgW, height: imgH, bytes: jpegBytes } = dimensoes[p];
 
-      // Decodificar JPEG
-      const base64 = jpegDataUrls[p].split(',')[1];
-      const binaryString = atob(base64);
-      const jpegBytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        jpegBytes[i] = binaryString.charCodeAt(i);
-      }
-
-      // Page object
+      // Page object — MediaBox com dimensões REAIS da imagem
       offsets[pageObjNum] = currentOffset;
-      pushStr(`${pageObjNum} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im${p + 1} ${imageObjNum} 0 R >> >> /Contents ${contentObjNum} 0 R >>\nendobj\n`);
+      pushStr(`${pageObjNum} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${imgW} ${imgH}] /Resources << /XObject << /Im${p + 1} ${imageObjNum} 0 R >> >> /Contents ${contentObjNum} 0 R >>\nendobj\n`);
 
-      // Image object (JPEG via DCTDecode)
+      // Image object — Width e Height REAIS
       offsets[imageObjNum] = currentOffset;
-      pushStr(`${imageObjNum} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${pageWidth} /Height ${pageHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`);
+      pushStr(`${imageObjNum} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${imgW} /Height ${imgH} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`);
       pushBytes(jpegBytes);
       pushStr('\nendstream\nendobj\n');
 
-      // Content stream
-      const content = `q\n${pageWidth} 0 0 ${pageHeight} 0 0 cm\n/Im${p + 1} Do\nQ\n`;
+      // Content stream — escala com dimensões REAIS
+      const content = `q\n${imgW} 0 0 ${imgH} 0 0 cm\n/Im${p + 1} Do\nQ\n`;
       offsets[contentObjNum] = currentOffset;
       pushStr(`${contentObjNum} 0 obj\n<< /Length ${content.length} >>\nstream\n${content}endstream\nendobj\n`);
     }
