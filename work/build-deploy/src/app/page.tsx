@@ -4428,7 +4428,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
     setProcessandoLote(false);
 
-    // Contar resultados
+    // ⚠️ Forçar re-render das máquinas para garantir que os thumbnails apareçam
+    // O setMaquinas dentro do loop pode ter sido batched pelo React
+    setMaquinas(prev => prev.map(m => ({ ...m })));
+    console.log('[Lote] Re-render forçado após processamento');
     const fotosProcessadas = fotosLote.filter(f => f.status === 'concluido' || f.status === 'erro');
     const concluidas = fotosProcessadas.filter(f => f.status === 'concluido' && f.resultado?.codigoReconhecido && (f.resultado.entrada !== null || f.resultado.saida !== null)).length;
     const naoEncontradas = fotosProcessadas.filter(f => f.status === 'concluido' && !f.resultado?.codigoReconhecido).length;
@@ -8394,20 +8397,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     <Button
                       data-close-lote-modal="true"
                       onClick={() => {
-                        // Log para debug — verificar se fotoProcessada está no estado
-                        console.log('[CONCLUIR] Estado atual das máquinas:', maquinas.map(m => ({
-                          codigo: m.codigo,
-                          fotoProcessada: m.fotoProcessada ? `${m.fotoProcessada.substring(0, 50)}...` : 'NULL',
-                          novaEntrada: m.novaEntrada,
-                        })));
-                        // Forçar re-render
-                        setMaquinas(prev => {
-                          console.log('[CONCLUIR] prev maquinas:', prev.map(m => ({
-                            codigo: m.codigo,
-                            hasFoto: !!m.fotoProcessada,
-                          })));
-                          return prev.map(m => ({ ...m }));
-                        });
                         setLoteModalOpen(false);
                         setFotosLote([]);
                         setLoteProgresso(0);
