@@ -4081,15 +4081,25 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
     setExtraindoLeitura(true);
     try {
-      // Extrair leitura da foto diretamente via OCR IA Vision (sem validação de etiqueta)
+      // Usar o MESMO endpoint do lote (processar-lote-foto) que tem melhor taxa de acerto
+      // — prompt estruturado (identifica máquina + lê valores) e temperature 0.05
       const token = useAuthStore.getState().token;
-      const res = await fetch('/api/leituras/extrair', {
+      const codigosMaquinas = maquinas.map(m => m.codigo);
+      const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string }> = {};
+      maquinas.forEach(m => {
+        modelosMap[m.codigo] = {
+          nomeEntrada: m.tipo?.nomeEntrada || 'E',
+          nomeSaida: m.tipo?.nomeSaida || 'S',
+        };
+      });
+
+      const res = await fetch('/api/leituras/processar-lote-foto', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
           imagem: fotoCapturada,
-          nomeEntrada: maquinaFoto.tipo?.nomeEntrada || 'E',
-          nomeSaida: maquinaFoto.tipo?.nomeSaida || 'S',
+          codigosMaquinas,
+          modelosMap,
           empresaId: empresa?.id,
         }),
       });
