@@ -6198,7 +6198,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         return null;
       }
 
-        const SCALE = 2;
+        const SCALE = 3;
         const A4_W = 794;
         const padding = 40;
 
@@ -6533,7 +6533,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     try {
       if (!segundaViaDados || segundaViaDados.length === 0) return null;
 
-      const SCALE = 2;
+      const SCALE = 3;
       const A4_W = 794;
       const padding = 40;
 
