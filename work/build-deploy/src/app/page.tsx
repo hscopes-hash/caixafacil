@@ -4350,24 +4350,26 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             );
 
             if (indexMaquina !== -1) {
+              // ⚠️ Criar NOVO objeto da máquina (não mutar o original)
+              // Shallow copy do array + mutação direta não dispara re-render do React
               const novasMaquinas = [...maquinasSnapshot];
+              const maquinaAtualizada = { ...novasMaquinas[indexMaquina] };
               if (data.entrada !== null) {
-                novasMaquinas[indexMaquina].novaEntrada = String(data.entrada);
-                const entradaAtual = novasMaquinas[indexMaquina].entradaAtual || 0;
-                novasMaquinas[indexMaquina].diferencaEntrada = data.entrada - entradaAtual;
+                maquinaAtualizada.novaEntrada = String(data.entrada);
+                const entradaAtual = maquinaAtualizada.entradaAtual || 0;
+                maquinaAtualizada.diferencaEntrada = data.entrada - entradaAtual;
               }
               if (data.saida !== null) {
-                novasMaquinas[indexMaquina].novaSaida = String(data.saida);
-                const saidaAtual = novasMaquinas[indexMaquina].saidaAtual || 0;
-                novasMaquinas[indexMaquina].diferencaSaida = data.saida - saidaAtual;
+                maquinaAtualizada.novaSaida = String(data.saida);
+                const saidaAtual = maquinaAtualizada.saidaAtual || 0;
+                maquinaAtualizada.diferencaSaida = data.saida - saidaAtual;
               }
-              novasMaquinas[indexMaquina].saldoMaquina = calcularValor(
-                novasMaquinas[indexMaquina].moeda,
-                novasMaquinas[indexMaquina].diferencaEntrada - novasMaquinas[indexMaquina].diferencaSaida
+              maquinaAtualizada.saldoMaquina = calcularValor(
+                maquinaAtualizada.moeda,
+                maquinaAtualizada.diferencaEntrada - maquinaAtualizada.diferencaSaida
               );
 
-              // ⚠️ CORREÇÃO: Guardar foto processada (com tarja vermelha) na máquina
-              // Antes estava faltando — causava fotos sem tarja no GCS e no relatório 2a via
+              // ⚠️ Guardar foto processada (com tarja vermelha) na máquina
               try {
                 const nowTs = new Date();
                 const dataStrTarja = `${nowTs.getDate().toString().padStart(2, '0')}/${(nowTs.getMonth() + 1).toString().padStart(2, '0')}/${nowTs.getFullYear().toString().slice(-2)} ${nowTs.getHours().toString().padStart(2, '0')}:${nowTs.getMinutes().toString().padStart(2, '0')}`;
@@ -4379,13 +4381,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   data.saida ?? null,
                   foto.origem || 'LOTE'
                 );
-                novasMaquinas[indexMaquina].fotoProcessada = fotoComTarja;
+                maquinaAtualizada.fotoProcessada = fotoComTarja;
                 console.log(`[Lote] Tarja aplicada à máquina ${data.codigoMaquina}`);
               } catch (err) {
                 console.warn(`[Lote] Falha ao aplicar tarja na máquina ${data.codigoMaquina}:`, err);
-                // Fallback: usar foto original sem tarja (melhor que null)
-                novasMaquinas[indexMaquina].fotoProcessada = foto.imagem;
+                maquinaAtualizada.fotoProcessada = foto.imagem;
               }
+
+              novasMaquinas[indexMaquina] = maquinaAtualizada;
 
               maquinasSnapshot = novasMaquinas;
               setMaquinas(novasMaquinas);
