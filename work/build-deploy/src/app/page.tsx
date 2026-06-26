@@ -8394,6 +8394,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     <Button
                       data-close-lote-modal="true"
                       onClick={() => {
+                        // Forçar re-render das máquinas para atualizar thumbnails
+                        // (setMaquinas durante processarLote pode não ter disparado re-render
+                        //  se o modal estava aberto e React batched as atualizações)
+                        setMaquinas(prev => prev.map(m => ({ ...m })));
                         setLoteModalOpen(false);
                         setFotosLote([]);
                         setLoteProgresso(0);
