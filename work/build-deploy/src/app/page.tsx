@@ -6589,7 +6589,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       await Promise.race([Promise.all(promessas), new Promise<void>(r => setTimeout(r, 10000))]);
 
       const operadores = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => l.usuario.nome));
-      const CARD_HEIGHT = 280;
+      const CARD_HEIGHT = 380;
       const temReceitasExtras = modo2via !== 'COBRANCA' && receitasFinal.length > 0;
       const temDespesasExtras = modo2via !== 'COBRANCA' && despesasFinal.length > 0;
 
@@ -6639,7 +6639,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
         ctx.strokeRect(padding, y, A4_W - padding * 2, CARD_HEIGHT - 20);
         const img = imagensPorMaquinaId.get(id) || (m.codigo ? imagensPorCodigo.get(m.codigo) : undefined);
-        const fotoX = padding + 10, fotoY = y + 10, fotoW = 180, fotoH = 180;
+        const fotoX = padding + 10, fotoY = y + 10, fotoW = 280, fotoH = 280;
         ctx.fillStyle = '#f0f0f0'; ctx.fillRect(fotoX, fotoY, fotoW, fotoH);
         if (img && img.complete && img.naturalWidth > 0) {
           const ar = img.naturalWidth / img.naturalHeight;
@@ -6650,7 +6650,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           ctx.fillStyle = '#999999'; ctx.font = '14px Arial'; ctx.textAlign = 'center';
           ctx.fillText('sem foto', fotoX + fotoW / 2, fotoY + fotoH / 2); ctx.textAlign = 'left';
         }
-        const textX = padding + 210;
+        const textX = padding + 310;
         ctx.fillStyle = '#000000';
         const nomeMaquina = (m.tipo?.descricao || '').toUpperCase();
         const moeda = lws[0].moeda || 'M001';
@@ -6658,14 +6658,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const mult = multMap[moeda] ?? 0.01;
         const moedaStr = `x${mult.toString().replace('.', ',')}`;
         const parteNegrito = `${m.codigo} - ${nomeMaquina} `;
-        ctx.font = FONT_LABEL; ctx.fillText(parteNegrito, textX, y + 40);
+        ctx.font = FONT_LABEL; ctx.fillText(parteNegrito, textX, y + 50);
         const larguraNegrito = ctx.measureText(parteNegrito).width;
-        ctx.font = '20px "Arial", sans-serif'; ctx.fillText(moedaStr, textX + larguraNegrito, y + 40);
+        ctx.font = '20px "Arial", sans-serif'; ctx.fillText(moedaStr, textX + larguraNegrito, y + 50);
         ctx.font = FONT_VALUE;
-        ctx.fillText(`${lws[0].entradaNova || 0} - ${lws[0].entradaAnterior || 0} = ${(lws[0].entradaNova || 0) - (lws[0].entradaAnterior || 0)}`, textX, y + 80);
-        ctx.fillText(`${lws[0].saidaNova || 0} - ${lws[0].saidaAnterior || 0} = ${(lws[0].saidaNova || 0) - (lws[0].saidaAnterior || 0)}`, textX, y + 115);
+        ctx.fillText(`${lws[0].entradaNova || 0} - ${lws[0].entradaAnterior || 0} = ${(lws[0].entradaNova || 0) - (lws[0].entradaAnterior || 0)}`, textX, y + 90);
+        ctx.fillText(`${lws[0].saidaNova || 0} - ${lws[0].saidaAnterior || 0} = ${(lws[0].saidaNova || 0) - (lws[0].saidaAnterior || 0)}`, textX, y + 125);
         ctx.font = FONT_LABEL; ctx.fillStyle = '#000000';
-        ctx.fillText(`Saldo: ${formatNumber(lws[0].saldo)}`, textX, y + 155);
+        ctx.fillText(`Saldo: ${formatNumber(lws[0].saldo)}`, textX, y + 165);
         y += CARD_HEIGHT + 20;
       }
 
