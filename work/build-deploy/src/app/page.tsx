@@ -4228,18 +4228,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     // usuário clica em APLICAR VALORES, capturando foto original sem tarja.
     novasMaquinas[index].fotoProcessada = fotoComTarjaRef.current || fotoCapturada || null;
     setMaquinas([...novasMaquinas]);
-
-    // ⚠️ Marcar máquina como processada no estado separado (Set de IDs).
-    // Garante ícone verde confiável, independente do array `maquinas`.
-    // Adiciona AMBOS id e codigo para máxima robustez.
-    const maquinaIdIndividual = novasMaquinas[index].id;
-    const maquinaCodigoIndividual = novasMaquinas[index].codigo;
-    setMaquinasProcessadasIds(prev => {
-      const novoSet = new Set(prev);
-      novoSet.add(maquinaIdIndividual);
-      novoSet.add(maquinaCodigoIndividual);
-      return novoSet;
-    });
+    // Fluxo individual não usa o Set separado — o thumbnail da fotoProcessada
+    // já é o indicador visual (mostra a miniatura no lugar do ícone).
+    // O Set maquinasProcessadasIds é usado apenas pelo fluxo de LOTE.
     
     toast.success('Valores aplicados com sucesso!');
     
@@ -7469,18 +7460,41 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       >
                         <RotateCcw className="w-4 h-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={`relative h-9 w-9 rounded-md ${(maquina.fotoProcessada || maquinasProcessadasIds.has(maquina.id) || maquinasProcessadasIds.has(maquina.codigo)) ? '!text-green-500 hover:!text-green-600 hover:bg-green-500/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
-                        onClick={() => abrirModalFoto(maquina)}
-                        title={(maquina.fotoProcessada || maquinasProcessadasIds.has(maquina.id) || maquinasProcessadasIds.has(maquina.codigo)) ? 'Máquina processada' : 'Tirar foto'}
-                      >
-                        <Camera className="w-5 h-5" />
-                        {(maquina.fotoProcessada || maquinasProcessadasIds.has(maquina.id) || maquinasProcessadasIds.has(maquina.codigo)) && (
-                          <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-card" aria-hidden="true" />
-                        )}
-                      </Button>
+                      {/* ============================================
+                          FLUXO INDIVIDUAL (clique no ícone):
+                          - Mostra thumbnail da foto processada no lugar do ícone
+                          - Comportamento que já funcionava corretamente
+
+                          FLUXO LOTE (LANÇAMENTO DE LOTE):
+                          - Não tem fotoProcessada (bug de batching do React)
+                          - Usa Set separado maquinasProcessadasIds para deixar
+                            o ícone verde (sem thumbnail, sem badge)
+                          ============================================ */}
+                      {maquina.fotoProcessada ? (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 overflow-hidden rounded-md p-0 hover:opacity-80"
+                          onClick={() => abrirModalFoto(maquina)}
+                          title="Foto processada — clique para ver"
+                        >
+                          <img
+                            src={maquina.fotoProcessada}
+                            alt="Foto com tarja"
+                            className="w-full h-full object-cover"
+                          />
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={`h-9 w-9 rounded-md ${(maquinasProcessadasIds.has(maquina.id) || maquinasProcessadasIds.has(maquina.codigo)) ? 'text-green-500 hover:text-green-600 hover:bg-green-500/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+                          onClick={() => abrirModalFoto(maquina)}
+                          title={(maquinasProcessadasIds.has(maquina.id) || maquinasProcessadasIds.has(maquina.codigo)) ? 'Máquina processada no lote' : 'Tirar foto'}
+                        >
+                          <Camera className="w-5 h-5" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                   {/* Cabeçalho das colunas */}
