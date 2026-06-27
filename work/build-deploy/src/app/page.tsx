@@ -14746,16 +14746,18 @@ export default function App() {
                   <div className="px-4 pb-2">
                     <div className="flex items-center gap-3">
                       <img src="/logo-caixafacil-icon.svg" alt="CaixaFácil" className="w-10 h-10 rounded-lg" />
-                      <div>
-                        <p className="font-medium text-foreground text-sm">{empresa?.nome}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-foreground text-sm truncate">{empresa?.nome}</p>
                         <p className="text-xs text-muted-foreground">Plano: {{BASICO:'Básico',PROFISSIONAL:'Profissional',PREMIUM:'Premium',ENTERPRISE:'Enterprise'}[empresa?.plano || ''] || empresa?.plano || '-'}</p>
                       </div>
+                      <span className="text-[10px] text-muted-foreground/60 select-none shrink-0" title={VERSION_WITH_DATE}>{VERSION_DISPLAY}</span>
                     </div>
                   </div>
                 </div>
               </SheetContent>
             </Sheet>
             <span className="font-extrabold text-lg tracking-tight select-none" style={{ lineHeight: '1.1' }}><span className="text-gray-400">Caixa</span><span className="text-amber-400">Fácil</span></span>
+            <span className="text-[10px] text-muted-foreground/60 select-none" title={VERSION_WITH_DATE}>{VERSION_DISPLAY}</span>
           </div>
           <div className="flex items-center gap-1">
             <button
