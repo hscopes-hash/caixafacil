@@ -4433,10 +4433,20 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
     setProcessandoLote(false);
 
-    // ⚠️ Forçar re-render das máquinas para garantir que os thumbnails apareçam
-    // O setMaquinas dentro do loop pode ter sido batched pelo React
-    setMaquinas(prev => prev.map(m => ({ ...m })));
-    console.log('[Lote] Re-render forçado após processamento');
+    // ⚠️ Aplicar fotoProcessada do snapshot para o estado React
+    // Durante o loop, setMaquinas(novasMaquinas) pode ter sido batchado pelo React
+    // e o estado 'prev' pode não ter fotoProcessada.
+    // Solução: usar maquinasSnapshot (que tem as fotos) e fazer setMaquinas final.
+    setMaquinas(prev => {
+      return prev.map(m => {
+        const snapMaquina = maquinasSnapshot.find(s => s.id === m.id);
+        if (snapMaquina && snapMaquina.fotoProcessada) {
+          return { ...m, fotoProcessada: snapMaquina.fotoProcessada };
+        }
+        return { ...m };
+      });
+    });
+    console.log('[Lote] Re-render final com fotoProcessada do snapshot');
     const fotosProcessadas = fotosLote.filter(f => f.status === 'concluido' || f.status === 'erro');
     const concluidas = fotosProcessadas.filter(f => f.status === 'concluido' && f.resultado?.codigoReconhecido && (f.resultado.entrada !== null || f.resultado.saida !== null)).length;
     const naoEncontradas = fotosProcessadas.filter(f => f.status === 'concluido' && !f.resultado?.codigoReconhecido).length;
