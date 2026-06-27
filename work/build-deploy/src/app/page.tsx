@@ -4395,6 +4395,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
               maquinasSnapshot = novasMaquinas;
               setMaquinas(novasMaquinas);
+              console.log(`[Lote] setMaquinas chamado para ${data.codigoMaquina}. fotoProcessada: ${maquinaAtualizada.fotoProcessada ? 'SIM (' + maquinaAtualizada.fotoProcessada.length + ' chars)' : 'NÃO'}`);
 
               setMaquinasComFotoAplicada(prev => new Map(prev).set(maquinasSnapshot[indexMaquina].id, ''));
             }
@@ -8400,8 +8401,19 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     <Button
                       data-close-lote-modal="true"
                       onClick={() => {
-                        // Forçar re-render criando novos objetos
-                        setMaquinas(prev => prev.map(m => ({ ...m })));
+                        // Log: verificar estado ANTES do re-render
+                        console.log('[CONCLUIR] maquinas antes re-render:', maquinas.map(m => ({
+                          codigo: m.codigo,
+                          hasFoto: !!m.fotoProcessada,
+                          fotoLen: m.fotoProcessada?.length || 0,
+                        })));
+                        setMaquinas(prev => {
+                          console.log('[CONCLUIR] prev (estado real):', prev.map(m => ({
+                            codigo: m.codigo,
+                            hasFoto: !!m.fotoProcessada,
+                          })));
+                          return prev.map(m => ({ ...m }));
+                        });
                         setLoteModalOpen(false);
                         setFotosLote([]);
                         setLoteProgresso(0);
