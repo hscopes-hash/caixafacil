@@ -1,7 +1,7 @@
 // Sistema de Gestão de Máquinas - v2.3.0.7
 'use client';
 
-import { useState, useEffect, useRef, useCallback, startTransition } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, startTransition } from 'react';
 import { useSwipeNavigation } from '@/hooks/use-swipe-navigation';
 import { useKioskMode } from '@/hooks/use-kiosk-mode';
 import { useTheme } from 'next-themes';
@@ -2842,17 +2842,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   // ⚠️ Estado SEPARADO para rastrear máquinas processadas no lote.
   // Independente do array `maquinas` — evita problemas de batching do React.
   // Usado APENAS no fluxo LOTE (o fluxo individual usa fotoProcessada direto).
-  // Usa Record (objeto) em vez de Set para facilitar debug e garantir
-  // referência nova a cada update (força re-render).
-  // ⚠️ Estratégia anti-batching: guarda os dados em useRef (valor sempre
-  // atualizado, mesmo se React batchear) + um counter useState para forçar
-  // re-render. Esse padrão é à prova de qualquer otimização do React.
+  // ⚠️ Estratégia anti-batching robusta:
+  // - useRef guarda os dados (sempre atualizado, não é batcheado)
+  // - tick (counter) força re-render
+  // - useMemo cria NOVO snapshot imutável a cada tick (referência nova)
+  //   isso garante que o render veja o Map atualizado
   const maquinasProcessadasRef = useRef<Record<string, boolean>>({});
   const [maquinasProcessadasTick, setMaquinasProcessadasTick] = useState(0);
   // Helper: marca máquina como processada (id + codigo) e força re-render
+  // ⚠️ Cria NOVO objeto (spread) para garantir referência nova
   const marcarMaquinaProcessada = useCallback((id: string, codigo: string) => {
-    maquinasProcessadasRef.current[id] = true;
-    maquinasProcessadasRef.current[codigo] = true;
+    maquinasProcessadasRef.current = { ...maquinasProcessadasRef.current, [id]: true, [codigo]: true };
     setMaquinasProcessadasTick(t => t + 1);
   }, []);
   // Helper: limpa todas as marcações
@@ -2865,8 +2865,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     maquinasProcessadasRef.current = { ...novoMap };
     setMaquinasProcessadasTick(t => t + 1);
   }, []);
-  // Snapshot imutável do Map para usar no render (é recalculado a cada tick)
-  const maquinasProcessadasMap = maquinasProcessadasRef.current;
+  // Snapshot imutável do Map — criado NOVO a cada tick (referência diferente)
+  // Isto garante que o render veja o Map atualizado
+  const maquinasProcessadasMap = useMemo(() => {
+    return { ...maquinasProcessadasRef.current };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maquinasProcessadasTick]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [extratoVisivel, setExtratoVisivel] = useState(false);
