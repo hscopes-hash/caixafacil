@@ -3553,9 +3553,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const data = await res.json();
 
       // Tentar restaurar dados do localStorage
+      // ⚠️ TEMPORARIAMENTE DESATIVADO para debug do problema do thumbnail do lote
       const modo = modoForcado || modoOperacao;
       let savedData: any = null;
-      if (!skipRestore) {
+      if (false && !skipRestore) {  // <-- 'false &&' desativa temporariamente
         try {
           const raw = localStorage.getItem(`cf-digitacao-${modo}-${clienteId}`);
           if (raw) savedData = JSON.parse(raw);
