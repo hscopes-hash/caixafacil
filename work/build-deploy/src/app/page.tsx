@@ -3553,10 +3553,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const data = await res.json();
 
       // Tentar restaurar dados do localStorage
-      // ⚠️ TEMPORARIAMENTE DESATIVADO para debug do problema do thumbnail do lote
       const modo = modoForcado || modoOperacao;
       let savedData: any = null;
-      if (false && !skipRestore) {  // <-- 'false &&' desativa temporariamente
+      if (!skipRestore) {
         try {
           const raw = localStorage.getItem(`cf-digitacao-${modo}-${clienteId}`);
           if (raw) savedData = JSON.parse(raw);
@@ -5825,10 +5824,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   }, [clienteSelecionado]);
 
   // Auto-salvar no localStorage a cada mudança de estado (so se ha dados)
-  // ⚠️ TEMPORARIAMENTE DESATIVADO para debug do problema do thumbnail do lote
   useEffect(() => {
     if (clienteSelecionado && !saving && !resumoModalOpen) {
-      // salvarDigitacaoLS(); // <-- DESATIVADO
+      salvarDigitacaoLS();
     }
   }, [maquinas, receitasItens, despesasItens, recebido, formaPagamento, valorPago, clienteSelecionado, saving, resumoModalOpen, salvarDigitacaoLS]);
 
@@ -7412,18 +7410,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       <Button
                         variant="ghost"
                         size="icon"
-                        className={`h-9 w-9 overflow-hidden rounded-md ${maquina.fotoProcessada ? 'p-0 hover:opacity-80' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+                        className={`h-9 w-9 rounded-md ${maquina.fotoProcessada ? 'text-green-500 hover:text-green-600 hover:bg-green-500/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
                         onClick={() => abrirModalFoto(maquina)}
                       >
-                        {maquina.fotoProcessada ? (
-                          <img
-                            src={maquina.fotoProcessada}
-                            alt="Foto com tarja"
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <Camera className="w-5 h-5" />
-                        )}
+                        <Camera className="w-5 h-5" />
                       </Button>
                     </div>
                   </div>
