@@ -4387,9 +4387,23 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 // Garantir que é uma NOVA string (forçar mudança de referência)
                 maquinaAtualizada.fotoProcessada = fotoComTarja + '';
                 console.log(`[Lote] Tarja aplicada à máquina ${data.codigoMaquina}, foto: ${maquinaAtualizada.fotoProcessada?.length || 0} chars`);
+
+                // ⚠️ Atualizar fotoProcessada DIRETAMENTE no estado React (update funcional)
+                // Não depender de maquinasSnapshot ou setMaquinas(novasMaquinas) que pode ser batched
+                setMaquinas(prev => prev.map(m =>
+                  m.id === maquinaAtualizada.id
+                    ? { ...m, fotoProcessada: maquinaAtualizada.fotoProcessada }
+                    : m
+                ));
               } catch (err) {
                 console.warn(`[Lote] Falha ao aplicar tarja na máquina ${data.codigoMaquina}:`, err);
                 maquinaAtualizada.fotoProcessada = foto.imagem + '';
+                // Atualizar estado mesmo no fallback
+                setMaquinas(prev => prev.map(m =>
+                  m.id === maquinaAtualizada.id
+                    ? { ...m, fotoProcessada: maquinaAtualizada.fotoProcessada }
+                    : m
+                ));
               }
 
               novasMaquinas[indexMaquina] = maquinaAtualizada;
@@ -8413,19 +8427,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     <Button
                       data-close-lote-modal="true"
                       onClick={() => {
-                        // Log: verificar estado ANTES do re-render
-                        console.log('[CONCLUIR] maquinas antes re-render:', maquinas.map(m => ({
-                          codigo: m.codigo,
-                          hasFoto: !!m.fotoProcessada,
-                          fotoLen: m.fotoProcessada?.length || 0,
-                        })));
-                        setMaquinas(prev => {
-                          console.log('[CONCLUIR] prev (estado real):', prev.map(m => ({
-                            codigo: m.codigo,
-                            hasFoto: !!m.fotoProcessada,
-                          })));
-                          return prev.map(m => ({ ...m }));
-                        });
                         setLoteModalOpen(false);
                         setFotosLote([]);
                         setLoteProgresso(0);
