@@ -4398,9 +4398,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               // ⚠️ Mesmo padrão do fluxo individual (aplicarLeituraExtraida):
               // setMaquinas com NOVO array spread — força re-render
               setMaquinas([...novasMaquinas]);
-              console.log(`[Lote] setMaquinas([...novasMaquinas]) para ${data.codigoMaquina}. fotoProcessada: ${maquinaAtualizada.fotoProcessada ? 'SIM' : 'NÃO'}`);
-
-              setMaquinasComFotoAplicada(prev => new Map(prev).set(maquinasSnapshot[indexMaquina].id, ''));
+              console.log(`[Lote] setMaquinas([...novasMaquinas]) para ${data.codigoMaquina}. fotoProcessada: ${maquinaAtualizada.fotoProcessada ? 'SIM (' + maquinaAtualizada.fotoProcessada.length + ' chars)' : 'NÃO'}`);
             }
           }
         } else {
