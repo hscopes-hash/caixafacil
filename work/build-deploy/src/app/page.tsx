@@ -2839,6 +2839,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
   const [maquinas, setMaquinas] = useState<MaquinaLeitura[]>([]);
   const [maquinasAlteradas, setMaquinasAlteradas] = useState<Map<string, MaquinaLeitura>>(new Map());
+  // ⚠️ Estado SEPARADO para rastrear máquinas processadas no lote.
+  // Independente do array `maquinas` — evita problemas de batching do React
+  // e garante re-render confiável quando uma foto é processada.
+  // Usado APENAS para mudar a cor do ícone da câmera para verde.
+  const [maquinasProcessadasIds, setMaquinasProcessadasIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [extratoVisivel, setExtratoVisivel] = useState(false);
@@ -3591,6 +3596,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       setMaquinas(maquinasComLeitura);
 
+      // ⚠️ Sincronizar Set de máquinas processadas com estado restaurado.
+      // Se uma máquina tem fotoProcessada no localStorage, marcamos seu ID como
+      // processado para o ícone continuar verde após reload da página.
+      const idsRestaurados = new Set<string>();
+      maquinasComLeitura.forEach(m => {
+        if (m.fotoProcessada) idsRestaurados.add(m.id);
+      });
+      setMaquinasProcessadasIds(idsRestaurados);
+
       // Restaurar outros campos salvos
       if (savedData) {
         if (savedData.receitasItens) setReceitasItens(savedData.receitasItens);
@@ -4211,6 +4225,18 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     // usuário clica em APLICAR VALORES, capturando foto original sem tarja.
     novasMaquinas[index].fotoProcessada = fotoComTarjaRef.current || fotoCapturada || null;
     setMaquinas([...novasMaquinas]);
+
+    // ⚠️ Marcar máquina como processada no estado separado (Set de IDs).
+    // Garante ícone verde confiável, independente do array `maquinas`.
+    const maquinaIdIndividual = novasMaquinas[index].id;
+    if (maquinaIdIndividual) {
+      setMaquinasProcessadasIds(prev => {
+        if (prev.has(maquinaIdIndividual)) return prev;
+        const novoSet = new Set(prev);
+        novoSet.add(maquinaIdIndividual);
+        return novoSet;
+      });
+    }
     
     toast.success('Valores aplicados com sucesso!');
     
@@ -4398,6 +4424,21 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               // setMaquinas com NOVO array spread — força re-render
               setMaquinas([...novasMaquinas]);
               console.log(`[Lote] setMaquinas([...novasMaquinas]) para ${data.codigoMaquina}. fotoProcessada: ${maquinaAtualizada.fotoProcessada ? 'SIM (' + maquinaAtualizada.fotoProcessada.length + ' chars)' : 'NÃO'}`);
+
+              // ⚠️ ATUALIZAR estado separado de máquinas processadas (Set de IDs).
+              // Isto é INDEPENDENTE do array `maquinas` — garante que o ícone
+              // da câmera fique verde mesmo se houver problemas de batching do
+              // React com o fotoProcessada (string base64 longa).
+              // Usa função updater para garantir que estamos trabalhando com o
+              // estado mais recente (não um snapshot stale do closure).
+              const maquinaIdProcessada = maquinaAtualizada.id;
+              setMaquinasProcessadasIds(prev => {
+                if (prev.has(maquinaIdProcessada)) return prev; // já está, não muda
+                const novoSet = new Set(prev);
+                novoSet.add(maquinaIdProcessada);
+                return novoSet;
+              });
+              console.log(`[Lote] ID ${maquinaIdProcessada} adicionado a maquinasProcessadasIds`);
             }
           }
         } else {
@@ -5785,6 +5826,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       let restaurou = false;
       // Restaurar maquinas — mesclar com dados atuais
       if (dados.maquinas && Array.isArray(dados.maquinas)) {
+        // ⚠️ Antes de mesclar, coletar IDs de máquinas que têm fotoProcessada
+        // para atualizar o Set de máquinas processadas (ícone verde)
+        const idsComFoto = new Set<string>();
+        dados.maquinas.forEach((sv: any) => {
+          if (sv.id && sv.fotoProcessada) idsComFoto.add(sv.id);
+        });
         setMaquinas(prev => prev.map(m => {
           const s = dados.maquinas.find((sv: any) => sv.id === m.id);
           if (!s) return m;
@@ -5799,6 +5846,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             fotoProcessada: s.fotoProcessada || null,
           };
         }));
+        // Mesclar IDs restaurados com os já existentes no Set
+        setMaquinasProcessadasIds(prev => {
+          const novoSet = new Set(prev);
+          idsComFoto.forEach(id => novoSet.add(id));
+          return novoSet;
+        });
       }
       if (dados.receitasItens) { setReceitasItens(dados.receitasItens); restaurou = true; }
       if (dados.despesasItens) { setDespesasItens(dados.despesasItens); restaurou = true; }
@@ -5850,6 +5903,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     restoreDoneRef.current = '';
     // Limpar estado local antes do reload
     setMaquinas(prev => prev.map(m => ({ ...m, novaEntrada: '', novaSaida: '', diferencaEntrada: 0, diferencaSaida: 0, saldoMaquina: 0, fotoProcessada: null })));
+    // Limpar Set de máquinas processadas (ícones voltam a ficar cinza)
+    setMaquinasProcessadasIds(new Set());
     setExtratoVisivel(false);
     setRecebido('');
     setFormaPagamento(null);
@@ -7410,7 +7465,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       <Button
                         variant="ghost"
                         size="icon"
-                        className={`h-9 w-9 rounded-md ${maquina.fotoProcessada ? 'text-green-500 hover:text-green-600 hover:bg-green-500/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+                        className={`h-9 w-9 rounded-md ${(maquina.fotoProcessada || maquinasProcessadasIds.has(maquina.id)) ? 'text-green-500 hover:text-green-600 hover:bg-green-500/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
                         onClick={() => abrirModalFoto(maquina)}
                       >
                         <Camera className="w-5 h-5" />
