@@ -2840,10 +2840,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [maquinas, setMaquinas] = useState<MaquinaLeitura[]>([]);
   const [maquinasAlteradas, setMaquinasAlteradas] = useState<Map<string, MaquinaLeitura>>(new Map());
   // ⚠️ Estado SEPARADO para rastrear máquinas processadas no lote.
-  // Independente do array `maquinas` — evita problemas de batching do React
-  // e garante re-render confiável quando uma foto é processada.
-  // Usado APENAS para mudar a cor do ícone da câmera para verde.
-  const [maquinasProcessadasIds, setMaquinasProcessadasIds] = useState<Set<string>>(new Set());
+  // Independente do array `maquinas` — evita problemas de batching do React.
+  // Usado APENAS no fluxo LOTE (o fluxo individual usa fotoProcessada direto).
+  // Usa Record (objeto) em vez de Set para facilitar debug e garantir
+  // referência nova a cada update (força re-render).
+  const [maquinasProcessadasMap, setMaquinasProcessadasMap] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [extratoVisivel, setExtratoVisivel] = useState(false);
@@ -3596,17 +3597,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       setMaquinas(maquinasComLeitura);
 
-      // ⚠️ Sincronizar Set de máquinas processadas com estado restaurado.
+      // ⚠️ Sincronizar Map de máquinas processadas com estado restaurado.
       // Se uma máquina tem fotoProcessada no localStorage, marcamos seu ID E codigo
       // como processado para o ícone continuar verde após reload da página.
-      const idsRestaurados = new Set<string>();
+      const idsRestaurados: Record<string, boolean> = {};
       maquinasComLeitura.forEach(m => {
         if (m.fotoProcessada) {
-          idsRestaurados.add(m.id);
-          idsRestaurados.add(m.codigo);
+          idsRestaurados[m.id] = true;
+          idsRestaurados[m.codigo] = true;
         }
       });
-      setMaquinasProcessadasIds(idsRestaurados);
+      setMaquinasProcessadasMap(idsRestaurados);
 
       // Restaurar outros campos salvos
       if (savedData) {
@@ -4419,23 +4420,25 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               setMaquinas([...novasMaquinas]);
               console.log(`[Lote] setMaquinas([...novasMaquinas]) para ${data.codigoMaquina}. fotoProcessada: ${maquinaAtualizada.fotoProcessada ? 'SIM (' + maquinaAtualizada.fotoProcessada.length + ' chars)' : 'NÃO'}`);
 
-              // ⚠️ ATUALIZAR estado separado de máquinas processadas (Set de IDs).
+              // ⚠️ ATUALIZAR estado separado de máquinas processadas (Map de IDs).
               // Isto é INDEPENDENTE do array `maquinas` — garante que o ícone
               // da câmera fique verde mesmo se houver problemas de batching do
               // React com o fotoProcessada (string base64 longa).
               // Usa função updater para garantir que estamos trabalhando com o
               // estado mais recente (não um snapshot stale do closure).
               // Adiciona AMBOS id e codigo para máxima robustez.
+              // Usa Record (objeto) em vez de Set — cria NOVO objeto a cada
+              // update, forçando re-render do React.
               const maquinaIdProcessada = maquinaAtualizada.id;
               const maquinaCodigoProcessado = maquinaAtualizada.codigo;
-              setMaquinasProcessadasIds(prev => {
-                const novoSet = new Set(prev);
-                novoSet.add(maquinaIdProcessada);
-                novoSet.add(maquinaCodigoProcessado);
-                console.log(`[Lote] Set agora tem ${novoSet.size} itens. Adicionados: id=${maquinaIdProcessada}, codigo=${maquinaCodigoProcessado}`);
-                return novoSet;
+              setMaquinasProcessadasMap(prev => {
+                const novoMap = { ...prev };
+                novoMap[maquinaIdProcessada] = true;
+                novoMap[maquinaCodigoProcessado] = true;
+                console.log(`[Lote] Map agora tem ${Object.keys(novoMap).length} chaves. Adicionados: id=${maquinaIdProcessada}, codigo=${maquinaCodigoProcessado}`);
+                return novoMap;
               });
-              console.log(`[Lote] ID ${maquinaIdProcessada} e codigo ${maquinaCodigoProcessado} adicionados a maquinasProcessadasIds`);
+              console.log(`[Lote] ID ${maquinaIdProcessada} e codigo ${maquinaCodigoProcessado} adicionados a maquinasProcessadasMap`);
             }
           }
         } else {
@@ -5824,11 +5827,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       // Restaurar maquinas — mesclar com dados atuais
       if (dados.maquinas && Array.isArray(dados.maquinas)) {
         // ⚠️ Antes de mesclar, coletar IDs E codigos de máquinas que têm fotoProcessada
-        // para atualizar o Set de máquinas processadas (ícone verde + badge)
-        const idsComFoto = new Set<string>();
+        // para atualizar o Map de máquinas processadas (ícone verde)
+        const idsComFoto: Record<string, boolean> = {};
         dados.maquinas.forEach((sv: any) => {
-          if (sv.id && sv.fotoProcessada) idsComFoto.add(sv.id);
-          if (sv.codigo && sv.fotoProcessada) idsComFoto.add(sv.codigo);
+          if (sv.id && sv.fotoProcessada) idsComFoto[sv.id] = true;
+          if (sv.codigo && sv.fotoProcessada) idsComFoto[sv.codigo] = true;
         });
         setMaquinas(prev => prev.map(m => {
           const s = dados.maquinas.find((sv: any) => sv.id === m.id);
@@ -5844,11 +5847,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             fotoProcessada: s.fotoProcessada || null,
           };
         }));
-        // Mesclar IDs restaurados com os já existentes no Set
-        setMaquinasProcessadasIds(prev => {
-          const novoSet = new Set(prev);
-          idsComFoto.forEach(id => novoSet.add(id));
-          return novoSet;
+        // Mesclar IDs restaurados com os já existentes no Map
+        setMaquinasProcessadasMap(prev => {
+          const novoMap = { ...prev };
+          Object.keys(idsComFoto).forEach(id => { novoMap[id] = true; });
+          return novoMap;
         });
       }
       if (dados.receitasItens) { setReceitasItens(dados.receitasItens); restaurou = true; }
@@ -5901,8 +5904,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     restoreDoneRef.current = '';
     // Limpar estado local antes do reload
     setMaquinas(prev => prev.map(m => ({ ...m, novaEntrada: '', novaSaida: '', diferencaEntrada: 0, diferencaSaida: 0, saldoMaquina: 0, fotoProcessada: null })));
-    // Limpar Set de máquinas processadas (ícones voltam a ficar cinza)
-    setMaquinasProcessadasIds(new Set());
+    // Limpar Map de máquinas processadas (ícones voltam a ficar cinza)
+    setMaquinasProcessadasMap({});
     setExtratoVisivel(false);
     setRecebido('');
     setFormaPagamento(null);
@@ -7467,7 +7470,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
                           FLUXO LOTE (LANÇAMENTO DE LOTE):
                           - Não tem fotoProcessada (bug de batching do React)
-                          - Usa Set separado maquinasProcessadasIds para deixar
+                          - Usa Map separado maquinasProcessadasMap para deixar
                             o ícone verde (sem thumbnail, sem badge)
                           ============================================ */}
                       {maquina.fotoProcessada ? (
@@ -7488,9 +7491,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         <Button
                           variant="ghost"
                           size="icon"
-                          className={`h-9 w-9 rounded-md ${(maquinasProcessadasIds.has(maquina.id) || maquinasProcessadasIds.has(maquina.codigo)) ? 'text-green-500 hover:text-green-600 hover:bg-green-500/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+                          className={`h-9 w-9 rounded-md ${(maquinasProcessadasMap[maquina.id] || maquinasProcessadasMap[maquina.codigo]) ? 'text-green-500 hover:text-green-600 hover:bg-green-500/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
                           onClick={() => abrirModalFoto(maquina)}
-                          title={(maquinasProcessadasIds.has(maquina.id) || maquinasProcessadasIds.has(maquina.codigo)) ? 'Máquina processada no lote' : 'Tirar foto'}
+                          title={(maquinasProcessadasMap[maquina.id] || maquinasProcessadasMap[maquina.codigo]) ? 'Máquina processada no lote' : 'Tirar foto'}
                         >
                           <Camera className="w-5 h-5" />
                         </Button>
@@ -8483,6 +8486,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     <Button
                       data-close-lote-modal="true"
                       onClick={() => {
+                        console.log('[Lote CONCLUIR] Estado atual maquinasProcessadasMap:', maquinasProcessadasMap);
+                        console.log('[Lote CONCLUIR] Quantidade de chaves:', Object.keys(maquinasProcessadasMap).length);
+                        // Forçar re-render garantindo nova referência do Map
+                        setMaquinasProcessadasMap(prev => ({ ...prev }));
                         setLoteModalOpen(false);
                         setFotosLote([]);
                         setLoteProgresso(0);
