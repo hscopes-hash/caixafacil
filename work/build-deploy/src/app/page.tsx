@@ -4387,30 +4387,18 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 // Garantir que é uma NOVA string (forçar mudança de referência)
                 maquinaAtualizada.fotoProcessada = fotoComTarja + '';
                 console.log(`[Lote] Tarja aplicada à máquina ${data.codigoMaquina}, foto: ${maquinaAtualizada.fotoProcessada?.length || 0} chars`);
-
-                // ⚠️ Atualizar fotoProcessada DIRETAMENTE no estado React (update funcional)
-                // Não depender de maquinasSnapshot ou setMaquinas(novasMaquinas) que pode ser batched
-                setMaquinas(prev => prev.map(m =>
-                  m.id === maquinaAtualizada.id
-                    ? { ...m, fotoProcessada: maquinaAtualizada.fotoProcessada }
-                    : m
-                ));
               } catch (err) {
                 console.warn(`[Lote] Falha ao aplicar tarja na máquina ${data.codigoMaquina}:`, err);
                 maquinaAtualizada.fotoProcessada = foto.imagem + '';
-                // Atualizar estado mesmo no fallback
-                setMaquinas(prev => prev.map(m =>
-                  m.id === maquinaAtualizada.id
-                    ? { ...m, fotoProcessada: maquinaAtualizada.fotoProcessada }
-                    : m
-                ));
               }
 
               novasMaquinas[indexMaquina] = maquinaAtualizada;
-
               maquinasSnapshot = novasMaquinas;
-              setMaquinas(novasMaquinas);
-              console.log(`[Lote] setMaquinas chamado para ${data.codigoMaquina}. fotoProcessada: ${maquinaAtualizada.fotoProcessada ? 'SIM (' + maquinaAtualizada.fotoProcessada.length + ' chars)' : 'NÃO'}`);
+
+              // ⚠️ Mesmo padrão do fluxo individual (aplicarLeituraExtraida):
+              // setMaquinas com NOVO array spread — força re-render
+              setMaquinas([...novasMaquinas]);
+              console.log(`[Lote] setMaquinas([...novasMaquinas]) para ${data.codigoMaquina}. fotoProcessada: ${maquinaAtualizada.fotoProcessada ? 'SIM' : 'NÃO'}`);
 
               setMaquinasComFotoAplicada(prev => new Map(prev).set(maquinasSnapshot[indexMaquina].id, ''));
             }
