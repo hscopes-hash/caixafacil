@@ -5814,9 +5814,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   }, [clienteSelecionado]);
 
   // Auto-salvar no localStorage a cada mudança de estado (so se ha dados)
+  // ⚠️ TEMPORARIAMENTE DESATIVADO para debug do problema do thumbnail do lote
   useEffect(() => {
     if (clienteSelecionado && !saving && !resumoModalOpen) {
-      salvarDigitacaoLS();
+      // salvarDigitacaoLS(); // <-- DESATIVADO
     }
   }, [maquinas, receitasItens, despesasItens, recebido, formaPagamento, valorPago, clienteSelecionado, saving, resumoModalOpen, salvarDigitacaoLS]);
 
