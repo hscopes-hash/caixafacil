@@ -2844,7 +2844,29 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   // Usado APENAS no fluxo LOTE (o fluxo individual usa fotoProcessada direto).
   // Usa Record (objeto) em vez de Set para facilitar debug e garantir
   // referência nova a cada update (força re-render).
-  const [maquinasProcessadasMap, setMaquinasProcessadasMap] = useState<Record<string, boolean>>({});
+  // ⚠️ Estratégia anti-batching: guarda os dados em useRef (valor sempre
+  // atualizado, mesmo se React batchear) + um counter useState para forçar
+  // re-render. Esse padrão é à prova de qualquer otimização do React.
+  const maquinasProcessadasRef = useRef<Record<string, boolean>>({});
+  const [maquinasProcessadasTick, setMaquinasProcessadasTick] = useState(0);
+  // Helper: marca máquina como processada (id + codigo) e força re-render
+  const marcarMaquinaProcessada = useCallback((id: string, codigo: string) => {
+    maquinasProcessadasRef.current[id] = true;
+    maquinasProcessadasRef.current[codigo] = true;
+    setMaquinasProcessadasTick(t => t + 1);
+  }, []);
+  // Helper: limpa todas as marcações
+  const limparMaquinasProcessadas = useCallback(() => {
+    maquinasProcessadasRef.current = {};
+    setMaquinasProcessadasTick(t => t + 1);
+  }, []);
+  // Helper: define marcações a partir de objeto (sobrescreve)
+  const setMaquinasProcessadas = useCallback((novoMap: Record<string, boolean>) => {
+    maquinasProcessadasRef.current = { ...novoMap };
+    setMaquinasProcessadasTick(t => t + 1);
+  }, []);
+  // Snapshot imutável do Map para usar no render (é recalculado a cada tick)
+  const maquinasProcessadasMap = maquinasProcessadasRef.current;
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [extratoVisivel, setExtratoVisivel] = useState(false);
@@ -3607,7 +3629,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           idsRestaurados[m.codigo] = true;
         }
       });
-      setMaquinasProcessadasMap(idsRestaurados);
+      setMaquinasProcessadas(idsRestaurados);
 
       // Restaurar outros campos salvos
       if (savedData) {
@@ -4420,25 +4442,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               setMaquinas([...novasMaquinas]);
               console.log(`[Lote] setMaquinas([...novasMaquinas]) para ${data.codigoMaquina}. fotoProcessada: ${maquinaAtualizada.fotoProcessada ? 'SIM (' + maquinaAtualizada.fotoProcessada.length + ' chars)' : 'NÃO'}`);
 
-              // ⚠️ ATUALIZAR estado separado de máquinas processadas (Map de IDs).
-              // Isto é INDEPENDENTE do array `maquinas` — garante que o ícone
-              // da câmera fique verde mesmo se houver problemas de batching do
-              // React com o fotoProcessada (string base64 longa).
-              // Usa função updater para garantir que estamos trabalhando com o
-              // estado mais recente (não um snapshot stale do closure).
+              // ⚠️ ATUALIZAR estado separado de máquinas processadas via useRef.
+              // useRef sempre tem valor atualizado (não é batcheado pelo React).
+              // O tick (counter) força re-render garantido.
               // Adiciona AMBOS id e codigo para máxima robustez.
-              // Usa Record (objeto) em vez de Set — cria NOVO objeto a cada
-              // update, forçando re-render do React.
               const maquinaIdProcessada = maquinaAtualizada.id;
               const maquinaCodigoProcessado = maquinaAtualizada.codigo;
-              setMaquinasProcessadasMap(prev => {
-                const novoMap = { ...prev };
-                novoMap[maquinaIdProcessada] = true;
-                novoMap[maquinaCodigoProcessado] = true;
-                console.log(`[Lote] Map agora tem ${Object.keys(novoMap).length} chaves. Adicionados: id=${maquinaIdProcessada}, codigo=${maquinaCodigoProcessado}`);
-                return novoMap;
-              });
-              console.log(`[Lote] ID ${maquinaIdProcessada} e codigo ${maquinaCodigoProcessado} adicionados a maquinasProcessadasMap`);
+              marcarMaquinaProcessada(maquinaIdProcessada, maquinaCodigoProcessado);
+              console.log(`[Lote] marcarMaquinaProcessada chamada: id=${maquinaIdProcessada}, codigo=${maquinaCodigoProcessado}`);
+              console.log(`[Lote] Map atual:`, { ...maquinasProcessadasRef.current });
             }
           }
         } else {
@@ -5847,12 +5859,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             fotoProcessada: s.fotoProcessada || null,
           };
         }));
-        // Mesclar IDs restaurados com os já existentes no Map
-        setMaquinasProcessadasMap(prev => {
-          const novoMap = { ...prev };
-          Object.keys(idsComFoto).forEach(id => { novoMap[id] = true; });
-          return novoMap;
+        // Mesclar IDs restaurados com os já existentes no Map (useRef)
+        Object.keys(idsComFoto).forEach(id => {
+          maquinasProcessadasRef.current[id] = true;
         });
+        setMaquinasProcessadasTick(t => t + 1);
       }
       if (dados.receitasItens) { setReceitasItens(dados.receitasItens); restaurou = true; }
       if (dados.despesasItens) { setDespesasItens(dados.despesasItens); restaurou = true; }
@@ -5905,7 +5916,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     // Limpar estado local antes do reload
     setMaquinas(prev => prev.map(m => ({ ...m, novaEntrada: '', novaSaida: '', diferencaEntrada: 0, diferencaSaida: 0, saldoMaquina: 0, fotoProcessada: null })));
     // Limpar Map de máquinas processadas (ícones voltam a ficar cinza)
-    setMaquinasProcessadasMap({});
+    limparMaquinasProcessadas();
     setExtratoVisivel(false);
     setRecebido('');
     setFormaPagamento(null);
@@ -7432,6 +7443,19 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         LANÇAMENTO DE LOTE
       </Button>
 
+      {/* DEBUG OVERLAY — diagnóstico ícone verde lote (remover após fix) */}
+      {maquinas.length > 0 && (
+        <div
+          className="fixed top-14 left-2 z-[55] bg-black/80 text-white text-[10px] px-2 py-1 rounded-md font-mono pointer-events-none"
+          style={{ maxWidth: '90vw' }}
+        >
+          <div>tick: {maquinasProcessadasTick}</div>
+          <div>mapKeys: {Object.keys(maquinasProcessadasMap).length}</div>
+          <div>keys: {Object.keys(maquinasProcessadasMap).slice(0, 4).join('|')}</div>
+          <div>máquinas: {maquinas.map(m => `${m.codigo}:${(maquinasProcessadasMap[m.id] || maquinasProcessadasMap[m.codigo]) ? 'V' : 'X'}`).join(' ')}</div>
+        </div>
+      )}
+
       {loading ? (
         <div className="text-center py-8 text-muted-foreground">Carregando máquinas...</div>
       ) : clienteSelecionado && maquinas.length === 0 ? (
@@ -7470,9 +7494,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
                           FLUXO LOTE (LANÇAMENTO DE LOTE):
                           - Não tem fotoProcessada (bug de batching do React)
-                          - Usa Map separado maquinasProcessadasMap para deixar
-                            o ícone verde (sem thumbnail, sem badge)
+                          - Usa Map separado maquinasProcessadasMap (via useRef)
+                            para deixar o ícone verde (sem thumbnail, sem badge)
+                            maquinasProcessadasTick força re-render do componente
                           ============================================ */}
+                      {/* DEBUG: tick={maquinasProcessadasTick} para forçar re-render */}
+                      {(() => { void maquinasProcessadasTick; return null; })()}
                       {maquina.fotoProcessada ? (
                         <Button
                           variant="ghost"
@@ -7493,7 +7520,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                           size="icon"
                           className={`h-9 w-9 rounded-md ${(maquinasProcessadasMap[maquina.id] || maquinasProcessadasMap[maquina.codigo]) ? 'text-green-500 hover:text-green-600 hover:bg-green-500/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
                           onClick={() => abrirModalFoto(maquina)}
-                          title={(maquinasProcessadasMap[maquina.id] || maquinasProcessadasMap[maquina.codigo]) ? 'Máquina processada no lote' : 'Tirar foto'}
+                          title={(maquinasProcessadasMap[maquina.id] || maquinasProcessadasMap[maquina.codigo]) ? `Máquina processada no lote (id=${maquina.id}, codigo=${maquina.codigo})` : 'Tirar foto'}
                         >
                           <Camera className="w-5 h-5" />
                         </Button>
@@ -8486,10 +8513,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     <Button
                       data-close-lote-modal="true"
                       onClick={() => {
-                        console.log('[Lote CONCLUIR] Estado atual maquinasProcessadasMap:', maquinasProcessadasMap);
-                        console.log('[Lote CONCLUIR] Quantidade de chaves:', Object.keys(maquinasProcessadasMap).length);
-                        // Forçar re-render garantindo nova referência do Map
-                        setMaquinasProcessadasMap(prev => ({ ...prev }));
+                        const chaves = Object.keys(maquinasProcessadasRef.current);
+                        console.log('[Lote CONCLUIR] Map:', { ...maquinasProcessadasRef.current });
+                        console.log('[Lote CONCLUIR] Quantidade de chaves:', chaves.length);
+                        // Toast visual para debug no smartphone (sem precisar de F12)
+                        toast.info(`DEBUG LOTE: ${chaves.length} máquinas marcadas. IDs: ${chaves.slice(0, 5).join(', ')}${chaves.length > 5 ? '...' : ''}`);
+                        // Forçar re-render garantindo nova referência do Map + tick
+                        maquinasProcessadasRef.current = { ...maquinasProcessadasRef.current };
+                        setMaquinasProcessadasTick(t => t + 1);
                         setLoteModalOpen(false);
                         setFotosLote([]);
                         setLoteProgresso(0);
