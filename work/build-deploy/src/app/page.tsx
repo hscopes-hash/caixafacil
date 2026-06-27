@@ -7481,14 +7481,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   {/* Linha Entrada */}
                   <div className={`grid gap-2 mb-2 ${modoOperacao === 'AJUSTE' ? 'grid-cols-2' : 'grid-cols-3'}`}>
                     <div className="relative">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-success font-bold">E</span>
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground font-bold">E</span>
                       <Input
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
                         value={maquina.entradaAtual || 0}
                         disabled
-                        className="bg-field-bg border-field-border text-success text-right pr-2 pl-6 h-10 font-mono no-spinners"
+                        className="bg-field-bg border-field-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners"
                       />
                     </div>
                     <Input
@@ -7510,21 +7510,21 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       pattern="[0-9]*"
                       value={maquina.novaEntrada ? maquina.diferencaEntrada : 0}
                       disabled
-                      className={`text-right pr-2 h-10 font-mono no-spinners ${(maquina.novaEntrada ? maquina.diferencaEntrada : 0) >= 0 ? 'bg-success-bg border-success/30 text-success' : 'bg-danger-bg border-danger/30 text-danger'}`}
+                      className="text-right pr-2 h-10 font-mono no-spinners bg-muted border-border text-foreground"
                     />
                     )}
                   </div>
                   {/* Linha Saída */}
                   <div className={`grid gap-2 ${modoOperacao === 'AJUSTE' ? 'grid-cols-2' : 'grid-cols-3'}`}>
                     <div className="relative">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-danger font-bold">S</span>
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground font-bold">S</span>
                       <Input
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
                         value={maquina.saidaAtual || 0}
                         disabled
-                        className="bg-field-bg border-field-border text-success text-right pr-2 pl-6 h-10 font-mono no-spinners"
+                        className="bg-field-bg border-field-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners"
                       />
                     </div>
                     <Input
@@ -7546,7 +7546,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       pattern="[0-9]*"
                       value={maquina.novaSaida ? maquina.diferencaSaida : 0}
                       disabled
-                      className={`text-right pr-2 h-10 font-mono no-spinners ${(maquina.novaSaida ? maquina.diferencaSaida : 0) >= 0 ? 'bg-danger-bg border-danger/30 text-danger' : 'bg-success-bg border-success/30 text-success'}`}
+                      className="text-right pr-2 h-10 font-mono no-spinners bg-muted border-border text-foreground"
                     />
                     )}
                   </div>
@@ -7554,7 +7554,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   {modoOperacao !== 'AJUSTE' && (
                   <div className="flex justify-between mt-3 text-sm">
                     <span className="text-muted-foreground">X {getMoedaLabel(maquina.moeda || 'M010')}</span>
-                    <span className={(maquina.novaEntrada || maquina.novaSaida) ? (maquina.saldoMaquina >= 0 ? 'text-success' : 'text-danger') : 'text-muted-foreground'}>
+                    <span className="text-foreground">
                       Saldo: R$ {formatNumber((maquina.novaEntrada || maquina.novaSaida) ? (maquina.saldoMaquina || 0) : 0)}
                     </span>
                   </div>
