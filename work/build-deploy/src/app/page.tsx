@@ -3597,11 +3597,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       setMaquinas(maquinasComLeitura);
 
       // ⚠️ Sincronizar Set de máquinas processadas com estado restaurado.
-      // Se uma máquina tem fotoProcessada no localStorage, marcamos seu ID como
-      // processado para o ícone continuar verde após reload da página.
+      // Se uma máquina tem fotoProcessada no localStorage, marcamos seu ID E codigo
+      // como processado para o ícone continuar verde após reload da página.
       const idsRestaurados = new Set<string>();
       maquinasComLeitura.forEach(m => {
-        if (m.fotoProcessada) idsRestaurados.add(m.id);
+        if (m.fotoProcessada) {
+          idsRestaurados.add(m.id);
+          idsRestaurados.add(m.codigo);
+        }
       });
       setMaquinasProcessadasIds(idsRestaurados);
 
@@ -4228,15 +4231,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
     // ⚠️ Marcar máquina como processada no estado separado (Set de IDs).
     // Garante ícone verde confiável, independente do array `maquinas`.
+    // Adiciona AMBOS id e codigo para máxima robustez.
     const maquinaIdIndividual = novasMaquinas[index].id;
-    if (maquinaIdIndividual) {
-      setMaquinasProcessadasIds(prev => {
-        if (prev.has(maquinaIdIndividual)) return prev;
-        const novoSet = new Set(prev);
-        novoSet.add(maquinaIdIndividual);
-        return novoSet;
-      });
-    }
+    const maquinaCodigoIndividual = novasMaquinas[index].codigo;
+    setMaquinasProcessadasIds(prev => {
+      const novoSet = new Set(prev);
+      novoSet.add(maquinaIdIndividual);
+      novoSet.add(maquinaCodigoIndividual);
+      return novoSet;
+    });
     
     toast.success('Valores aplicados com sucesso!');
     
@@ -4431,14 +4434,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               // React com o fotoProcessada (string base64 longa).
               // Usa função updater para garantir que estamos trabalhando com o
               // estado mais recente (não um snapshot stale do closure).
+              // Adiciona AMBOS id e codigo para máxima robustez.
               const maquinaIdProcessada = maquinaAtualizada.id;
+              const maquinaCodigoProcessado = maquinaAtualizada.codigo;
               setMaquinasProcessadasIds(prev => {
-                if (prev.has(maquinaIdProcessada)) return prev; // já está, não muda
                 const novoSet = new Set(prev);
                 novoSet.add(maquinaIdProcessada);
+                novoSet.add(maquinaCodigoProcessado);
+                console.log(`[Lote] Set agora tem ${novoSet.size} itens. Adicionados: id=${maquinaIdProcessada}, codigo=${maquinaCodigoProcessado}`);
                 return novoSet;
               });
-              console.log(`[Lote] ID ${maquinaIdProcessada} adicionado a maquinasProcessadasIds`);
+              console.log(`[Lote] ID ${maquinaIdProcessada} e codigo ${maquinaCodigoProcessado} adicionados a maquinasProcessadasIds`);
             }
           }
         } else {
@@ -5826,11 +5832,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       let restaurou = false;
       // Restaurar maquinas — mesclar com dados atuais
       if (dados.maquinas && Array.isArray(dados.maquinas)) {
-        // ⚠️ Antes de mesclar, coletar IDs de máquinas que têm fotoProcessada
-        // para atualizar o Set de máquinas processadas (ícone verde)
+        // ⚠️ Antes de mesclar, coletar IDs E codigos de máquinas que têm fotoProcessada
+        // para atualizar o Set de máquinas processadas (ícone verde + badge)
         const idsComFoto = new Set<string>();
         dados.maquinas.forEach((sv: any) => {
           if (sv.id && sv.fotoProcessada) idsComFoto.add(sv.id);
+          if (sv.codigo && sv.fotoProcessada) idsComFoto.add(sv.codigo);
         });
         setMaquinas(prev => prev.map(m => {
           const s = dados.maquinas.find((sv: any) => sv.id === m.id);
@@ -7465,10 +7472,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       <Button
                         variant="ghost"
                         size="icon"
-                        className={`h-9 w-9 rounded-md ${(maquina.fotoProcessada || maquinasProcessadasIds.has(maquina.id)) ? 'text-green-500 hover:text-green-600 hover:bg-green-500/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+                        className={`relative h-9 w-9 rounded-md ${(maquina.fotoProcessada || maquinasProcessadasIds.has(maquina.id) || maquinasProcessadasIds.has(maquina.codigo)) ? '!text-green-500 hover:!text-green-600 hover:bg-green-500/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
                         onClick={() => abrirModalFoto(maquina)}
+                        title={(maquina.fotoProcessada || maquinasProcessadasIds.has(maquina.id) || maquinasProcessadasIds.has(maquina.codigo)) ? 'Máquina processada' : 'Tirar foto'}
                       >
                         <Camera className="w-5 h-5" />
+                        {(maquina.fotoProcessada || maquinasProcessadasIds.has(maquina.id) || maquinasProcessadasIds.has(maquina.codigo)) && (
+                          <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-card" aria-hidden="true" />
+                        )}
                       </Button>
                     </div>
                   </div>

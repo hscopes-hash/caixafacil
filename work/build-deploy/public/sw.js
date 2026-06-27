@@ -1,4 +1,4 @@
-const CACHE_NAME = 'caixafacil-v12';
+const CACHE_NAME = 'caixafacil-v13';
 
 // Domains that should NEVER be intercepted by the service worker
 const SKIP_DOMAINS = [
