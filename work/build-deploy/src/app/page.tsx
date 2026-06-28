@@ -2852,16 +2852,20 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   // Helper: marca máquina como processada (id + codigo) e força re-render
   // ⚠️ Cria NOVO objeto (spread) para garantir referência nova
   const marcarMaquinaProcessada = useCallback((id: string, codigo: string) => {
+    console.log(`[marcarMaquinaProcessada] ANTES — ref.current:`, { ...maquinasProcessadasRef.current });
     maquinasProcessadasRef.current = { ...maquinasProcessadasRef.current, [id]: true, [codigo]: true };
+    console.log(`[marcarMaquinaProcessada] DEPOIS — ref.current tem ${Object.keys(maquinasProcessadasRef.current).length} chaves:`, { ...maquinasProcessadasRef.current });
     setMaquinasProcessadasTick(t => t + 1);
   }, []);
   // Helper: limpa todas as marcações
   const limparMaquinasProcessadas = useCallback(() => {
+    console.log(`[limparMaquinasProcessadas] LIMPANDO ref.current (era ${Object.keys(maquinasProcessadasRef.current).length} chaves)`);
     maquinasProcessadasRef.current = {};
     setMaquinasProcessadasTick(t => t + 1);
   }, []);
   // Helper: define marcações a partir de objeto (sobrescreve)
   const setMaquinasProcessadas = useCallback((novoMap: Record<string, boolean>) => {
+    console.log(`[setMaquinasProcessadas] SOBRESCREVENDO ref.current com ${Object.keys(novoMap).length} chaves (era ${Object.keys(maquinasProcessadasRef.current).length})`);
     maquinasProcessadasRef.current = { ...novoMap };
     setMaquinasProcessadasTick(t => t + 1);
   }, []);
@@ -8505,10 +8509,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       data-close-lote-modal="true"
                       onClick={() => {
                         const chaves = Object.keys(maquinasProcessadasRef.current);
+                        console.log('[Lote CONCLUIR] ==========================================');
                         console.log('[Lote CONCLUIR] Map:', { ...maquinasProcessadasRef.current });
                         console.log('[Lote CONCLUIR] Quantidade de chaves:', chaves.length);
+                        console.log('[Lote CONCLUIR] tick atual:', maquinasProcessadasTick);
+                        console.trace('[Lote CONCLUIR] stack trace');
                         // Toast visual para debug no smartphone (sem precisar de F12)
-                        toast.info(`DEBUG LOTE: ${chaves.length} máquinas marcadas. IDs: ${chaves.slice(0, 5).join(', ')}${chaves.length > 5 ? '...' : ''}`);
+                        toast.info(`DEBUG LOTE: ${chaves.length} chaves no Map, tick=${maquinasProcessadasTick}. IDs: ${chaves.slice(0, 5).join(', ')}${chaves.length > 5 ? '...' : ''}`);
                         // Forçar re-render garantindo nova referência do Map + tick
                         maquinasProcessadasRef.current = { ...maquinasProcessadasRef.current };
                         setMaquinasProcessadasTick(t => t + 1);
