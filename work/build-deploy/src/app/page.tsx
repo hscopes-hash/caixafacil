@@ -4424,14 +4424,26 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 maquinaAtualizada.diferencaEntrada - maquinaAtualizada.diferencaSaida
               );
 
-              // ⚠️ NÃO setar fotoProcessada no fluxo LOTE.
-              // O usuário pediu: lote deve mostrar APENAS ícone verde (sem thumbnail).
-              // O thumbnail é exclusivo do fluxo individual (clique no ícone).
-              // A tarja é aplicada e enviada ao GCS no salvarLeituras (não precisa
-              // guardar no estado React).
-              // Foto original com tarja NÃO é guardada em maquina.fotoProcessada.
-              // Apenas marcamos a máquina como processada no Map (useRef) abaixo.
-              // (Foto com tarja para envio GCS continua sendo gerada no salvarLeituras)
+              // ⚠️ Gerar foto com tarja e setar fotoProcessada — mostra thumbnail no ícone
+              // Mesmo padrão do fluxo individual (aplicarLeituraExtraida) e do processarFotoEmBackground
+              try {
+                const nowTs = new Date();
+                const dataStrTarja = `${nowTs.getDate().toString().padStart(2, '0')}/${(nowTs.getMonth() + 1).toString().padStart(2, '0')}/${nowTs.getFullYear().toString().slice(-2)} ${nowTs.getHours().toString().padStart(2, '0')}:${nowTs.getMinutes().toString().padStart(2, '0')}`;
+                const fotoComTarja = await adicionarTarjaNaFoto(
+                  foto.imagem,
+                  dataStrTarja,
+                  usuarioNome,
+                  data.entrada ?? null,
+                  data.saida ?? null,
+                  foto.origem || 'LOTE'
+                );
+                // Garantir que é uma NOVA string (forçar mudança de referência)
+                maquinaAtualizada.fotoProcessada = fotoComTarja + '';
+                console.log(`[Lote] Tarja aplicada à máquina ${data.codigoMaquina}, foto: ${maquinaAtualizada.fotoProcessada?.length || 0} chars`);
+              } catch (err) {
+                console.warn(`[Lote] Falha ao aplicar tarja na máquina ${data.codigoMaquina}:`, err);
+                maquinaAtualizada.fotoProcessada = foto.imagem + '';
+              }
 
               novasMaquinas[indexMaquina] = maquinaAtualizada;
               maquinasSnapshot = novasMaquinas;
@@ -4439,7 +4451,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               // ⚠️ Mesmo padrão do fluxo individual (aplicarLeituraExtraida):
               // setMaquinas com NOVO array spread — força re-render
               setMaquinas([...novasMaquinas]);
-              console.log(`[Lote] setMaquinas([...novasMaquinas]) para ${data.codigoMaquina}. fotoProcessada: ${maquinaAtualizada.fotoProcessada ? 'SIM' : 'NÃO (intencional — lote usa só ícone verde)'}`);
+              console.log(`[Lote] setMaquinas([...novasMaquinas]) para ${data.codigoMaquina}. fotoProcessada: ${maquinaAtualizada.fotoProcessada ? 'SIM (' + maquinaAtualizada.fotoProcessada.length + ' chars)' : 'NÃO'}`);
 
               // ⚠️ ATUALIZAR estado separado de máquinas processadas via useRef.
               // useRef sempre tem valor atualizado (não é batcheado pelo React).
@@ -4754,25 +4766,48 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           );
           if (indexMaquina !== -1) {
             const novasMaquinas = [...maquinasSnapshot];
+            // Criar NOVO objeto (evita mutar original — força re-render)
+            const maquinaAtualizada = { ...novasMaquinas[indexMaquina] };
             if (data.entrada !== null) {
-              novasMaquinas[indexMaquina].novaEntrada = String(data.entrada);
-              novasMaquinas[indexMaquina].diferencaEntrada = data.entrada - (novasMaquinas[indexMaquina].entradaAtual || 0);
+              maquinaAtualizada.novaEntrada = String(data.entrada);
+              maquinaAtualizada.diferencaEntrada = data.entrada - (maquinaAtualizada.entradaAtual || 0);
             }
             if (data.saida !== null) {
-              novasMaquinas[indexMaquina].novaSaida = String(data.saida);
-              novasMaquinas[indexMaquina].diferencaSaida = data.saida - (novasMaquinas[indexMaquina].saidaAtual || 0);
+              maquinaAtualizada.novaSaida = String(data.saida);
+              maquinaAtualizada.diferencaSaida = data.saida - (maquinaAtualizada.saidaAtual || 0);
             }
-            novasMaquinas[indexMaquina].saldoMaquina = calcularValor(
-              novasMaquinas[indexMaquina].moeda,
-              novasMaquinas[indexMaquina].diferencaEntrada - novasMaquinas[indexMaquina].diferencaSaida
+            maquinaAtualizada.saldoMaquina = calcularValor(
+              maquinaAtualizada.moeda,
+              maquinaAtualizada.diferencaEntrada - maquinaAtualizada.diferencaSaida
             );
+
+            // ⚠️ Gerar foto com tarja e setar fotoProcessada — mostra thumbnail no ícone
+            // Mesmo padrão do fluxo individual (aplicarLeituraExtraida) e do processarLote
+            try {
+              const nowTs = new Date();
+              const dataStrTarja = `${nowTs.getDate().toString().padStart(2, '0')}/${(nowTs.getMonth() + 1).toString().padStart(2, '0')}/${nowTs.getFullYear().toString().slice(-2)} ${nowTs.getHours().toString().padStart(2, '0')}:${nowTs.getMinutes().toString().padStart(2, '0')}`;
+              const fotoComTarja = await adicionarTarjaNaFoto(
+                imagemBase64,
+                dataStrTarja,
+                usuarioNome,
+                data.entrada ?? null,
+                data.saida ?? null,
+                'LOTE'
+              );
+              maquinaAtualizada.fotoProcessada = fotoComTarja + '';
+              console.log(`[Lote BG] Tarja aplicada à máquina ${data.codigoMaquina}, foto: ${maquinaAtualizada.fotoProcessada?.length || 0} chars`);
+            } catch (err) {
+              console.warn(`[Lote BG] Falha ao aplicar tarja na máquina ${data.codigoMaquina}:`, err);
+              maquinaAtualizada.fotoProcessada = imagemBase64 + '';
+            }
+
+            novasMaquinas[indexMaquina] = maquinaAtualizada;
             maquinasSnapshot = novasMaquinas;
-            setMaquinas(novasMaquinas);
-            // ⚠️ Marcar máquina como processada no Map (useRef + tick)
-            // Isto faz o ícone da câmera ficar verde
-            const maquinaProc = novasMaquinas[indexMaquina];
-            console.log(`[Lote BG] marcarMaquinaProcessada: id=${maquinaProc.id}, codigo=${maquinaProc.codigo}`);
-            marcarMaquinaProcessada(maquinaProc.id, maquinaProc.codigo);
+            setMaquinas([...novasMaquinas]);
+            // ⚠️ Também marcar no Map (useRef + tick) — backup caso fotoProcessada
+            // tenha problemas de batching (mantém ícone verde como fallback)
+            console.log(`[Lote BG] marcarMaquinaProcessada: id=${maquinaAtualizada.id}, codigo=${maquinaAtualizada.codigo}`);
+            marcarMaquinaProcessada(maquinaAtualizada.id, maquinaAtualizada.codigo);
           }
         }
       } else {
