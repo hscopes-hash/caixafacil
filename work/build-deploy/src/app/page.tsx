@@ -4324,6 +4324,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setProcessandoLote(true);
     setLoteProgresso(0);
 
+    console.log(`[Lote INÍCIO] ref.current ANTES do loop:`, { ...maquinasProcessadasRef.current });
+    console.log(`[Lote INÍCIO] ref.current tem ${Object.keys(maquinasProcessadasRef.current).length} chaves`);
+    console.log(`[Lote INÍCIO] marcarMaquinaProcessada é a mesma?`, marcarMaquinaProcessada);
+
     // Preparar lista de códigos de máquinas e mapa de nomes E/S
     const codigosMaquinas = maquinas.map(m => m.codigo);
     const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string }> = {};
@@ -4494,6 +4498,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       });
     });
     console.log('[Lote] Re-render final com fotoProcessada do snapshot');
+    console.log(`[Lote FIM] ref.current tem ${Object.keys(maquinasProcessadasRef.current).length} chaves:`, { ...maquinasProcessadasRef.current });
+    console.log(`[Lote FIM] tick atual: ${maquinasProcessadasTick}`);
+    // Toast mostrando estado final do Map ao terminar processamento
+    const chavesFinais = Object.keys(maquinasProcessadasRef.current);
+    toast.info(`LOTE PROCESSADO: ${chavesFinais.length} chaves no Map. IDs: ${chavesFinais.slice(0, 5).join(', ')}${chavesFinais.length > 5 ? '...' : ''}`, { duration: 6000 });
     const fotosProcessadas = fotosLote.filter(f => f.status === 'concluido' || f.status === 'erro');
     const concluidas = fotosProcessadas.filter(f => f.status === 'concluido' && f.resultado?.codigoReconhecido && (f.resultado.entrada !== null || f.resultado.saida !== null)).length;
     const naoEncontradas = fotosProcessadas.filter(f => f.status === 'concluido' && !f.resultado?.codigoReconhecido).length;
