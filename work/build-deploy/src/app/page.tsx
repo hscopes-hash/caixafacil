@@ -4416,27 +4416,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 maquinaAtualizada.diferencaEntrada - maquinaAtualizada.diferencaSaida
               );
 
-              // ⚠️ Guardar foto processada (com tarja vermelha) na máquina
-              // SEMPRE setar fotoProcessada, independentemente dos valores serem iguais
-              // O thumbnail deve aparecer sempre que houver foto processada
-              try {
-                const nowTs = new Date();
-                const dataStrTarja = `${nowTs.getDate().toString().padStart(2, '0')}/${(nowTs.getMonth() + 1).toString().padStart(2, '0')}/${nowTs.getFullYear().toString().slice(-2)} ${nowTs.getHours().toString().padStart(2, '0')}:${nowTs.getMinutes().toString().padStart(2, '0')}`;
-                const fotoComTarja = await adicionarTarjaNaFoto(
-                  foto.imagem,
-                  dataStrTarja,
-                  usuarioNome,
-                  data.entrada ?? null,
-                  data.saida ?? null,
-                  foto.origem || 'LOTE'
-                );
-                // Garantir que é uma NOVA string (forçar mudança de referência)
-                maquinaAtualizada.fotoProcessada = fotoComTarja + '';
-                console.log(`[Lote] Tarja aplicada à máquina ${data.codigoMaquina}, foto: ${maquinaAtualizada.fotoProcessada?.length || 0} chars`);
-              } catch (err) {
-                console.warn(`[Lote] Falha ao aplicar tarja na máquina ${data.codigoMaquina}:`, err);
-                maquinaAtualizada.fotoProcessada = foto.imagem + '';
-              }
+              // ⚠️ NÃO setar fotoProcessada no fluxo LOTE.
+              // O usuário pediu: lote deve mostrar APENAS ícone verde (sem thumbnail).
+              // O thumbnail é exclusivo do fluxo individual (clique no ícone).
+              // A tarja é aplicada e enviada ao GCS no salvarLeituras (não precisa
+              // guardar no estado React).
+              // Foto original com tarja NÃO é guardada em maquina.fotoProcessada.
+              // Apenas marcamos a máquina como processada no Map (useRef) abaixo.
+              // (Foto com tarja para envio GCS continua sendo gerada no salvarLeituras)
 
               novasMaquinas[indexMaquina] = maquinaAtualizada;
               maquinasSnapshot = novasMaquinas;
@@ -4444,7 +4431,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               // ⚠️ Mesmo padrão do fluxo individual (aplicarLeituraExtraida):
               // setMaquinas com NOVO array spread — força re-render
               setMaquinas([...novasMaquinas]);
-              console.log(`[Lote] setMaquinas([...novasMaquinas]) para ${data.codigoMaquina}. fotoProcessada: ${maquinaAtualizada.fotoProcessada ? 'SIM (' + maquinaAtualizada.fotoProcessada.length + ' chars)' : 'NÃO'}`);
+              console.log(`[Lote] setMaquinas([...novasMaquinas]) para ${data.codigoMaquina}. fotoProcessada: ${maquinaAtualizada.fotoProcessada ? 'SIM' : 'NÃO (intencional — lote usa só ícone verde)'}`);
 
               // ⚠️ ATUALIZAR estado separado de máquinas processadas via useRef.
               // useRef sempre tem valor atualizado (não é batcheado pelo React).
