@@ -2852,20 +2852,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   // Helper: marca máquina como processada (id + codigo) e força re-render
   // ⚠️ Cria NOVO objeto (spread) para garantir referência nova
   const marcarMaquinaProcessada = useCallback((id: string, codigo: string) => {
-    console.log(`[marcarMaquinaProcessada] ANTES — ref.current:`, { ...maquinasProcessadasRef.current });
     maquinasProcessadasRef.current = { ...maquinasProcessadasRef.current, [id]: true, [codigo]: true };
-    console.log(`[marcarMaquinaProcessada] DEPOIS — ref.current tem ${Object.keys(maquinasProcessadasRef.current).length} chaves:`, { ...maquinasProcessadasRef.current });
     setMaquinasProcessadasTick(t => t + 1);
   }, []);
   // Helper: limpa todas as marcações
   const limparMaquinasProcessadas = useCallback(() => {
-    console.log(`[limparMaquinasProcessadas] LIMPANDO ref.current (era ${Object.keys(maquinasProcessadasRef.current).length} chaves)`);
     maquinasProcessadasRef.current = {};
     setMaquinasProcessadasTick(t => t + 1);
   }, []);
   // Helper: define marcações a partir de objeto (sobrescreve)
   const setMaquinasProcessadas = useCallback((novoMap: Record<string, boolean>) => {
-    console.log(`[setMaquinasProcessadas] SOBRESCREVENDO ref.current com ${Object.keys(novoMap).length} chaves (era ${Object.keys(maquinasProcessadasRef.current).length})`);
     maquinasProcessadasRef.current = { ...novoMap };
     setMaquinasProcessadasTick(t => t + 1);
   }, []);
@@ -4324,10 +4320,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setProcessandoLote(true);
     setLoteProgresso(0);
 
-    console.log(`[Lote INÍCIO] ref.current ANTES do loop:`, { ...maquinasProcessadasRef.current });
-    console.log(`[Lote INÍCIO] ref.current tem ${Object.keys(maquinasProcessadasRef.current).length} chaves`);
-    console.log(`[Lote INÍCIO] marcarMaquinaProcessada é a mesma?`, marcarMaquinaProcessada);
-
     // Preparar lista de códigos de máquinas e mapa de nomes E/S
     const codigosMaquinas = maquinas.map(m => m.codigo);
     const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string }> = {};
@@ -4439,7 +4431,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 );
                 // Garantir que é uma NOVA string (forçar mudança de referência)
                 maquinaAtualizada.fotoProcessada = fotoComTarja + '';
-                console.log(`[Lote] Tarja aplicada à máquina ${data.codigoMaquina}, foto: ${maquinaAtualizada.fotoProcessada?.length || 0} chars`);
               } catch (err) {
                 console.warn(`[Lote] Falha ao aplicar tarja na máquina ${data.codigoMaquina}:`, err);
                 maquinaAtualizada.fotoProcessada = foto.imagem + '';
@@ -4448,20 +4439,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               novasMaquinas[indexMaquina] = maquinaAtualizada;
               maquinasSnapshot = novasMaquinas;
 
-              // ⚠️ Mesmo padrão do fluxo individual (aplicarLeituraExtraida):
               // setMaquinas com NOVO array spread — força re-render
               setMaquinas([...novasMaquinas]);
-              console.log(`[Lote] setMaquinas([...novasMaquinas]) para ${data.codigoMaquina}. fotoProcessada: ${maquinaAtualizada.fotoProcessada ? 'SIM (' + maquinaAtualizada.fotoProcessada.length + ' chars)' : 'NÃO'}`);
 
-              // ⚠️ ATUALIZAR estado separado de máquinas processadas via useRef.
-              // useRef sempre tem valor atualizado (não é batcheado pelo React).
-              // O tick (counter) força re-render garantido.
-              // Adiciona AMBOS id e codigo para máxima robustez.
+              // ⚠️ Marcar máquina como processada no Map (useRef + tick) — fallback
               const maquinaIdProcessada = maquinaAtualizada.id;
               const maquinaCodigoProcessado = maquinaAtualizada.codigo;
               marcarMaquinaProcessada(maquinaIdProcessada, maquinaCodigoProcessado);
-              console.log(`[Lote] marcarMaquinaProcessada chamada: id=${maquinaIdProcessada}, codigo=${maquinaCodigoProcessado}`);
-              console.log(`[Lote] Map atual:`, { ...maquinasProcessadasRef.current });
             }
           }
         } else {
@@ -4510,11 +4494,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       });
     });
     console.log('[Lote] Re-render final com fotoProcessada do snapshot');
-    console.log(`[Lote FIM] ref.current tem ${Object.keys(maquinasProcessadasRef.current).length} chaves:`, { ...maquinasProcessadasRef.current });
-    console.log(`[Lote FIM] tick atual: ${maquinasProcessadasTick}`);
-    // Toast mostrando estado final do Map ao terminar processamento
-    const chavesFinais = Object.keys(maquinasProcessadasRef.current);
-    toast.info(`LOTE PROCESSADO: ${chavesFinais.length} chaves no Map. IDs: ${chavesFinais.slice(0, 5).join(', ')}${chavesFinais.length > 5 ? '...' : ''}`, { duration: 6000 });
     const fotosProcessadas = fotosLote.filter(f => f.status === 'concluido' || f.status === 'erro');
     const concluidas = fotosProcessadas.filter(f => f.status === 'concluido' && f.resultado?.codigoReconhecido && (f.resultado.entrada !== null || f.resultado.saida !== null)).length;
     const naoEncontradas = fotosProcessadas.filter(f => f.status === 'concluido' && !f.resultado?.codigoReconhecido).length;
@@ -4795,7 +4774,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 'LOTE'
               );
               maquinaAtualizada.fotoProcessada = fotoComTarja + '';
-              console.log(`[Lote BG] Tarja aplicada à máquina ${data.codigoMaquina}, foto: ${maquinaAtualizada.fotoProcessada?.length || 0} chars`);
             } catch (err) {
               console.warn(`[Lote BG] Falha ao aplicar tarja na máquina ${data.codigoMaquina}:`, err);
               maquinaAtualizada.fotoProcessada = imagemBase64 + '';
@@ -4804,9 +4782,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             novasMaquinas[indexMaquina] = maquinaAtualizada;
             maquinasSnapshot = novasMaquinas;
             setMaquinas([...novasMaquinas]);
-            // ⚠️ Também marcar no Map (useRef + tick) — backup caso fotoProcessada
-            // tenha problemas de batching (mantém ícone verde como fallback)
-            console.log(`[Lote BG] marcarMaquinaProcessada: id=${maquinaAtualizada.id}, codigo=${maquinaAtualizada.codigo}`);
+            // ⚠️ Também marcar no Map (useRef + tick) — fallback caso fotoProcessada falhe
             marcarMaquinaProcessada(maquinaAtualizada.id, maquinaAtualizada.codigo);
           }
         }
@@ -7487,19 +7463,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         LANÇAMENTO DE LOTE
       </Button>
 
-      {/* DEBUG OVERLAY — diagnóstico ícone verde lote (remover após fix) */}
-      {maquinas.length > 0 && (
-        <div
-          className="fixed top-14 left-2 z-[55] bg-black/80 text-white text-[10px] px-2 py-1 rounded-md font-mono pointer-events-none"
-          style={{ maxWidth: '90vw' }}
-        >
-          <div>tick: {maquinasProcessadasTick}</div>
-          <div>mapKeys: {Object.keys(maquinasProcessadasMap).length}</div>
-          <div>keys: {Object.keys(maquinasProcessadasMap).slice(0, 4).join('|')}</div>
-          <div>máquinas: {maquinas.map(m => `${m.codigo}:${(maquinasProcessadasMap[m.id] || maquinasProcessadasMap[m.codigo]) ? 'V' : 'X'}`).join(' ')}</div>
-        </div>
-      )}
-
       {loading ? (
         <div className="text-center py-8 text-muted-foreground">Carregando máquinas...</div>
       ) : clienteSelecionado && maquinas.length === 0 ? (
@@ -8557,17 +8520,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     <Button
                       data-close-lote-modal="true"
                       onClick={() => {
-                        const chaves = Object.keys(maquinasProcessadasRef.current);
-                        console.log('[Lote CONCLUIR] ==========================================');
-                        console.log('[Lote CONCLUIR] Map:', { ...maquinasProcessadasRef.current });
-                        console.log('[Lote CONCLUIR] Quantidade de chaves:', chaves.length);
-                        console.log('[Lote CONCLUIR] tick atual:', maquinasProcessadasTick);
-                        console.trace('[Lote CONCLUIR] stack trace');
-                        // Toast visual para debug no smartphone (sem precisar de F12)
-                        toast.info(`DEBUG LOTE: ${chaves.length} chaves no Map, tick=${maquinasProcessadasTick}. IDs: ${chaves.slice(0, 5).join(', ')}${chaves.length > 5 ? '...' : ''}`);
-                        // Forçar re-render garantindo nova referência do Map + tick
-                        maquinasProcessadasRef.current = { ...maquinasProcessadasRef.current };
-                        setMaquinasProcessadasTick(t => t + 1);
                         setLoteModalOpen(false);
                         setFotosLote([]);
                         setLoteProgresso(0);
