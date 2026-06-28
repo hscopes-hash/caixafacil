@@ -4768,6 +4768,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             );
             maquinasSnapshot = novasMaquinas;
             setMaquinas(novasMaquinas);
+            // ⚠️ Marcar máquina como processada no Map (useRef + tick)
+            // Isto faz o ícone da câmera ficar verde
+            const maquinaProc = novasMaquinas[indexMaquina];
+            console.log(`[Lote BG] marcarMaquinaProcessada: id=${maquinaProc.id}, codigo=${maquinaProc.codigo}`);
+            marcarMaquinaProcessada(maquinaProc.id, maquinaProc.codigo);
           }
         }
       } else {
