@@ -7536,23 +7536,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   </div>
                   {/* Cabeçalho das colunas */}
                   <div className={`grid gap-2 mb-2 text-xs text-muted-foreground text-center ${modoOperacao === 'AJUSTE' ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                    <span>ANTERIOR</span>
                     <span>ATUAL</span>
+                    <span>ANTERIOR</span>
                     {modoOperacao !== 'AJUSTE' && <span>SALDO</span>}
                   </div>
                   {/* Linha Entrada */}
                   <div className={`grid gap-2 mb-2 ${modoOperacao === 'AJUSTE' ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                    <div className="relative">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground font-bold">E</span>
-                      <Input
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        value={maquina.entradaAtual || 0}
-                        disabled
-                        className="bg-field-bg border-field-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners"
-                      />
-                    </div>
                     <Input
                       type="text"
                       inputMode="numeric"
@@ -7565,6 +7554,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       placeholder="0"
                       readOnly={empresa?.permitirDigitacaoLeitura === false}
                     />
+                    <div className="relative">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground font-bold">E</span>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={maquina.entradaAtual || 0}
+                        disabled
+                        className="bg-field-bg border-field-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners"
+                      />
+                    </div>
                     {modoOperacao !== 'AJUSTE' && (
                     <Input
                       type="text"
@@ -7578,17 +7578,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   </div>
                   {/* Linha Saída */}
                   <div className={`grid gap-2 ${modoOperacao === 'AJUSTE' ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                    <div className="relative">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground font-bold">S</span>
-                      <Input
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        value={maquina.saidaAtual || 0}
-                        disabled
-                        className="bg-field-bg border-field-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners"
-                      />
-                    </div>
                     <Input
                       type="text"
                       inputMode="numeric"
@@ -7601,6 +7590,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       placeholder="0"
                       readOnly={empresa?.permitirDigitacaoLeitura === false}
                     />
+                    <div className="relative">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground font-bold">S</span>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={maquina.saidaAtual || 0}
+                        disabled
+                        className="bg-field-bg border-field-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners"
+                      />
+                    </div>
                     {modoOperacao !== 'AJUSTE' && (
                     <Input
                       type="text"
