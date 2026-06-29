@@ -7542,29 +7542,29 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   </div>
                   {/* Linha Entrada */}
                   <div className={`grid gap-2 mb-2 ${modoOperacao === 'AJUSTE' ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      value={maquina.novaEntrada}
-                      onChange={(e) => handleNovaEntrada(index, e.target.value)}
-                      onBlur={() => validateNovaEntrada(index)}
-                      ref={(el) => { entradaRefs.current[index] = el; }}
-                      className={`bg-muted border-border text-foreground text-right pr-2 h-10 font-mono no-spinners ${empresa?.permitirDigitacaoLeitura === false ? 'opacity-70 cursor-not-allowed' : ''}`}
-                      placeholder="0"
-                      readOnly={empresa?.permitirDigitacaoLeitura === false}
-                    />
                     <div className="relative">
                       <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground font-bold">E</span>
                       <Input
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
-                        value={maquina.entradaAtual || 0}
-                        disabled
-                        className="bg-field-bg border-field-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners"
+                        value={maquina.novaEntrada}
+                        onChange={(e) => handleNovaEntrada(index, e.target.value)}
+                        onBlur={() => validateNovaEntrada(index)}
+                        ref={(el) => { entradaRefs.current[index] = el; }}
+                        className={`bg-muted border-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners ${empresa?.permitirDigitacaoLeitura === false ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        placeholder="0"
+                        readOnly={empresa?.permitirDigitacaoLeitura === false}
                       />
                     </div>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={maquina.entradaAtual || 0}
+                      disabled
+                      className="bg-field-bg border-field-border text-foreground text-right pr-2 h-10 font-mono no-spinners"
+                    />
                     {modoOperacao !== 'AJUSTE' && (
                     <Input
                       type="text"
@@ -7578,29 +7578,29 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   </div>
                   {/* Linha Saída */}
                   <div className={`grid gap-2 ${modoOperacao === 'AJUSTE' ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      value={maquina.novaSaida}
-                      onChange={(e) => handleNovaSaida(index, e.target.value)}
-                      onBlur={() => validateNovaSaida(index)}
-                      ref={(el) => { saidaRefs.current[index] = el; }}
-                      className={`bg-muted border-border text-foreground text-right pr-2 h-10 font-mono no-spinners ${empresa?.permitirDigitacaoLeitura === false ? 'opacity-70 cursor-not-allowed' : ''}`}
-                      placeholder="0"
-                      readOnly={empresa?.permitirDigitacaoLeitura === false}
-                    />
                     <div className="relative">
                       <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground font-bold">S</span>
                       <Input
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
-                        value={maquina.saidaAtual || 0}
-                        disabled
-                        className="bg-field-bg border-field-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners"
+                        value={maquina.novaSaida}
+                        onChange={(e) => handleNovaSaida(index, e.target.value)}
+                        onBlur={() => validateNovaSaida(index)}
+                        ref={(el) => { saidaRefs.current[index] = el; }}
+                        className={`bg-muted border-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners ${empresa?.permitirDigitacaoLeitura === false ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        placeholder="0"
+                        readOnly={empresa?.permitirDigitacaoLeitura === false}
                       />
                     </div>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={maquina.saidaAtual || 0}
+                      disabled
+                      className="bg-field-bg border-field-border text-foreground text-right pr-2 h-10 font-mono no-spinners"
+                    />
                     {modoOperacao !== 'AJUSTE' && (
                     <Input
                       type="text"
