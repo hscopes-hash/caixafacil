@@ -7548,6 +7548,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
+                        autoComplete="off"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
                         value={maquina.novaEntrada}
                         onChange={(e) => handleNovaEntrada(index, e.target.value)}
                         onBlur={() => validateNovaEntrada(index)}
@@ -7584,6 +7588,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
+                        autoComplete="off"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
                         value={maquina.novaSaida}
                         onChange={(e) => handleNovaSaida(index, e.target.value)}
                         onBlur={() => validateNovaSaida(index)}
@@ -7660,6 +7668,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         <Input
                           type="text"
                           inputMode="decimal"
+                          autoComplete="off"
+                          autoCapitalize="off"
+                          autoCorrect="off"
+                          spellCheck={false}
                           value={item.valor}
                           onChange={(e) => atualizarReceita(item.id, 'valor', e.target.value)}
                           onBlur={(e) => formatarValorReceita(item.id, e.target.value)}
@@ -7759,6 +7771,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         <Input
                           type="text"
                           inputMode="decimal"
+                          autoComplete="off"
+                          autoCapitalize="off"
+                          autoCorrect="off"
+                          spellCheck={false}
                           value={item.valor}
                           onChange={(e) => atualizarDespesa(item.id, 'valor', e.target.value)}
                           onBlur={(e) => formatarValorDespesa(item.id, e.target.value)}
