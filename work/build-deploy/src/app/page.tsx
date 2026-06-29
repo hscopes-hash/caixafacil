@@ -7398,8 +7398,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const dataFormatada = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear().toString().slice(-2)} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
 
   return (
-    <div className="space-y-4">
-      {/* Decoy oculto para evitar que Chrome detecte campos de senha e mostre a barra de autofill */}
+    <form autoComplete="off" onSubmit={(e) => e.preventDefault()} className="space-y-4" style={{ width: '100%' }}>
+      {/* Decoy oculto para evitar que Chrome detecte campos de senha e mostre a barra de autofill.
+          DEVE ser o primeiro input do form para o Chrome 'satisfer' sua detecção de login. */}
       <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true">
         <input type="text" name="fake-username" tabIndex={-1} autoComplete="username" readOnly />
         <input type="password" name="fake-password" tabIndex={-1} autoComplete="current-password" readOnly />
@@ -9846,11 +9847,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   </Button>
                 </div>
               )}
-            </DialogContent>
+          </DialogContent>
           </Dialog>
         </>
       ) : null}
-    </div>
+    </form>
   );
 }
 
