@@ -7399,6 +7399,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
   return (
     <div className="space-y-4">
+      {/* Decoy oculto para evitar que Chrome detecte campos de senha e mostre a barra de autofill */}
+      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true">
+        <input type="text" name="fake-username" tabIndex={-1} autoComplete="username" readOnly />
+        <input type="password" name="fake-password" tabIndex={-1} autoComplete="current-password" readOnly />
+      </div>
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-foreground">
           {modoOperacao === 'COBRANCA' ? 'COBRANÇAS' : modoOperacao === 'LEITURA' ? 'LEITURAS' : 'AJUSTES'}
@@ -7549,7 +7554,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         inputMode="numeric"
                         pattern="[0-9]*"
                         name={`entrada-${maquina.id}-naopassword`}
-                        autoComplete="off"
+                        autoComplete="new-password"
                         autoCapitalize="off"
                         autoCorrect="off"
                         spellCheck={false}
@@ -7571,7 +7576,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       inputMode="numeric"
                       pattern="[0-9]*"
                       name={`ent-atual-${maquina.id}`}
-                      autoComplete="off"
+                      autoComplete="new-password"
                       value={maquina.entradaAtual || 0}
                       disabled
                       className="bg-field-bg border-field-border text-foreground text-right pr-2 h-10 font-mono no-spinners"
@@ -7582,7 +7587,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       inputMode="numeric"
                       pattern="[0-9]*"
                       name={`ent-diff-${maquina.id}`}
-                      autoComplete="off"
+                      autoComplete="new-password"
                       value={maquina.novaEntrada ? maquina.diferencaEntrada : 0}
                       disabled
                       className="text-right pr-2 h-10 font-mono no-spinners bg-muted border-border text-foreground"
@@ -7598,7 +7603,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         inputMode="numeric"
                         pattern="[0-9]*"
                         name={`saida-${maquina.id}-naopassword`}
-                        autoComplete="off"
+                        autoComplete="new-password"
                         autoCapitalize="off"
                         autoCorrect="off"
                         spellCheck={false}
@@ -7620,7 +7625,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       inputMode="numeric"
                       pattern="[0-9]*"
                       name={`sai-atual-${maquina.id}`}
-                      autoComplete="off"
+                      autoComplete="new-password"
                       value={maquina.saidaAtual || 0}
                       disabled
                       className="bg-field-bg border-field-border text-foreground text-right pr-2 h-10 font-mono no-spinners"
@@ -7631,7 +7636,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       inputMode="numeric"
                       pattern="[0-9]*"
                       name={`sai-diff-${maquina.id}`}
-                      autoComplete="off"
+                      autoComplete="new-password"
                       value={maquina.novaSaida ? maquina.diferencaSaida : 0}
                       disabled
                       className="text-right pr-2 h-10 font-mono no-spinners bg-muted border-border text-foreground"
@@ -7686,7 +7691,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         <Input
                           type="text"
                           inputMode="decimal"
-                          autoComplete="off"
+                          autoComplete="new-password"
                           autoCapitalize="off"
                           autoCorrect="off"
                           spellCheck={false}
@@ -7789,7 +7794,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         <Input
                           type="text"
                           inputMode="decimal"
-                          autoComplete="off"
+                          autoComplete="new-password"
                           autoCapitalize="off"
                           autoCorrect="off"
                           spellCheck={false}
