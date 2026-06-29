@@ -7548,10 +7548,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
+                        name={`entrada-${maquina.id}-naopassword`}
                         autoComplete="off"
                         autoCapitalize="off"
                         autoCorrect="off"
                         spellCheck={false}
+                        data-lpignore="true"
+                        data-1p-ignore
+                        data-form-type="other"
+                        data-protonpass-ignore
                         value={maquina.novaEntrada}
                         onChange={(e) => handleNovaEntrada(index, e.target.value)}
                         onBlur={() => validateNovaEntrada(index)}
@@ -7565,6 +7570,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       type="text"
                       inputMode="numeric"
                       pattern="[0-9]*"
+                      name={`ent-atual-${maquina.id}`}
+                      autoComplete="off"
                       value={maquina.entradaAtual || 0}
                       disabled
                       className="bg-field-bg border-field-border text-foreground text-right pr-2 h-10 font-mono no-spinners"
@@ -7574,6 +7581,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       type="text"
                       inputMode="numeric"
                       pattern="[0-9]*"
+                      name={`ent-diff-${maquina.id}`}
+                      autoComplete="off"
                       value={maquina.novaEntrada ? maquina.diferencaEntrada : 0}
                       disabled
                       className="text-right pr-2 h-10 font-mono no-spinners bg-muted border-border text-foreground"
@@ -7588,10 +7597,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
+                        name={`saida-${maquina.id}-naopassword`}
                         autoComplete="off"
                         autoCapitalize="off"
                         autoCorrect="off"
                         spellCheck={false}
+                        data-lpignore="true"
+                        data-1p-ignore
+                        data-form-type="other"
+                        data-protonpass-ignore
                         value={maquina.novaSaida}
                         onChange={(e) => handleNovaSaida(index, e.target.value)}
                         onBlur={() => validateNovaSaida(index)}
@@ -7605,6 +7619,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       type="text"
                       inputMode="numeric"
                       pattern="[0-9]*"
+                      name={`sai-atual-${maquina.id}`}
+                      autoComplete="off"
                       value={maquina.saidaAtual || 0}
                       disabled
                       className="bg-field-bg border-field-border text-foreground text-right pr-2 h-10 font-mono no-spinners"
@@ -7614,6 +7630,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       type="text"
                       inputMode="numeric"
                       pattern="[0-9]*"
+                      name={`sai-diff-${maquina.id}`}
+                      autoComplete="off"
                       value={maquina.novaSaida ? maquina.diferencaSaida : 0}
                       disabled
                       className="text-right pr-2 h-10 font-mono no-spinners bg-muted border-border text-foreground"
