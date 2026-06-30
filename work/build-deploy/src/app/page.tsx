@@ -9228,10 +9228,54 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       alt="Foto ampliada"
                       className="max-w-full max-h-full object-contain select-none"
                       draggable={false}
+                      style={{ touchAction: 'none' }}
+                      onTouchStart={(e) => {
+                        if (e.touches.length === 2) {
+                          e.preventDefault();
+                          const t1 = e.touches[0];
+                          const t2 = e.touches[1];
+                          pinchStartDistance.current = Math.sqrt(
+                            Math.pow(t2.clientX - t1.clientX, 2) +
+                            Math.pow(t2.clientY - t1.clientY, 2)
+                          );
+                          pinchStartZoom.current = zoomFotoRef.current;
+                        }
+                      }}
+                      onTouchMove={(e) => {
+                        if (e.touches.length === 2 && pinchStartDistance.current > 0) {
+                          e.preventDefault();
+                          const t1 = e.touches[0];
+                          const t2 = e.touches[1];
+                          const currentDistance = Math.sqrt(
+                            Math.pow(t2.clientX - t1.clientX, 2) +
+                            Math.pow(t2.clientY - t1.clientY, 2)
+                          );
+                          const scale = currentDistance / pinchStartDistance.current;
+                          const newZoom = Math.min(5, Math.max(0.5, pinchStartZoom.current * scale));
+                          zoomFotoRef.current = newZoom;
+                          setZoomFoto(newZoom);
+                        }
+                      }}
+                      onTouchEnd={() => {
+                        pinchStartDistance.current = 0;
+                      }}
                       onWheel={(e) => {
                         e.preventDefault();
                         const delta = e.deltaY > 0 ? -0.2 : 0.2;
-                        setZoomFoto(prev => Math.min(5, Math.max(0.5, prev + delta)));
+                        const novo = Math.min(5, Math.max(0.5, zoomFotoRef.current + delta));
+                        zoomFotoRef.current = novo;
+                        setZoomFoto(novo);
+                      }}
+                      onDoubleClick={(e) => {
+                        e.preventDefault();
+                        // Duplo clique alterna entre 1x e 2x
+                        if (zoomFotoRef.current === 1) {
+                          zoomFotoRef.current = 2;
+                          setZoomFoto(2);
+                        } else {
+                          zoomFotoRef.current = 1;
+                          setZoomFoto(1);
+                        }
                       }}
                     />
                   </div>
