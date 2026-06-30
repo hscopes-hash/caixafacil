@@ -9268,14 +9268,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       }}
                       onDoubleClick={(e) => {
                         e.preventDefault();
-                        // Duplo clique alterna entre 1x e 2x
-                        if (zoomFotoRef.current === 1) {
-                          zoomFotoRef.current = 2;
-                          setZoomFoto(2);
-                        } else {
-                          zoomFotoRef.current = 1;
-                          setZoomFoto(1);
-                        }
+                        // Duplo clique aumenta zoom em 10% (1.1x) cada vez
+                        const novo = Math.min(5, zoomFotoRef.current + 0.1);
+                        zoomFotoRef.current = novo;
+                        setZoomFoto(novo);
                       }}
                     />
                   </div>
