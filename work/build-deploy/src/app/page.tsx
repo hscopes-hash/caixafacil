@@ -3880,8 +3880,36 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setNumpadOpen(true);
   };
 
+  // ============================================
+  // CLIQUE AUDÍVEL para o numpad (vibração + beep via Web Audio API)
+  // ============================================
+  const numpadClickSound = useCallback(() => {
+    // Vibração (se suportado)
+    try { if (navigator.vibrate) navigator.vibrate(15); } catch {}
+    // Beep via Web Audio API (oscilador curto, não precisa de arquivo de áudio)
+    try {
+      const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext);
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+        oscillator.connect(gain);
+        gain.connect(ctx.destination);
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 800; // 800 Hz - som de "click"
+        gain.gain.setValueAtTime(0.15, ctx.currentTime); // volume baixo
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08); // decay
+        oscillator.start(ctx.currentTime);
+        oscillator.stop(ctx.currentTime + 0.08);
+        // Fechar contexto após o som para liberar recursos
+        setTimeout(() => { try { ctx.close(); } catch {} }, 200);
+      }
+    } catch {}
+  }, []);
+
   // Adiciona um dígito ao valor do numpad
   const numpadAddDigit = (digit: string) => {
+    numpadClickSound();
     setNumpadValue(prev => {
       // Evitar zeros à esquerda (exceto se valor for vazio e digito for 0)
       if (prev === '' && digit === '0') return '0';
@@ -3892,11 +3920,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
   // Remove o último dígito (backspace)
   const numpadBackspace = () => {
+    numpadClickSound();
     setNumpadValue(prev => prev.slice(0, -1));
   };
 
   // Limpa todo o valor
   const numpadClear = () => {
+    numpadClickSound();
     setNumpadValue('');
   };
 
@@ -9931,7 +9961,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 key={d}
                 type="button"
                 onClick={() => numpadAddDigit(d)}
-                className="bg-muted hover:bg-muted/80 active:bg-amber-500/20 text-foreground text-xl font-bold h-14 rounded-md transition-colors"
+                className="bg-muted hover:bg-muted/80 active:bg-amber-500/20 text-foreground text-3xl font-bold h-16 rounded-md transition-colors"
               >
                 {d}
               </button>
@@ -9939,7 +9969,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             <button
               type="button"
               onClick={numpadClear}
-              className="bg-destructive/10 hover:bg-destructive/20 text-destructive text-sm font-bold h-14 rounded-md transition-colors flex items-center justify-center"
+              className="bg-destructive/10 hover:bg-destructive/20 text-destructive text-sm font-bold h-16 rounded-md transition-colors flex items-center justify-center"
               title="Limpar"
             >
               LIMPAR
@@ -9947,17 +9977,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             <button
               type="button"
               onClick={() => numpadAddDigit('0')}
-              className="bg-muted hover:bg-muted/80 active:bg-amber-500/20 text-foreground text-xl font-bold h-14 rounded-md transition-colors"
+              className="bg-muted hover:bg-muted/80 active:bg-amber-500/20 text-foreground text-3xl font-bold h-16 rounded-md transition-colors"
             >
               0
             </button>
             <button
               type="button"
               onClick={numpadBackspace}
-              className="bg-muted hover:bg-muted/80 active:bg-amber-500/20 text-foreground h-14 rounded-md transition-colors flex items-center justify-center"
+              className="bg-muted hover:bg-muted/80 active:bg-amber-500/20 text-foreground h-16 rounded-md transition-colors flex items-center justify-center"
               title="Apagar"
             >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l-7-7 7-7M19 12H5" transform="rotate(180 12 12)" />
               </svg>
             </button>
