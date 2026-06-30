@@ -13,6 +13,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Garantir que as colunas novas existem antes de fazer findUnique
+    await ensureSchema();
+
     const { id } = await params;
 
     const cliente = await db.cliente.findUnique({

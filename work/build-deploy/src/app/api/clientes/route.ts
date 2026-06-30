@@ -11,6 +11,10 @@ async function ensureSchema() {
 // Listar clientes da empresa
 export async function GET(request: NextRequest) {
   try {
+    // Garantir que as colunas novas existem antes de fazer findMany
+    // (sem isso, Prisma falha se a migration não rodou)
+    await ensureSchema();
+
     const { searchParams } = new URL(request.url);
     const empresaId = searchParams.get('empresaId');
     const busca = searchParams.get('busca');
