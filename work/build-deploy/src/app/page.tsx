@@ -3891,10 +3891,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
   // Abre o numpad para um campo específico de uma máquina
   const abrirNumpad = (maquina: MaquinaLeitura, campo: 'entrada' | 'saida') => {
-    // Verifica liberação de digitação: cliente tem prioridade sobre empresa
-    const liberado = clienteSelecionado?.liberarDigitacaoLeitura !== false && empresa?.permitirDigitacaoLeitura !== false;
-    if (!liberado) {
-      toast.info('Digitação desativada para este cliente. Use o processamento de foto (OCR).');
+    // Verifica liberação de digitação: apenas no nível do cliente
+    // (empresa não controla mais isso — remoção solicitada pelo usuário)
+    if (clienteSelecionado?.liberarDigitacaoLeitura === false) {
+      toast.info('Digitação desativada para este cliente. Use o ícone da câmera para tirar foto e processar via OCR.');
       return;
     }
     setNumpadMaquinaId(maquina.id);
@@ -7690,8 +7690,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     <button
                       type="button"
                       onClick={() => abrirNumpad(maquina, 'entrada')}
-                      disabled={clienteSelecionado?.liberarDigitacaoLeitura === false || empresa?.permitirDigitacaoLeitura === false}
-                      className={`relative bg-muted border border-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners rounded-md flex items-center justify-end ${(clienteSelecionado?.liberarDigitacaoLeitura === false || empresa?.permitirDigitacaoLeitura === false) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted/80 active:bg-muted/60'}`}
+                      disabled={clienteSelecionado?.liberarDigitacaoLeitura === false}
+                      className={`relative bg-muted border border-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners rounded-md flex items-center justify-end ${clienteSelecionado?.liberarDigitacaoLeitura === false ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted/80 active:bg-muted/60'}`}
                     >
                       <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground font-bold">E</span>
                       <span className={maquina.novaEntrada ? '' : 'text-muted-foreground/50'}>
@@ -7727,8 +7727,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     <button
                       type="button"
                       onClick={() => abrirNumpad(maquina, 'saida')}
-                      disabled={clienteSelecionado?.liberarDigitacaoLeitura === false || empresa?.permitirDigitacaoLeitura === false}
-                      className={`relative bg-muted border border-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners rounded-md flex items-center justify-end ${(clienteSelecionado?.liberarDigitacaoLeitura === false || empresa?.permitirDigitacaoLeitura === false) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted/80 active:bg-muted/60'}`}
+                      disabled={clienteSelecionado?.liberarDigitacaoLeitura === false}
+                      className={`relative bg-muted border border-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners rounded-md flex items-center justify-end ${clienteSelecionado?.liberarDigitacaoLeitura === false ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted/80 active:bg-muted/60'}`}
                     >
                       <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground font-bold">S</span>
                       <span className={maquina.novaSaida ? '' : 'text-muted-foreground/50'}>
