@@ -131,6 +131,7 @@ model Cliente {
   telegramGroupId String?         // ID do grupo Telegram para envio silencioso de foto/extrato (ex: -1001234567890)
   acertoPercentual Int             @default(50)  // Percentual do acerto do cliente (padrão 50%)
   formaCobranca   String?                       // "COBRANCA" ou "LEITURA" — define o modo padrão na tela de cobranças
+  liberarDigitacaoLeitura Boolean @default(true) // Liberar digitação manual da leitura atual? Se false, apenas preenchimento via OCR (foto)
   ativo           Boolean         @default(true)
   bloqueado       Boolean         @default(false)
   motivoBloqueio  String?

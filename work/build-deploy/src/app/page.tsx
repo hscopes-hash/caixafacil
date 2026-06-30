@@ -67,6 +67,7 @@ interface Cliente {
   whatsapp?: string;
   acertoPercentual?: number;
   formaCobranca?: string;
+  liberarDigitacaoLeitura?: boolean;
   ativo: boolean;
   bloqueado: boolean;
   motivoBloqueio?: string;
@@ -1192,6 +1193,7 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
     telegramGroupId: '',
     acertoPercentual: '50',
     formaCobranca: '' as string,
+    liberarDigitacaoLeitura: true as boolean,
   });
 
   useEffect(() => {
@@ -1298,6 +1300,7 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
       telegramGroupId: '',
       acertoPercentual: '50',
       formaCobranca: '',
+      liberarDigitacaoLeitura: true,
     });
     setClienteEditando(null);
   };
@@ -1319,6 +1322,7 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
       telegramGroupId: (cliente as any).telegramGroupId || '',
       acertoPercentual: String(cliente.acertoPercentual ?? 50),
       formaCobranca: cliente.formaCobranca || '',
+      liberarDigitacaoLeitura: (cliente as any).liberarDigitacaoLeitura !== false,
     });
     setDialogOpen(true);
   };
@@ -1463,6 +1467,21 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
                       <option value="LEITURA">Leitura</option>
                     </select>
                     <p className="text-xs text-muted-foreground">Define o modo padrão ao selecionar este cliente</p>
+                  </div>
+                </div>
+                {/* Liberar digitação de leitura */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Liberar digitação de leitura</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Se desativado, os campos ATUAL (entrada/saída) só podem ser preenchidos via processamento de foto (OCR).
+                      </p>
+                    </div>
+                    <Switch
+                      checked={formData.liberarDigitacaoLeitura !== false}
+                      onCheckedChange={(checked) => setFormData({ ...formData, liberarDigitacaoLeitura: checked })}
+                    />
                   </div>
                 </div>
               </div>
@@ -3872,7 +3891,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
   // Abre o numpad para um campo específico de uma máquina
   const abrirNumpad = (maquina: MaquinaLeitura, campo: 'entrada' | 'saida') => {
-    if (empresa?.permitirDigitacaoLeitura === false) return;
+    // Verifica liberação de digitação: cliente tem prioridade sobre empresa
+    const liberado = clienteSelecionado?.liberarDigitacaoLeitura !== false && empresa?.permitirDigitacaoLeitura !== false;
+    if (!liberado) {
+      toast.info('Digitação desativada para este cliente. Use o processamento de foto (OCR).');
+      return;
+    }
     setNumpadMaquinaId(maquina.id);
     setNumpadMaquinaCodigo(maquina.codigo);
     setNumpadCampo(campo);
@@ -3884,13 +3908,20 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   // CLIQUE AUDÍVEL para o numpad (vibração + beep via Web Audio API)
   // ============================================
   const numpadClickSound = useCallback(() => {
-    // Vibração (se suportado)
-    try { if (navigator.vibrate) navigator.vibrate(15); } catch {}
+    // Vibração — tenta 3 padrões diferentes para máxima compatibilidade
+    try {
+      if (navigator.vibrate) {
+        // Padrão simples + curto (compatível com maioria dos Androids)
+        navigator.vibrate(20);
+      }
+    } catch {}
     // Beep via Web Audio API (oscilador curto, não precisa de arquivo de áudio)
     try {
       const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext);
       if (AudioCtx) {
         const ctx = new AudioCtx();
+        // Alguns navegadores exigem resume() se o contexto foi suspenso
+        if (ctx.state === 'suspended') { try { ctx.resume(); } catch {} }
         const oscillator = ctx.createOscillator();
         const gain = ctx.createGain();
         oscillator.connect(gain);
@@ -7659,8 +7690,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     <button
                       type="button"
                       onClick={() => abrirNumpad(maquina, 'entrada')}
-                      disabled={empresa?.permitirDigitacaoLeitura === false}
-                      className={`relative bg-muted border border-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners rounded-md flex items-center justify-end ${empresa?.permitirDigitacaoLeitura === false ? 'opacity-70 cursor-not-allowed' : 'hover:bg-muted/80 active:bg-muted/60'}`}
+                      disabled={clienteSelecionado?.liberarDigitacaoLeitura === false || empresa?.permitirDigitacaoLeitura === false}
+                      className={`relative bg-muted border border-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners rounded-md flex items-center justify-end ${(clienteSelecionado?.liberarDigitacaoLeitura === false || empresa?.permitirDigitacaoLeitura === false) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted/80 active:bg-muted/60'}`}
                     >
                       <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground font-bold">E</span>
                       <span className={maquina.novaEntrada ? '' : 'text-muted-foreground/50'}>
@@ -7696,8 +7727,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     <button
                       type="button"
                       onClick={() => abrirNumpad(maquina, 'saida')}
-                      disabled={empresa?.permitirDigitacaoLeitura === false}
-                      className={`relative bg-muted border border-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners rounded-md flex items-center justify-end ${empresa?.permitirDigitacaoLeitura === false ? 'opacity-70 cursor-not-allowed' : 'hover:bg-muted/80 active:bg-muted/60'}`}
+                      disabled={clienteSelecionado?.liberarDigitacaoLeitura === false || empresa?.permitirDigitacaoLeitura === false}
+                      className={`relative bg-muted border border-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners rounded-md flex items-center justify-end ${(clienteSelecionado?.liberarDigitacaoLeitura === false || empresa?.permitirDigitacaoLeitura === false) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted/80 active:bg-muted/60'}`}
                     >
                       <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground font-bold">S</span>
                       <span className={maquina.novaSaida ? '' : 'text-muted-foreground/50'}>

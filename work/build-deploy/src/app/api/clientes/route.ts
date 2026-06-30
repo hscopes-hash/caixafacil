@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { enforcePlan } from '@/lib/plan-enforcement';
 
-// Garantir coluna formaCobranca
+// Garantir coluna formaCobranca e liberarDigitacaoLeitura
 async function ensureSchema() {
   try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "formaCobranca" TEXT`); } catch {}
+  try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "liberarDigitacaoLeitura" BOOLEAN NOT NULL DEFAULT true`); } catch {}
 }
 
 // Listar clientes da empresa
@@ -73,6 +74,7 @@ export async function POST(request: NextRequest) {
       empresaId,
       acertoPercentual,
       formaCobranca,
+      liberarDigitacaoLeitura,
     } = body;
 
     if (!nome || !empresaId) {
@@ -125,6 +127,7 @@ export async function POST(request: NextRequest) {
         empresaId,
         acertoPercentual: acerto,
         ...(formaCobranca ? { formaCobranca } : {}),
+        liberarDigitacaoLeitura: liberarDigitacaoLeitura !== undefined ? Boolean(liberarDigitacaoLeitura) : true,
       },
     });
 

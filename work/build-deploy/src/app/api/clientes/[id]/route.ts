@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
-// Garantir coluna formaCobranca
+// Garantir coluna formaCobranca e liberarDigitacaoLeitura
 async function ensureSchema() {
   try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "formaCobranca" TEXT`); } catch {}
+  try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "liberarDigitacaoLeitura" BOOLEAN NOT NULL DEFAULT true`); } catch {}
 }
 
 // Buscar cliente por ID
@@ -72,6 +73,7 @@ export async function PUT(
       ativo,
       acertoPercentual,
       formaCobranca,
+      liberarDigitacaoLeitura,
     } = body;
 
     const data: Record<string, unknown> = {};
@@ -100,6 +102,7 @@ export async function PUT(
       }
     }
     if (formaCobranca !== undefined) data.formaCobranca = formaCobranca;
+    if (liberarDigitacaoLeitura !== undefined) data.liberarDigitacaoLeitura = Boolean(liberarDigitacaoLeitura);
 
     const cliente = await db.cliente.update({
       where: { id },
