@@ -2883,6 +2883,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [resumoTelegramEnviado, setResumoTelegramEnviado] = useState(false);
   const [maquinaFoto, setMaquinaFoto] = useState<MaquinaLeitura | null>(null);
   const [fotoCapturada, setFotoCapturada] = useState<string | null>(null);
+  // ⚠️ Numpad customizado — substitui inputs nativos para evitar barra de senhas do Chrome
+  const [numpadOpen, setNumpadOpen] = useState(false);
+  const [numpadCampo, setNumpadCampo] = useState<'entrada' | 'saida' | null>(null);
+  const [numpadMaquinaId, setNumpadMaquinaId] = useState<string | null>(null);
+  const [numpadMaquinaCodigo, setNumpadMaquinaCodigo] = useState<string>('');
+  const [numpadValue, setNumpadValue] = useState<string>('');
   // ⚠️ Ref para a foto COM tarja vermelha — evita race condition com estado assíncrono
   // Usado em aplicarLeituraExtraida() para garantir que fotoProcessada sempre tenha tarja
   const fotoComTarjaRef = useRef<string | null>(null);
@@ -3857,6 +3863,77 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         saidaRefs.current[index]?.focus();
       }, 100);
     }
+  };
+
+  // ============================================
+  // NUMPAD CUSTOMIZADO — substitui inputs nativos
+  // para evitar barra de senhas do Chrome Android
+  // ============================================
+
+  // Abre o numpad para um campo específico de uma máquina
+  const abrirNumpad = (maquina: MaquinaLeitura, campo: 'entrada' | 'saida') => {
+    if (empresa?.permitirDigitacaoLeitura === false) return;
+    setNumpadMaquinaId(maquina.id);
+    setNumpadMaquinaCodigo(maquina.codigo);
+    setNumpadCampo(campo);
+    setNumpadValue(campo === 'entrada' ? maquina.novaEntrada : maquina.novaSaida);
+    setNumpadOpen(true);
+  };
+
+  // Adiciona um dígito ao valor do numpad
+  const numpadAddDigit = (digit: string) => {
+    setNumpadValue(prev => {
+      // Evitar zeros à esquerda (exceto se valor for vazio e digito for 0)
+      if (prev === '' && digit === '0') return '0';
+      if (prev === '0' && digit !== '') return digit;
+      return prev + digit;
+    });
+  };
+
+  // Remove o último dígito (backspace)
+  const numpadBackspace = () => {
+    setNumpadValue(prev => prev.slice(0, -1));
+  };
+
+  // Limpa todo o valor
+  const numpadClear = () => {
+    setNumpadValue('');
+  };
+
+  // Confirma o valor e aplica na máquina
+  const numpadConfirm = () => {
+    if (!numpadMaquinaId || !numpadCampo) return;
+    const index = maquinas.findIndex(m => m.id === numpadMaquinaId);
+    if (index === -1) return;
+    if (numpadCampo === 'entrada') {
+      handleNovaEntrada(index, numpadValue);
+      // Validar entrada
+      const novaEntradaNum = parseInt(numpadValue) || 0;
+      const entradaAtual = maquinas[index].entradaAtual || 0;
+      if (numpadValue && novaEntradaNum < entradaAtual) {
+        toast.warning(`Entrada ${novaEntradaNum} menor que anterior ${entradaAtual}. Verifique.`);
+      }
+    } else {
+      handleNovaSaida(index, numpadValue);
+      // Validar saída
+      const novaSaidaNum = parseInt(numpadValue) || 0;
+      const saidaAtual = maquinas[index].saidaAtual || 0;
+      if (numpadValue && novaSaidaNum < saidaAtual) {
+        toast.warning(`Saída ${novaSaidaNum} menor que anterior ${saidaAtual}. Verifique.`);
+      }
+    }
+    setNumpadOpen(false);
+    setNumpadCampo(null);
+    setNumpadMaquinaId(null);
+    setNumpadValue('');
+  };
+
+  // Cancela o numpad sem aplicar
+  const numpadCancel = () => {
+    setNumpadOpen(false);
+    setNumpadCampo(null);
+    setNumpadMaquinaId(null);
+    setNumpadValue('');
   };
 
   // Função para repetir leitura anterior (copia ANTERIOR para ATUAL)
@@ -7548,30 +7625,18 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   </div>
                   {/* Linha Entrada */}
                   <div className={`grid gap-2 mb-2 ${modoOperacao === 'AJUSTE' ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                    <div className="relative">
+                    {/* ATUAL (editável) — botão que abre numpad customizado (evita barra de senhas do Chrome) */}
+                    <button
+                      type="button"
+                      onClick={() => abrirNumpad(maquina, 'entrada')}
+                      disabled={empresa?.permitirDigitacaoLeitura === false}
+                      className={`relative bg-muted border border-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners rounded-md flex items-center justify-end ${empresa?.permitirDigitacaoLeitura === false ? 'opacity-70 cursor-not-allowed' : 'hover:bg-muted/80 active:bg-muted/60'}`}
+                    >
                       <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground font-bold">E</span>
-                      <Input
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        name={`entrada-${maquina.id}-naopassword`}
-                        autoComplete="new-password"
-                        autoCapitalize="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        data-lpignore="true"
-                        data-1p-ignore
-                        data-form-type="other"
-                        data-protonpass-ignore
-                        value={maquina.novaEntrada}
-                        onChange={(e) => handleNovaEntrada(index, e.target.value)}
-                        onBlur={() => validateNovaEntrada(index)}
-                        ref={(el) => { entradaRefs.current[index] = el; }}
-                        className={`bg-muted border-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners ${empresa?.permitirDigitacaoLeitura === false ? 'opacity-70 cursor-not-allowed' : ''}`}
-                        placeholder="0"
-                        readOnly={empresa?.permitirDigitacaoLeitura === false}
-                      />
-                    </div>
+                      <span className={maquina.novaEntrada ? '' : 'text-muted-foreground/50'}>
+                        {maquina.novaEntrada || '0'}
+                      </span>
+                    </button>
                     <Input
                       type="text"
                       inputMode="numeric"
@@ -7597,30 +7662,18 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   </div>
                   {/* Linha Saída */}
                   <div className={`grid gap-2 ${modoOperacao === 'AJUSTE' ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                    <div className="relative">
+                    {/* ATUAL (editável) — botão que abre numpad customizado */}
+                    <button
+                      type="button"
+                      onClick={() => abrirNumpad(maquina, 'saida')}
+                      disabled={empresa?.permitirDigitacaoLeitura === false}
+                      className={`relative bg-muted border border-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners rounded-md flex items-center justify-end ${empresa?.permitirDigitacaoLeitura === false ? 'opacity-70 cursor-not-allowed' : 'hover:bg-muted/80 active:bg-muted/60'}`}
+                    >
                       <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground font-bold">S</span>
-                      <Input
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        name={`saida-${maquina.id}-naopassword`}
-                        autoComplete="new-password"
-                        autoCapitalize="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        data-lpignore="true"
-                        data-1p-ignore
-                        data-form-type="other"
-                        data-protonpass-ignore
-                        value={maquina.novaSaida}
-                        onChange={(e) => handleNovaSaida(index, e.target.value)}
-                        onBlur={() => validateNovaSaida(index)}
-                        ref={(el) => { saidaRefs.current[index] = el; }}
-                        className={`bg-muted border-border text-foreground text-right pr-2 pl-6 h-10 font-mono no-spinners ${empresa?.permitirDigitacaoLeitura === false ? 'opacity-70 cursor-not-allowed' : ''}`}
-                        placeholder="0"
-                        readOnly={empresa?.permitirDigitacaoLeitura === false}
-                      />
-                    </div>
+                      <span className={maquina.novaSaida ? '' : 'text-muted-foreground/50'}>
+                        {maquina.novaSaida || '0'}
+                      </span>
+                    </button>
                     <Input
                       type="text"
                       inputMode="numeric"
@@ -9851,6 +9904,85 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           </Dialog>
         </>
       ) : null}
+
+      {/* ============================================
+          NUMPAD CUSTOMIZADO — teclado numérico próprio
+          Substitui inputs nativos para evitar barra de senhas do Chrome
+          ============================================ */}
+      <Dialog open={numpadOpen} onOpenChange={(open) => { if (!open) numpadCancel(); }}>
+        <DialogContent className="bg-card border-border text-foreground max-w-xs p-0 gap-0 overflow-hidden">
+          <DialogHeader className="p-4 pb-2">
+            <DialogTitle className="text-center text-base">
+              {numpadCampo === 'entrada' ? 'ENTRADA' : 'SAÍDA'} — {numpadMaquinaCodigo}
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Display do valor */}
+          <div className="px-4 pb-3">
+            <div className="bg-muted border border-border rounded-md h-14 flex items-center justify-end pr-4 font-mono text-2xl text-foreground">
+              {numpadValue || <span className="text-muted-foreground/50">0</span>}
+            </div>
+          </div>
+
+          {/* Teclado numérico 3x4 */}
+          <div className="grid grid-cols-3 gap-1 p-3 pt-0">
+            {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => numpadAddDigit(d)}
+                className="bg-muted hover:bg-muted/80 active:bg-amber-500/20 text-foreground text-xl font-bold h-14 rounded-md transition-colors"
+              >
+                {d}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={numpadClear}
+              className="bg-destructive/10 hover:bg-destructive/20 text-destructive text-sm font-bold h-14 rounded-md transition-colors flex items-center justify-center"
+              title="Limpar"
+            >
+              LIMPAR
+            </button>
+            <button
+              type="button"
+              onClick={() => numpadAddDigit('0')}
+              className="bg-muted hover:bg-muted/80 active:bg-amber-500/20 text-foreground text-xl font-bold h-14 rounded-md transition-colors"
+            >
+              0
+            </button>
+            <button
+              type="button"
+              onClick={numpadBackspace}
+              className="bg-muted hover:bg-muted/80 active:bg-amber-500/20 text-foreground h-14 rounded-md transition-colors flex items-center justify-center"
+              title="Apagar"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l-7-7 7-7M19 12H5" transform="rotate(180 12 12)" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Botões Confirmar / Cancelar */}
+          <div className="grid grid-cols-2 gap-2 p-3 pt-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={numpadCancel}
+              className="h-12"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={numpadConfirm}
+              className="h-12 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700"
+            >
+              Confirmar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </form>
   );
 }
