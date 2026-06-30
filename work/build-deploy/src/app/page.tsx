@@ -3522,6 +3522,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   // Refs para controlar o pinch zoom
   const pinchStartDistance = useRef(0);
   const pinchStartZoom = useRef(1);
+  // Ref para manter o zoom atual sempre atualizado (evita closure stale no useEffect)
+  const zoomFotoRef = useRef(1);
   
   // Efeito para gerenciar pinch zoom
   useEffect(() => {
@@ -3537,7 +3539,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           Math.pow(touch2.clientX - touch1.clientX, 2) +
           Math.pow(touch2.clientY - touch1.clientY, 2)
         );
-        pinchStartZoom.current = zoomFoto;
+        // Usa ref para pegar valor sempre atualizado (evita closure stale)
+        pinchStartZoom.current = zoomFotoRef.current;
       }
     };
 
@@ -3552,6 +3555,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         );
         const scale = currentDistance / pinchStartDistance.current;
         const newZoom = Math.min(5, Math.max(0.5, pinchStartZoom.current * scale));
+        zoomFotoRef.current = newZoom;
         setZoomFoto(newZoom);
       }
       // Com 1 dedo: scroll nativo (sem preventDefault)
@@ -4996,24 +5000,31 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const handleDuploCliqueFoto = () => {
     if (fotoCapturada) {
       setFotoTelaCheia(true);
+      zoomFotoRef.current = 1;
       setZoomFoto(1);
     }
   };
 
   const handleDuploCliqueTelaCheia = () => {
     setFotoTelaCheia(false);
+    zoomFotoRef.current = 1;
     setZoomFoto(1);
   };
 
   const aumentarZoom = () => {
-    setZoomFoto(prev => Math.min(prev + 0.5, 5));
+    const novo = Math.min(zoomFotoRef.current + 0.5, 5);
+    zoomFotoRef.current = novo;
+    setZoomFoto(novo);
   };
 
   const diminuirZoom = () => {
-    setZoomFoto(prev => Math.max(prev - 0.5, 0.5));
+    const novo = Math.max(zoomFotoRef.current - 0.5, 0.5);
+    zoomFotoRef.current = novo;
+    setZoomFoto(novo);
   };
 
   const resetarZoom = () => {
+    zoomFotoRef.current = 1;
     setZoomFoto(1);
   };
 
@@ -9202,6 +9213,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               <div
                 ref={imageContainerRef}
                 className="flex-1 overflow-auto"
+                style={{ touchAction: 'none' }}
               >
                 {fotoCapturada && (
                   <div
