@@ -288,6 +288,53 @@ export async function tryVertexAIRegion(
 }
 
 // ============================================
+// STREAMING — para chat em tempo real (baixa latência)
+// Usa endpoint streamGenerateContent do Vertex AI
+// Retorna chunks de texto conforme são gerados pelo modelo
+// ============================================
+export async function tryVertexAIRegionStream(
+  region: string,
+  accessToken: string,
+  model: string,
+  contents: any[],
+  generationConfig: Record<string, any>,
+  signal: AbortSignal,
+): Promise<ReadableStream<Uint8Array> | null> {
+  // Endpoint de streaming: streamGenerateContent (em vez de generateContent)
+  const url = `https://${region}-aiplatform.googleapis.com/v1/projects/${VERTEX_PROJECT}/locations/${region}/publishers/google/models/${model}:streamGenerateContent`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      signal,
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ contents, generationConfig }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      console.warn(`[VERTEX STREAM ${region}] Erro ${response.status}: ${errText.substring(0, 300)}`);
+      return null;
+    }
+
+    if (!response.body) {
+      console.warn(`[VERTEX STREAM ${region}] response.body é nulo`);
+      return null;
+    }
+
+    console.log(`[VERTEX STREAM ${region}] Stream iniciado com modelo ${model}`);
+    return response.body;
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw err;
+    console.warn(`[VERTEX STREAM ${region}] Falha: ${err.message}`);
+    return null;
+  }
+}
+
+// ============================================
 // OPÇÕES DE CHAMADA
 // ============================================
 

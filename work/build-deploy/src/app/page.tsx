@@ -14803,6 +14803,225 @@ function PWAInstallBanner() {
 // MAIN APP COMPONENT
 // ============================================
 // v2.41.0.263
+// ============================================
+// CHAT IA STREAMING MODAL — diálogo em tempo real com baixa latência
+// Usa Vertex AI streamGenerateContent (texto aparece palavra por palavra)
+// ============================================
+function ChatIAStreamModal({ open, onClose, empresaId, usuarioId }: { open: boolean; onClose: () => void; empresaId: string; usuarioId: string }) {
+  const [messages, setMessages] = useState<{ role: 'user' | 'model'; content: string }[]>([]);
+  const [input, setInput] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
+  const abortRef = useRef<AbortController | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Scroll para o final quando novas mensagens chegam
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, streamingText]);
+
+  const enviarMensagem = async () => {
+    if (!input.trim() || isStreaming) return;
+
+    const mensagem = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', content: mensagem }]);
+    setIsStreaming(true);
+    setStreamingText('');
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const res = await fetch('/api/chat-ia/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          mensagem,
+          empresaId,
+          usuarioId,
+          historyMessages: messages.slice(-10),
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Falha na conexão com o Vertex AI');
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('Stream não disponível');
+
+      const decoder = new TextDecoder();
+      let textoCompleto = '';
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const linhas = buffer.split('\n');
+        buffer = linhas.pop() || '';
+
+        for (const linha of linhas) {
+          if (linha.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(linha.substring(6));
+              if (data.text) {
+                textoCompleto += data.text;
+                setStreamingText(textoCompleto);
+              }
+              if (data.done) {
+                // Stream finalizado
+              }
+              if (data.error) {
+                textoCompleto += `\n\n[Erro: ${data.error}]`;
+                setStreamingText(textoCompleto);
+              }
+            } catch {}
+          }
+        }
+      }
+
+      // Adicionar resposta completa às mensagens
+      if (textoCompleto) {
+        setMessages(prev => [...prev, { role: 'model', content: textoCompleto }]);
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        setMessages(prev => [...prev, { role: 'model', content: `Erro: ${err.message}` }]);
+      }
+    } finally {
+      setIsStreaming(false);
+      setStreamingText('');
+      abortRef.current = null;
+    }
+  };
+
+  const pararStream = () => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    if (streamingText) {
+      setMessages(prev => [...prev, { role: 'model', content: streamingText + '\n\n[Interrompido]' }]);
+    }
+    setIsStreaming(false);
+    setStreamingText('');
+  };
+
+  const limparChat = () => {
+    setMessages([]);
+    setStreamingText('');
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="bg-card border-border text-foreground max-w-md h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-border bg-gradient-to-r from-amber-500/10 to-orange-600/10">
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Zap className="w-5 h-5 text-amber-400" />
+              {isStreaming && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              )}
+            </div>
+            <div>
+              <h3 className="font-bold text-foreground text-sm">Chat IA Tempo Real</h3>
+              <p className="text-[10px] text-muted-foreground">Streaming via Vertex AI</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            {messages.length > 0 && (
+              <Button variant="ghost" size="icon" onClick={limparChat} className="h-8 w-8 text-muted-foreground" title="Limpar">
+                <RotateCcw className="w-4 h-4" />
+              </Button>
+            )}
+            <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 text-muted-foreground" title="Fechar">
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Mensagens */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+          {messages.length === 0 && !streamingText && (
+            <div className="text-center text-muted-foreground py-8">
+              <Zap className="w-12 h-12 mx-auto mb-3 text-amber-400/50" />
+              <p className="text-sm font-medium">Especialista CaixaFacil</p>
+              <p className="text-xs mt-1">Faça uma pergunta para começar</p>
+              <div className="mt-4 space-y-1 text-xs text-left bg-muted/50 rounded-lg p-3">
+                <p>• "Contas a receber pendentes"</p>
+                <p>• "Resumo financeiro"</p>
+                <p>• "Listar meus clientes"</p>
+                <p>• "Quanto devo receber?"</p>
+              </div>
+            </div>
+          )}
+          {messages.map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
+                msg.role === 'user'
+                  ? 'bg-amber-500/20 text-foreground border border-amber-500/30'
+                  : 'bg-muted text-foreground border border-border'
+              }`}>
+                <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+              </div>
+            </div>
+          ))}
+          {/* Texto sendo gerado em tempo real */}
+          {streamingText && (
+            <div className="flex justify-start">
+              <div className="max-w-[80%] rounded-lg px-3 py-2 text-sm bg-muted text-foreground border border-border">
+                <p className="whitespace-pre-wrap break-words">
+                  {streamingText}
+                  <span className="inline-block w-2 h-4 bg-amber-400 ml-0.5 animate-pulse" />
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Input */}
+        <div className="p-3 border-t border-border flex gap-2">
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarMensagem(); } }}
+            placeholder="Digite sua pergunta..."
+            disabled={isStreaming}
+            className="bg-muted border-border text-foreground flex-1"
+          />
+          {isStreaming ? (
+            <Button
+              onClick={pararStream}
+              variant="destructive"
+              size="icon"
+              className="shrink-0"
+              title="Parar geração"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          ) : (
+            <Button
+              onClick={enviarMensagem}
+              disabled={!input.trim()}
+              className="shrink-0 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700"
+              title="Enviar"
+            >
+              <Sparkles className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function App() {
   const { usuario, empresa, isAuthenticated, logout, updateEmpresa, preferencias, updatePreferencias } = useAuthStore();
   // Modo quiosque: fullscreen automático após login, re-entra se usuário sair
@@ -14820,6 +15039,7 @@ export default function App() {
   const [assinaturaPlanoNome, setAssinaturaPlanoNome] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showPreferencias, setShowPreferencias] = useState(false);
+  const [chatStreamOpen, setChatStreamOpen] = useState(false);
   const [prefsUiScale, setPrefsUiScale] = useState(1.0);
   const [prefsImpressoraPreset, setPrefsImpressoraPreset] = useState('none');
   const [prefsSalvando, setPrefsSalvando] = useState(false);
@@ -15188,6 +15408,16 @@ export default function App() {
             <span className="text-[10px] text-muted-foreground/60 select-none" title={VERSION_WITH_DATE}>{VERSION_DISPLAY}</span>
           </div>
           <div className="flex items-center gap-1">
+            {/* Botão Chat IA Streaming (tempo real) */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setChatStreamOpen(true)}
+              className="text-amber-400 hover:text-amber-500 hover:bg-amber-500/10 h-8 w-8"
+              title="Chat IA em tempo real"
+            >
+              <Zap className="w-5 h-5" />
+            </Button>
             <button
               onClick={handleOpenPreferencias}
               className="text-right mr-1 hover:opacity-80 transition-opacity"
@@ -15360,6 +15590,14 @@ export default function App() {
       </nav>
       )}
       
+      {/* Chat IA Streaming Modal — tempo real via Vertex AI */}
+      <ChatIAStreamModal
+        open={chatStreamOpen}
+        onClose={() => setChatStreamOpen(false)}
+        empresaId={empresa?.id || ''}
+        usuarioId={usuario?.id || ''}
+      />
+
       {/* Dialog - Minhas Preferencias */}
       <Dialog open={showPreferencias} onOpenChange={setShowPreferencias}>
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
