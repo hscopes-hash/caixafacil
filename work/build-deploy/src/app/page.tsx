@@ -39,7 +39,7 @@ import {
   ClipboardList, Printer, Camera, X, Image as ImageIcon, Layers, MessageCircle, LogIn,
   CalendarDays, ShieldAlert, FileText, Sun, Moon, DatabaseBackup, Download, Upload, HardDrive, SlidersHorizontal,
   Key, Wifi, EyeOff, CreditCard, ExternalLink, ChevronDown, ChevronUp, ChevronLeft, RotateCcw, Crown, Check, CheckCircle2, XCircle, Sparkles, Zap, Shield, Info,
-  Receipt, Mic, MicOff, Send, Volume2, ShoppingCart, ShoppingBag, Maximize2, Minimize2, Monitor, User, Lock, QrCode, BookOpen, Globe, Save, HelpCircle, Landmark, MapPin, Copy, Bot, Calculator, Phone, Smartphone
+  Receipt, Mic, MicOff, Send, Volume2, VolumeX, ShoppingCart, ShoppingBag, Maximize2, Minimize2, Monitor, User, Lock, QrCode, BookOpen, Globe, Save, HelpCircle, Landmark, MapPin, Copy, Bot, Calculator, Phone, Smartphone
 } from 'lucide-react';
 import { VERSION_DISPLAY, VERSION_STRING, VERSION_WITH_DATE } from '@/lib/version';
 import GestaoPlanosSaaS from '@/components/GestaoPlanosSaaS';
@@ -15022,6 +15022,453 @@ function ChatIAStreamModal({ open, onClose, empresaId, usuarioId }: { open: bool
   );
 }
 
+// ============================================
+// CHAT IA VOICE MODAL — conversa por voz estilo Gemini Live
+// Escuta (STT), transcreve, auto-envia no silêncio, responde (stream + TTS),
+// interrompe se usuário voltar a falar. Zero cliques após iniciar.
+// ============================================
+function ChatIAVoiceModal({ open, onClose, empresaId, usuarioId }: { open: boolean; onClose: () => void; empresaId: string; usuarioId: string }) {
+  const [messages, setMessages] = useState<{ role: 'user' | 'model'; content: string }[]>([]);
+  const [transcript, setTranscript] = useState(''); // texto interim (while speaking)
+  const [aiResponse, setAiResponse] = useState(''); // texto streaming da IA
+  const [status, setStatus] = useState<'idle' | 'listening' | 'thinking' | 'speaking'>('idle');
+  const [ttsEnabled, setTtsEnabled] = useState(true);
+  const [error, setError] = useState('');
+
+  const recognitionRef = useRef<any>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const silenceTimerRef = useRef<any>(null);
+  const ttsUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const statusRef = useRef<'idle' | 'listening' | 'thinking' | 'speaking'>('idle');
+  const transcriptRef = useRef(''); // último transcript final acumulado
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Atualiza statusRef quando status muda
+  useEffect(() => { statusRef.current = status; }, [status]);
+
+  // Scroll para o final
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, transcript, aiResponse]);
+
+  // Verificar suporte a SpeechRecognition
+  const getSpeechRecognition = (): any | null => {
+    if (typeof window === 'undefined') return null;
+    return (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  };
+
+  // Parar TTS
+  const stopTTS = () => {
+    try {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    } catch {}
+    ttsUtteranceRef.current = null;
+  };
+
+  // Parar tudo (reconhecimento + streaming + TTS)
+  const stopAll = () => {
+    try { if (recognitionRef.current) recognitionRef.current.stop(); } catch {}
+    if (abortRef.current) {
+      try { abortRef.current.abort(); } catch {}
+      abortRef.current = null;
+    }
+    stopTTS();
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  };
+
+  // Falar resposta via TTS
+  const speakResponse = (text: string) => {
+    if (!ttsEnabled || !text.trim()) return;
+    stopTTS();
+    try {
+      // Limpar texto para TTS (remover JSON se houver)
+      let cleanText = text;
+      const jsonMatch = text.match(/\{[\s\S]*?"acao"[\s\S]*\}/);
+      if (jsonMatch) {
+        cleanText = text.replace(jsonMatch[0], '').trim() || 'Ação executada.';
+      }
+      cleanText = cleanText.replace(/```json[\s\S]*?```/g, '').replace(/```/g, '').trim();
+      if (!cleanText) return;
+
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.lang = 'pt-BR';
+      utterance.rate = 1.1;
+      utterance.pitch = 1.0;
+      utterance.onend = () => {
+        ttsUtteranceRef.current = null;
+        // Após TTS terminar, voltar a escutar (conversa contínua)
+        if (statusRef.current === 'speaking') {
+          startListening();
+        }
+      };
+      utterance.onerror = () => {
+        ttsUtteranceRef.current = null;
+        if (statusRef.current === 'speaking') {
+          startListening();
+        }
+      };
+      ttsUtteranceRef.current = utterance;
+      setStatus('speaking');
+      statusRef.current = 'speaking';
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      // Se TTS falhar, voltar a escutar
+      if (statusRef.current === 'speaking') startListening();
+    }
+  };
+
+  // Enviar mensagem para a IA (streaming)
+  const sendToAI = async (mensagem: string) => {
+    if (!mensagem.trim()) {
+      startListening();
+      return;
+    }
+
+    setMessages(prev => [...prev, { role: 'user', content: mensagem }]);
+    setStatus('thinking');
+    statusRef.current = 'thinking';
+    setAiResponse('');
+    setError('');
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const res = await fetch('/api/chat-ia/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          mensagem,
+          empresaId,
+          usuarioId,
+          historyMessages: messages.slice(-10),
+        }),
+      });
+
+      if (!res.ok) throw new Error('Falha na conexão');
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('Stream não disponível');
+
+      const decoder = new TextDecoder();
+      let textoCompleto = '';
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const linhas = buffer.split('\n');
+        buffer = linhas.pop() || '';
+
+        for (const linha of linhas) {
+          if (linha.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(linha.substring(6));
+              if (data.text) {
+                textoCompleto += data.text;
+                setAiResponse(textoCompleto);
+              }
+              if (data.error) {
+                textoCompleto += `\n\n[Erro: ${data.error}]`;
+                setAiResponse(textoCompleto);
+              }
+            } catch {}
+          }
+        }
+      }
+
+      if (textoCompleto) {
+        setMessages(prev => [...prev, { role: 'model', content: textoCompleto }]);
+        setAiResponse('');
+        // Falar a resposta (TTS) — ao terminar, volta a escutar
+        speakResponse(textoCompleto);
+      } else {
+        startListening();
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        setError(err.message);
+        setStatus('idle');
+        statusRef.current = 'idle';
+      }
+    } finally {
+      abortRef.current = null;
+    }
+  };
+
+  // Iniciar escuta (SpeechRecognition)
+  const startListening = () => {
+    const SpeechRecognition = getSpeechRecognition();
+    if (!SpeechRecognition) {
+      setError('Reconhecimento de voz não suportado neste navegador. Use Chrome no Android.');
+      return;
+    }
+
+    // Parar qualquer reconhecimento/streaming/TTS anterior
+    stopAll();
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'pt-BR';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    transcriptRef.current = '';
+    setTranscript('');
+    setStatus('listening');
+    statusRef.current = 'listening';
+
+    recognition.onresult = (event: any) => {
+      let interimText = '';
+      let finalText = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          finalText += result[0].transcript;
+        } else {
+          interimText += result[0].transcript;
+        }
+      }
+
+      if (finalText) {
+        transcriptRef.current += finalText;
+        setTranscript(transcriptRef.current);
+      } else if (interimText) {
+        setTranscript(transcriptRef.current + interimText);
+      }
+
+      // Resetar timer de silêncio a cada resultado
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      // Se estamos em modo 'speaking' (IA respondendo), interromper!
+      if (statusRef.current === 'speaking' || statusRef.current === 'thinking') {
+        // Usuário voltou a falar — interromper IA
+        stopAll();
+        transcriptRef.current = finalText || interimText;
+        setTranscript(transcriptRef.current);
+        setStatus('listening');
+        statusRef.current = 'listening';
+      }
+
+      // Timer de silêncio: 1.5s sem fala → enviar
+      silenceTimerRef.current = setTimeout(() => {
+        if (statusRef.current === 'listening' && transcriptRef.current.trim()) {
+          const msg = transcriptRef.current.trim();
+          transcriptRef.current = '';
+          setTranscript('');
+          try { recognition.stop(); } catch {}
+          sendToAI(msg);
+        }
+      }, 1500);
+    };
+
+    recognition.onerror = (event: any) => {
+      if (event.error === 'no-speech' || event.error === 'aborted') return;
+      if (event.error === 'not-allowed') {
+        setError('Permissão de microfone negada. Allow acesso ao microfone.');
+      } else {
+        setError('Erro no reconhecimento: ' + event.error);
+      }
+      setStatus('idle');
+      statusRef.current = 'idle';
+    };
+
+    recognition.onend = () => {
+      // Se ainda estamos em modo listening e há transcript, reenviar
+      if (statusRef.current === 'listening' && transcriptRef.current.trim()) {
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = setTimeout(() => {
+          if (statusRef.current === 'listening' && transcriptRef.current.trim()) {
+            const msg = transcriptRef.current.trim();
+            transcriptRef.current = '';
+            setTranscript('');
+            sendToAI(msg);
+          }
+        }, 500);
+      } else if (statusRef.current === 'listening') {
+        // Reconhecimento terminou sem fala — reiniciar se ainda ativo
+        try { recognition.start(); } catch {}
+      }
+    };
+
+    recognitionRef.current = recognition;
+
+    try {
+      recognition.start();
+    } catch (err: any) {
+      setError('Erro ao iniciar microfone: ' + err.message);
+      setStatus('idle');
+      statusRef.current = 'idle';
+    }
+  };
+
+  // Toggle (iniciar/parar)
+  const toggleListening = () => {
+    if (status === 'listening' || status === 'thinking' || status === 'speaking') {
+      stopAll();
+      setStatus('idle');
+      statusRef.current = 'idle';
+      if (transcriptRef.current.trim()) {
+        // Se tinha texto, salvar como mensagem
+        setMessages(prev => [...prev, { role: 'user', content: transcriptRef.current.trim() }]);
+        transcriptRef.current = '';
+        setTranscript('');
+      }
+    } else {
+      startListening();
+    }
+  };
+
+  // Limpar tudo
+  const limparChat = () => {
+    stopAll();
+    setMessages([]);
+    setTranscript('');
+    setAiResponse('');
+    setError('');
+    setStatus('idle');
+    statusRef.current = 'idle';
+  };
+
+  // Cleanup ao fechar
+  useEffect(() => {
+    if (!open) {
+      stopAll();
+      setStatus('idle');
+      statusRef.current = 'idle';
+    }
+  }, [open]);
+
+  const statusInfo = {
+    idle: { label: 'Toque no microfone para começar', color: 'text-muted-foreground', bg: 'bg-muted', pulse: false },
+    listening: { label: 'Ouvindo...', color: 'text-green-400', bg: 'bg-green-500/20', pulse: true },
+    thinking: { label: 'Pensando...', color: 'text-amber-400', bg: 'bg-amber-500/20', pulse: true },
+    speaking: { label: 'Respondendo...', color: 'text-blue-400', bg: 'bg-blue-500/20', pulse: true },
+  }[status];
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="bg-card border-border text-foreground max-w-md h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-border bg-gradient-to-r from-amber-500/10 to-orange-600/10">
+          <div className="flex items-center gap-2">
+            <Mic className="w-5 h-5 text-amber-400" />
+            <div>
+              <h3 className="font-bold text-foreground text-sm">Chat por Voz</h3>
+              <p className="text-[10px] text-muted-foreground">Conversa em tempo real</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            {/* Toggle TTS */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setTtsEnabled(prev => !prev)}
+              className={`h-8 w-8 ${ttsEnabled ? 'text-amber-400' : 'text-muted-foreground/40'}`}
+              title={ttsEnabled ? 'Voz ativa (clique para desativar)' : 'Voz desativada (clique para ativar)'}
+            >
+              {ttsEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            </Button>
+            {messages.length > 0 && (
+              <Button variant="ghost" size="icon" onClick={limparChat} className="h-8 w-8 text-muted-foreground" title="Limpar">
+                <RotateCcw className="w-4 h-4" />
+              </Button>
+            )}
+            <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 text-muted-foreground" title="Fechar">
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Área de mensagens */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+          {messages.length === 0 && !transcript && !aiResponse && !error && (
+            <div className="text-center text-muted-foreground py-8">
+              <Mic className="w-12 h-12 mx-auto mb-3 text-amber-400/50" />
+              <p className="text-sm font-medium">Conversa por Voz</p>
+              <p className="text-xs mt-1">Toque no microfone e fale</p>
+              <div className="mt-4 space-y-1 text-xs text-left bg-muted/50 rounded-lg p-3">
+                <p>• Fale normalmente — a IA transcreve</p>
+                <p>• Pare de falar — a IA responde automaticamente</p>
+                <p>• Fale de novo — interrompe e recomeça</p>
+                <p>• Sem precisar clicar em nada</p>
+              </div>
+            </div>
+          )}
+          {messages.map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
+                msg.role === 'user'
+                  ? 'bg-amber-500/20 text-foreground border border-amber-500/30'
+                  : 'bg-muted text-foreground border border-border'
+              }`}>
+                <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+              </div>
+            </div>
+          ))}
+          {/* Transcript em tempo real (enquanto fala) */}
+          {transcript && (
+            <div className="flex justify-end">
+              <div className="max-w-[80%] rounded-lg px-3 py-2 text-sm bg-amber-500/10 text-foreground border border-amber-500/20 italic">
+                <p className="whitespace-pre-wrap break-words">{transcript}</p>
+              </div>
+            </div>
+          )}
+          {/* Resposta da IA (streaming) */}
+          {aiResponse && (
+            <div className="flex justify-start">
+              <div className="max-w-[80%] rounded-lg px-3 py-2 text-sm bg-muted text-foreground border border-border">
+                <p className="whitespace-pre-wrap break-words">
+                  {aiResponse}
+                  <span className="inline-block w-2 h-4 bg-amber-400 ml-0.5 animate-pulse" />
+                </p>
+              </div>
+            </div>
+          )}
+          {/* Erro */}
+          {error && (
+            <div className="text-center text-destructive text-xs bg-destructive/10 rounded-lg p-2">
+              {error}
+            </div>
+          )}
+        </div>
+
+        {/* Status + Botão Microfone */}
+        <div className="p-4 border-t border-border flex flex-col items-center gap-3">
+          <div className={`text-xs font-medium ${statusInfo.color} flex items-center gap-1`}>
+            {statusInfo.pulse && <span className="w-2 h-2 rounded-full bg-current animate-pulse" />}
+            {statusInfo.label}
+          </div>
+          <button
+            onClick={toggleListening}
+            className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${
+              status === 'idle'
+                ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:scale-105'
+                : statusInfo.bg + ' ' + statusInfo.color
+            } ${status !== 'idle' ? 'animate-pulse' : ''}`}
+            title={status === 'idle' ? 'Iniciar' : 'Parar'}
+          >
+            {status === 'idle' ? (
+              <Mic className="w-7 h-7 text-white" />
+            ) : (
+              <X className="w-7 h-7" />
+            )}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function App() {
   const { usuario, empresa, isAuthenticated, logout, updateEmpresa, preferencias, updatePreferencias } = useAuthStore();
   // Modo quiosque: fullscreen automático após login, re-entra se usuário sair
@@ -15040,6 +15487,7 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showPreferencias, setShowPreferencias] = useState(false);
   const [chatStreamOpen, setChatStreamOpen] = useState(false);
+  const [chatVoiceOpen, setChatVoiceOpen] = useState(false);
   const [prefsUiScale, setPrefsUiScale] = useState(1.0);
   const [prefsImpressoraPreset, setPrefsImpressoraPreset] = useState('none');
   const [prefsSalvando, setPrefsSalvando] = useState(false);
@@ -15414,9 +15862,19 @@ export default function App() {
               size="icon"
               onClick={() => setChatStreamOpen(true)}
               className="text-amber-400 hover:text-amber-500 hover:bg-amber-500/10 h-8 w-8"
-              title="Chat IA em tempo real"
+              title="Chat IA em tempo real (texto)"
             >
               <Zap className="w-5 h-5" />
+            </Button>
+            {/* Botão Chat IA Voz (conversa por voz estilo Gemini Live) */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setChatVoiceOpen(true)}
+              className="text-green-400 hover:text-green-500 hover:bg-green-500/10 h-8 w-8"
+              title="Chat IA por voz"
+            >
+              <Mic className="w-5 h-5" />
             </Button>
             <button
               onClick={handleOpenPreferencias}
@@ -15594,6 +16052,14 @@ export default function App() {
       <ChatIAStreamModal
         open={chatStreamOpen}
         onClose={() => setChatStreamOpen(false)}
+        empresaId={empresa?.id || ''}
+        usuarioId={usuario?.id || ''}
+      />
+
+      {/* Chat IA Voice Modal — conversa por voz estilo Gemini Live */}
+      <ChatIAVoiceModal
+        open={chatVoiceOpen}
+        onClose={() => setChatVoiceOpen(false)}
         empresaId={empresa?.id || ''}
         usuarioId={usuario?.id || ''}
       />
