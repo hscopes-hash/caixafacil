@@ -3064,11 +3064,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [maquinaFoto, setMaquinaFoto] = useState<MaquinaLeitura | null>(null);
   const [fotoCapturada, setFotoCapturada] = useState<string | null>(null);
   // ⚠️ Numpad customizado — substitui inputs nativos para evitar barra de senhas do Chrome
+  // Usa componente NumpadModal reutilizável (mesmo do cadastro de máquinas)
   const [numpadOpen, setNumpadOpen] = useState(false);
   const [numpadCampo, setNumpadCampo] = useState<'entrada' | 'saida' | null>(null);
   const [numpadMaquinaId, setNumpadMaquinaId] = useState<string | null>(null);
-  const [numpadMaquinaCodigo, setNumpadMaquinaCodigo] = useState<string>('');
-  const [numpadValue, setNumpadValue] = useState<string>('');
   // ⚠️ Ref para a foto COM tarja vermelha — evita race condition com estado assíncrono
   // Usado em aplicarLeituraExtraida() para garantir que fotoProcessada sempre tenha tarja
   const fotoComTarjaRef = useRef<string | null>(null);
@@ -4063,7 +4062,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   // para evitar barra de senhas do Chrome Android
   // ============================================
 
-  // Abre o numpad para um campo específico de uma máquina
+  // Abre o numpad (NumpadModal reutilizável) para um campo específico de uma máquina
   const abrirNumpad = (maquina: MaquinaLeitura, campo: 'entrada' | 'saida') => {
     // Verifica liberação de digitação: apenas no nível do cliente
     // (empresa não controla mais isso — remoção solicitada pelo usuário)
@@ -4072,103 +4071,39 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       return;
     }
     setNumpadMaquinaId(maquina.id);
-    setNumpadMaquinaCodigo(maquina.codigo);
     setNumpadCampo(campo);
-    setNumpadValue(campo === 'entrada' ? maquina.novaEntrada : maquina.novaSaida);
     setNumpadOpen(true);
   };
 
-  // ============================================
-  // CLIQUE AUDÍVEL para o numpad (vibração + beep via Web Audio API)
-  // ============================================
-  const numpadClickSound = useCallback(() => {
-    // Vibração — tenta 3 padrões diferentes para máxima compatibilidade
-    try {
-      if (navigator.vibrate) {
-        // Padrão simples + curto (compatível com maioria dos Androids)
-        navigator.vibrate(20);
-      }
-    } catch {}
-    // Beep via Web Audio API (oscilador curto, não precisa de arquivo de áudio)
-    try {
-      const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext);
-      if (AudioCtx) {
-        const ctx = new AudioCtx();
-        // Alguns navegadores exigem resume() se o contexto foi suspenso
-        if (ctx.state === 'suspended') { try { ctx.resume(); } catch {} }
-        const oscillator = ctx.createOscillator();
-        const gain = ctx.createGain();
-        oscillator.connect(gain);
-        gain.connect(ctx.destination);
-        oscillator.type = 'sine';
-        oscillator.frequency.value = 800; // 800 Hz - som de "click"
-        gain.gain.setValueAtTime(0.15, ctx.currentTime); // volume baixo
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08); // decay
-        oscillator.start(ctx.currentTime);
-        oscillator.stop(ctx.currentTime + 0.08);
-        // Fechar contexto após o som para liberar recursos
-        setTimeout(() => { try { ctx.close(); } catch {} }, 200);
-      }
-    } catch {}
-  }, []);
-
-  // Adiciona um dígito ao valor do numpad
-  const numpadAddDigit = (digit: string) => {
-    numpadClickSound();
-    setNumpadValue(prev => {
-      // Evitar zeros à esquerda (exceto se valor for vazio e digito for 0)
-      if (prev === '' && digit === '0') return '0';
-      if (prev === '0' && digit !== '') return digit;
-      return prev + digit;
-    });
-  };
-
-  // Remove o último dígito (backspace)
-  const numpadBackspace = () => {
-    numpadClickSound();
-    setNumpadValue(prev => prev.slice(0, -1));
-  };
-
-  // Limpa todo o valor
-  const numpadClear = () => {
-    numpadClickSound();
-    setNumpadValue('');
-  };
-
-  // Confirma o valor e aplica na máquina
-  const numpadConfirm = () => {
+  // Confirma o valor do numpad e aplica na máquina (callback do NumpadModal)
+  const numpadConfirm = (valor: string) => {
     if (!numpadMaquinaId || !numpadCampo) return;
     const index = maquinas.findIndex(m => m.id === numpadMaquinaId);
     if (index === -1) return;
     if (numpadCampo === 'entrada') {
-      handleNovaEntrada(index, numpadValue);
+      handleNovaEntrada(index, valor);
       // Validar entrada
-      const novaEntradaNum = parseInt(numpadValue) || 0;
+      const novaEntradaNum = parseInt(valor) || 0;
       const entradaAtual = maquinas[index].entradaAtual || 0;
-      if (numpadValue && novaEntradaNum < entradaAtual) {
+      if (valor && novaEntradaNum < entradaAtual) {
         toast.warning(`Entrada ${novaEntradaNum} menor que anterior ${entradaAtual}. Verifique.`);
       }
     } else {
-      handleNovaSaida(index, numpadValue);
+      handleNovaSaida(index, valor);
       // Validar saída
-      const novaSaidaNum = parseInt(numpadValue) || 0;
+      const novaSaidaNum = parseInt(valor) || 0;
       const saidaAtual = maquinas[index].saidaAtual || 0;
-      if (numpadValue && novaSaidaNum < saidaAtual) {
+      if (valor && novaSaidaNum < saidaAtual) {
         toast.warning(`Saída ${novaSaidaNum} menor que anterior ${saidaAtual}. Verifique.`);
       }
     }
-    setNumpadOpen(false);
-    setNumpadCampo(null);
-    setNumpadMaquinaId(null);
-    setNumpadValue('');
   };
 
-  // Cancela o numpad sem aplicar
-  const numpadCancel = () => {
+  // Fecha o numpad sem aplicar
+  const numpadClose = () => {
     setNumpadOpen(false);
     setNumpadCampo(null);
     setNumpadMaquinaId(null);
-    setNumpadValue('');
   };
 
   // Função para repetir leitura anterior (copia ANTERIOR para ATUAL)
@@ -10234,84 +10169,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         </>
       ) : null}
 
-      {/* ============================================
-          NUMPAD CUSTOMIZADO — teclado numérico próprio
-          Substitui inputs nativos para evitar barra de senhas do Chrome
-          ============================================ */}
-      <Dialog open={numpadOpen} onOpenChange={(open) => { if (!open) numpadCancel(); }}>
-        <DialogContent className="bg-card border-border text-foreground max-w-xs p-0 gap-0 overflow-hidden">
-          <DialogHeader className="p-4 pb-2">
-            <DialogTitle className="text-center text-base">
-              {numpadCampo === 'entrada' ? 'ENTRADA' : 'SAÍDA'} — {numpadMaquinaCodigo}
-            </DialogTitle>
-          </DialogHeader>
-
-          {/* Display do valor */}
-          <div className="px-4 pb-3">
-            <div className="bg-muted border border-border rounded-md h-14 flex items-center justify-end pr-4 font-mono text-2xl text-foreground">
-              {numpadValue || <span className="text-muted-foreground/50">0</span>}
-            </div>
-          </div>
-
-          {/* Teclado numérico 3x4 */}
-          <div className="grid grid-cols-3 gap-1 p-3 pt-0">
-            {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
-              <button
-                key={d}
-                type="button"
-                onClick={() => numpadAddDigit(d)}
-                className="bg-muted hover:bg-muted/80 active:bg-amber-500/20 text-foreground text-3xl font-bold h-16 rounded-md transition-colors"
-              >
-                {d}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={numpadClear}
-              className="bg-destructive/10 hover:bg-destructive/20 text-destructive text-sm font-bold h-16 rounded-md transition-colors flex items-center justify-center"
-              title="Limpar"
-            >
-              LIMPAR
-            </button>
-            <button
-              type="button"
-              onClick={() => numpadAddDigit('0')}
-              className="bg-muted hover:bg-muted/80 active:bg-amber-500/20 text-foreground text-3xl font-bold h-16 rounded-md transition-colors"
-            >
-              0
-            </button>
-            <button
-              type="button"
-              onClick={numpadBackspace}
-              className="bg-muted hover:bg-muted/80 active:bg-amber-500/20 text-foreground h-16 rounded-md transition-colors flex items-center justify-center"
-              title="Apagar"
-            >
-              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l-7-7 7-7M19 12H5" transform="rotate(180 12 12)" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Botões Confirmar / Cancelar */}
-          <div className="grid grid-cols-2 gap-2 p-3 pt-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={numpadCancel}
-              className="h-12"
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              onClick={numpadConfirm}
-              className="h-12 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700"
-            >
-              Confirmar
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Numpad customizado (NumpadModal reutilizável) — evita barra de senhas do Chrome */}
+      <NumpadModal
+        open={numpadOpen}
+        onClose={numpadClose}
+        onConfirm={numpadConfirm}
+        titulo={`${numpadCampo === 'entrada' ? 'ENTRADA' : 'SAÍDA'} — ${maquinas.find(m => m.id === numpadMaquinaId)?.codigo || ''}`}
+        valorInicial={numpadMaquinaId && numpadCampo ? (maquinas.find(m => m.id === numpadMaquinaId)?.[numpadCampo === 'entrada' ? 'novaEntrada' : 'novaSaida'] || '') : ''}
+      />
     </form>
   );
 }
