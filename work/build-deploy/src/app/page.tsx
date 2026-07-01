@@ -141,6 +141,152 @@ interface DashboardData {
 }
 
 // ============================================
+// NUMPAD MODAL — componente reutilizável
+// Teclado numérico customizado para evitar barra de senhas do Chrome
+// ============================================
+function NumpadModal({
+  open,
+  onClose,
+  onConfirm,
+  titulo,
+  valorInicial,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: (valor: string) => void;
+  titulo: string;
+  valorInicial: string;
+}) {
+  const [valor, setValor] = useState(valorInicial);
+
+  // Atualiza valor quando modal abre ou valorInicial muda
+  useEffect(() => {
+    if (open) setValor(valorInicial);
+  }, [open, valorInicial]);
+
+  // Clique audível (vibração + beep)
+  const clickSound = useCallback(() => {
+    try { if (navigator.vibrate) navigator.vibrate(20); } catch {}
+    try {
+      const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext);
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        if (ctx.state === 'suspended') { try { ctx.resume(); } catch {} }
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = 800;
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.08);
+        setTimeout(() => { try { ctx.close(); } catch {} }, 200);
+      }
+    } catch {}
+  }, []);
+
+  const addDigit = (d: string) => {
+    clickSound();
+    setValor(prev => {
+      if (prev === '' && d === '0') return '0';
+      if (prev === '0' && d !== '') return d;
+      return prev + d;
+    });
+  };
+
+  const backspace = () => {
+    clickSound();
+    setValor(prev => prev.slice(0, -1));
+  };
+
+  const clear = () => {
+    clickSound();
+    setValor('');
+  };
+
+  const confirm = () => {
+    onConfirm(valor);
+    onClose();
+  };
+
+  const cancel = () => {
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) cancel(); }}>
+      <DialogContent className="bg-card border-border text-foreground max-w-xs p-0 gap-0 overflow-hidden">
+        <DialogHeader className="p-4 pb-2">
+          <DialogTitle className="text-center text-base">{titulo}</DialogTitle>
+        </DialogHeader>
+
+        {/* Display do valor */}
+        <div className="px-4 pb-3">
+          <div className="bg-muted border border-border rounded-md h-14 flex items-center justify-end pr-4 font-mono text-2xl text-foreground">
+            {valor || <span className="text-muted-foreground/50">0</span>}
+          </div>
+        </div>
+
+        {/* Teclado numérico 3x4 */}
+        <div className="grid grid-cols-3 gap-1 p-3 pt-0">
+          {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => addDigit(d)}
+              className="bg-muted hover:bg-muted/80 active:bg-amber-500/20 text-foreground text-3xl font-bold h-16 rounded-md transition-colors"
+            >
+              {d}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={clear}
+            className="bg-destructive/10 hover:bg-destructive/20 text-destructive text-sm font-bold h-16 rounded-md transition-colors flex items-center justify-center"
+            title="Limpar"
+          >
+            LIMPAR
+          </button>
+          <button
+            type="button"
+            onClick={() => addDigit('0')}
+            className="bg-muted hover:bg-muted/80 active:bg-amber-500/20 text-foreground text-3xl font-bold h-16 rounded-md transition-colors"
+          >
+            0
+          </button>
+          <button
+            type="button"
+            onClick={backspace}
+            className="bg-muted hover:bg-muted/80 active:bg-amber-500/20 text-foreground h-16 rounded-md transition-colors flex items-center justify-center"
+            title="Apagar"
+          >
+            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l-7-7 7-7M19 12H5" transform="rotate(180 12 12)" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Botões Confirmar / Cancelar */}
+        <div className="grid grid-cols-2 gap-2 p-3 pt-0">
+          <Button type="button" variant="outline" onClick={cancel} className="h-12">
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            onClick={confirm}
+            className="h-12 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700"
+          >
+            Confirmar
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ============================================
 // LOGIN COMPONENT
 // ============================================
 function ThemeToggle() {
@@ -1592,6 +1738,8 @@ function MaquinasPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: bool
   const [filtroStatus, setFiltroStatus] = useState<string>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [maquinaEditando, setMaquinaEditando] = useState<Maquina | null>(null);
+  // Numpad para campos de entrada/saída (evita barra de senhas do Chrome)
+  const [numpadCampo, setNumpadCampo] = useState<'entradaAtual' | 'saidaAtual' | null>(null);
   const [formData, setFormData] = useState({
     codigo: '',
     tipoId: '',
@@ -1902,23 +2050,23 @@ function MaquinasPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: bool
                     </div>
                     <div className="space-y-2">
                       <Label>Entrada</Label>
-                      <Input
-                        type="number"
-                        value={formData.entradaAtual}
-                        onChange={(e) => setFormData({ ...formData, entradaAtual: e.target.value })}
-                        className="bg-muted border-border"
-                        placeholder="0"
-                      />
+                      <button
+                        type="button"
+                        onClick={() => setNumpadCampo('entradaAtual')}
+                        className="w-full h-9 rounded-md border border-border bg-muted px-3 py-1 text-sm text-foreground text-left font-mono hover:bg-muted/80"
+                      >
+                        {formData.entradaAtual || <span className="text-muted-foreground/50">0</span>}
+                      </button>
                     </div>
                     <div className="space-y-2">
                       <Label>Saída</Label>
-                      <Input
-                        type="number"
-                        value={formData.saidaAtual}
-                        onChange={(e) => setFormData({ ...formData, saidaAtual: e.target.value })}
-                        className="bg-muted border-border"
-                        placeholder="0"
-                      />
+                      <button
+                        type="button"
+                        onClick={() => setNumpadCampo('saidaAtual')}
+                        className="w-full h-9 rounded-md border border-border bg-muted px-3 py-1 text-sm text-foreground text-left font-mono hover:bg-muted/80"
+                      >
+                        {formData.saidaAtual || <span className="text-muted-foreground/50">0</span>}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1940,6 +2088,19 @@ function MaquinasPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: bool
             </DialogContent>
           </Dialog>
         )}
+
+        {/* Numpad para campos Entrada/Saída (evita barra de senhas do Chrome) */}
+        <NumpadModal
+          open={numpadCampo !== null}
+          onClose={() => setNumpadCampo(null)}
+          onConfirm={(valor) => {
+            if (numpadCampo) {
+              setFormData(prev => ({ ...prev, [numpadCampo]: valor }));
+            }
+          }}
+          titulo={numpadCampo === 'entradaAtual' ? 'ENTRADA INICIAL' : 'SAÍDA INICIAL'}
+          valorInicial={numpadCampo ? formData[numpadCampo] : ''}
+        />
       </div>
 
       {/* Filtros */}
