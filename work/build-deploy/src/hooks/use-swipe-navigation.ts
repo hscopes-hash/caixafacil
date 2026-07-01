@@ -51,7 +51,12 @@ export function useSwipeNavigation({
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
     // Verifica se é filho de um input (ex: ícone dentro de um Input do shadcn)
     const closestInput = target.closest('input, textarea, select, [contenteditable]');
-    return !!closestInput;
+    if (closestInput) return true;
+    // Ignorar swipe se iniciou dentro de um Dialog/Modal (role="dialog")
+    // Evita que swipe horizontal dentro de um modal troque de aba
+    const closestDialog = target.closest('[role="dialog"], [data-slot="dialog-content"]');
+    if (closestDialog) return true;
+    return false;
   }, []);
 
   /** Verifica se há algum campo de input com foco no documento */
