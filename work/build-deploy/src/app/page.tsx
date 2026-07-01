@@ -2917,6 +2917,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   // Estado para visualização em tela cheia
   const [fotoTelaCheia, setFotoTelaCheia] = useState(false);
   const [zoomFoto, setZoomFoto] = useState(1);
+  // Posição do pan (deslocar imagem com 1 dedo)
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
   // Estado para o modal de resumo
   const [resumoModalOpen, setResumoModalOpen] = useState(false);
   const [maquinasSalvas, setMaquinasSalvas] = useState<MaquinaLeitura[]>([]);
@@ -3524,6 +3527,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const pinchStartZoom = useRef(1);
   // Ref para manter o zoom atual sempre atualizado (evita closure stale no useEffect)
   const zoomFotoRef = useRef(1);
+  // Refs para pan (deslocar imagem com 1 dedo quando com zoom)
+  const panStartX = useRef(0);
+  const panStartY = useRef(0);
+  const panOffsetX = useRef(0);
+  const panOffsetY = useRef(0);
+  const isPanning = useRef(false);
   
   // Efeito para gerenciar pinch zoom
   useEffect(() => {
@@ -5002,6 +5011,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       setFotoTelaCheia(true);
       zoomFotoRef.current = 1;
       setZoomFoto(1);
+      panOffsetX.current = 0;
+      panOffsetY.current = 0;
+      setPanX(0);
+      setPanY(0);
     }
   };
 
@@ -5009,6 +5022,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setFotoTelaCheia(false);
     zoomFotoRef.current = 1;
     setZoomFoto(1);
+    panOffsetX.current = 0;
+    panOffsetY.current = 0;
+    setPanX(0);
+    setPanY(0);
   };
 
   const aumentarZoom = () => {
@@ -5021,11 +5038,22 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     const novo = Math.max(zoomFotoRef.current - 0.5, 0.5);
     zoomFotoRef.current = novo;
     setZoomFoto(novo);
+    // Se voltou para 1x, resetar pan
+    if (novo <= 1) {
+      panOffsetX.current = 0;
+      panOffsetY.current = 0;
+      setPanX(0);
+      setPanY(0);
+    }
   };
 
   const resetarZoom = () => {
     zoomFotoRef.current = 1;
     setZoomFoto(1);
+    panOffsetX.current = 0;
+    panOffsetY.current = 0;
+    setPanX(0);
+    setPanY(0);
   };
 
   // Função para adicionar tarja vermelha com informações na foto
@@ -9226,13 +9254,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       draggable={false}
                       style={{
                         touchAction: 'none',
-                        transform: `scale(${zoomFoto})`,
+                        transform: `translate(${panX}px, ${panY}px) scale(${zoomFoto})`,
                         transformOrigin: 'center center',
-                        transition: 'transform 0.15s ease-out',
+                        transition: isPanning.current ? 'none' : 'transform 0.15s ease-out',
                       }}
                       onTouchStart={(e) => {
                         if (e.touches.length === 2) {
+                          // Pinch zoom com 2 dedos
                           e.preventDefault();
+                          isPanning.current = false;
                           const t1 = e.touches[0];
                           const t2 = e.touches[1];
                           pinchStartDistance.current = Math.sqrt(
@@ -9240,10 +9270,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                             Math.pow(t2.clientY - t1.clientY, 2)
                           );
                           pinchStartZoom.current = zoomFotoRef.current;
+                        } else if (e.touches.length === 1 && zoomFotoRef.current > 1) {
+                          // Pan com 1 dedo (só se estiver com zoom > 1)
+                          e.preventDefault();
+                          isPanning.current = true;
+                          panStartX.current = e.touches[0].clientX - panOffsetX.current;
+                          panStartY.current = e.touches[0].clientY - panOffsetY.current;
                         }
                       }}
                       onTouchMove={(e) => {
                         if (e.touches.length === 2 && pinchStartDistance.current > 0) {
+                          // Pinch zoom
                           e.preventDefault();
                           const t1 = e.touches[0];
                           const t2 = e.touches[1];
@@ -9255,10 +9292,27 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                           const newZoom = Math.min(5, Math.max(0.5, pinchStartZoom.current * scale));
                           zoomFotoRef.current = newZoom;
                           setZoomFoto(newZoom);
+                          // Se voltou para 1x, resetar pan
+                          if (newZoom <= 1) {
+                            panOffsetX.current = 0;
+                            panOffsetY.current = 0;
+                            setPanX(0);
+                            setPanY(0);
+                          }
+                        } else if (e.touches.length === 1 && isPanning.current) {
+                          // Pan com 1 dedo
+                          e.preventDefault();
+                          const newX = e.touches[0].clientX - panStartX.current;
+                          const newY = e.touches[0].clientY - panStartY.current;
+                          panOffsetX.current = newX;
+                          panOffsetY.current = newY;
+                          setPanX(newX);
+                          setPanY(newY);
                         }
                       }}
                       onTouchEnd={() => {
                         pinchStartDistance.current = 0;
+                        isPanning.current = false;
                       }}
                       onWheel={(e) => {
                         e.preventDefault();
@@ -9269,8 +9323,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       }}
                       onDoubleClick={(e) => {
                         e.preventDefault();
-                        // Duplo clique aumenta zoom em 10% (1.1x) cada vez
-                        const novo = Math.min(5, zoomFotoRef.current + 0.1);
+                        // Duplo clique aumenta zoom em 20% (1.2x) cada vez
+                        const novo = Math.min(5, zoomFotoRef.current + 0.2);
                         zoomFotoRef.current = novo;
                         setZoomFoto(novo);
                       }}
