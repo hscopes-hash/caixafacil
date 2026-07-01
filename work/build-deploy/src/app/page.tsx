@@ -15504,6 +15504,384 @@ function ChatIAVoiceModal({ open, onClose, empresaId, usuarioId }: { open: boole
   );
 }
 
+// ============================================
+// CHAT IA LIVE MODAL — tela cheia estilo Gemini Live
+// Robô central animado + voz natural (Cloud TTS Neural2) + STT + streaming
+// ============================================
+function ChatIALiveModal({ open, onClose, empresaId, usuarioId }: { open: boolean; onClose: () => void; empresaId: string; usuarioId: string }) {
+  const [transcript, setTranscript] = useState('');
+  const [aiResponse, setAiResponse] = useState('');
+  const [status, setStatus] = useState<'idle' | 'listening' | 'thinking' | 'speaking'>('idle');
+  const [error, setError] = useState('');
+  const [audioReady, setAudioReady] = useState(true); // Cloud TTS disponível?
+
+  const recognitionRef = useRef<any>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const silenceTimerRef = useRef<any>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const statusRef = useRef<'idle' | 'listening' | 'thinking' | 'speaking'>('idle');
+  const transcriptRef = useRef('');
+  const audioReadyRef = useRef(true);
+
+  useEffect(() => { statusRef.current = status; }, [status]);
+  useEffect(() => { audioReadyRef.current = audioReady; }, [audioReady]);
+
+  const getSpeechRecognition = (): any | null => {
+    if (typeof window === 'undefined') return null;
+    return (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  };
+
+  const stopAudio = () => {
+    if (audioRef.current) {
+      try { audioRef.current.pause(); audioRef.current.currentTime = 0; } catch {}
+    }
+  };
+
+  const stopAll = () => {
+    try { if (recognitionRef.current) recognitionRef.current.stop(); } catch {}
+    if (abortRef.current) { try { abortRef.current.abort(); } catch {} abortRef.current = null; }
+    stopAudio();
+    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+  };
+
+  // Falar resposta — Cloud TTS Neural2 (voz natural) com fallback para navegador
+  const speakResponse = async (text: string) => {
+    if (!text.trim()) { startListening(); return; }
+
+    // Limpar texto
+    let cleanText = text;
+    const jsonMatch = text.match(/\{[\s\S]*?"acao"[\s\S]*\}/);
+    if (jsonMatch) cleanText = text.replace(jsonMatch[0], '').trim() || 'Ação executada.';
+    cleanText = cleanText.replace(/```json[\s\S]*?```/g, '').replace(/```/g, '').trim();
+    if (!cleanText) { startListening(); return; }
+
+    setStatus('speaking');
+    statusRef.current = 'speaking';
+
+    // Tentar Cloud TTS (Neural2 — voz natural)
+    if (audioReadyRef.current) {
+      try {
+        const ttsRes = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: cleanText }),
+        });
+
+        if (ttsRes.ok) {
+          const ttsData = await ttsRes.json();
+          if (ttsData.audioContent) {
+            // Tocar áudio MP3 do Cloud TTS
+            const audioBlob = await (await fetch(`data:audio/mp3;base64,${ttsData.audioContent}`)).blob();
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+            audioRef.current = audio;
+            audio.onended = () => {
+              URL.revokeObjectURL(audioUrl);
+              audioRef.current = null;
+              if (statusRef.current === 'speaking') startListening();
+            };
+            audio.onerror = () => {
+              URL.revokeObjectURL(audioUrl);
+              audioRef.current = null;
+              if (statusRef.current === 'speaking') startListening();
+            };
+            await audio.play();
+            return;
+          }
+        }
+        // Se TTS falhou, marcar como indisponível e usar fallback
+        if (ttsData.fallback) {
+          setAudioReady(false);
+        }
+      } catch {
+        setAudioReady(false);
+      }
+    }
+
+    // Fallback: TTS nativo do navegador
+    try {
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.lang = 'pt-BR';
+      utterance.rate = 1.05;
+      const voices = window.speechSynthesis?.getVoices?.() || [];
+      const googleVoice = voices.find(v => v.lang === 'pt-BR' && v.name.toLowerCase().includes('google'));
+      if (googleVoice) utterance.voice = googleVoice;
+      utterance.onend = () => { if (statusRef.current === 'speaking') startListening(); };
+      utterance.onerror = () => { if (statusRef.current === 'speaking') startListening(); };
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      if (statusRef.current === 'speaking') startListening();
+    }
+  };
+
+  // Enviar para IA (streaming)
+  const sendToAI = async (mensagem: string) => {
+    if (!mensagem.trim()) { startListening(); return; }
+
+    setStatus('thinking');
+    statusRef.current = 'thinking';
+    setAiResponse('');
+    setError('');
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const res = await fetch('/api/chat-ia/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({ mensagem, empresaId, usuarioId, historyMessages: [] }),
+      });
+
+      if (!res.ok) throw new Error('Falha na conexão');
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('Stream não disponível');
+
+      const decoder = new TextDecoder();
+      let textoCompleto = '';
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const linhas = buffer.split('\n');
+        buffer = linhas.pop() || '';
+        for (const linha of linhas) {
+          if (linha.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(linha.substring(6));
+              if (data.text) { textoCompleto += data.text; setAiResponse(textoCompleto); }
+            } catch {}
+          }
+        }
+      }
+
+      if (textoCompleto) {
+        setAiResponse('');
+        await speakResponse(textoCompleto);
+      } else {
+        startListening();
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        setError(err.message);
+        setStatus('idle');
+        statusRef.current = 'idle';
+      }
+    } finally {
+      abortRef.current = null;
+    }
+  };
+
+  // Iniciar escuta
+  const startListening = () => {
+    const SR = getSpeechRecognition();
+    if (!SR) { setError('Reconhecimento de voz não suportado. Use Chrome.'); return; }
+
+    stopAll();
+    const recognition = new SR();
+    recognition.lang = 'pt-BR';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    transcriptRef.current = '';
+    setTranscript('');
+    setStatus('listening');
+    statusRef.current = 'listening';
+
+    recognition.onresult = (event: any) => {
+      let interim = '', final = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const r = event.results[i];
+        if (r.isFinal) final += r[0].transcript; else interim += r[0].transcript;
+      }
+      if (final) { transcriptRef.current += final; setTranscript(transcriptRef.current); }
+      else if (interim) setTranscript(transcriptRef.current + interim);
+
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (statusRef.current === 'speaking' || statusRef.current === 'thinking') {
+        stopAll();
+        transcriptRef.current = final || interim;
+        setTranscript(transcriptRef.current);
+        setStatus('listening');
+        statusRef.current = 'listening';
+      }
+      silenceTimerRef.current = setTimeout(() => {
+        if (statusRef.current === 'listening' && transcriptRef.current.trim()) {
+          const msg = transcriptRef.current.trim();
+          transcriptRef.current = '';
+          setTranscript('');
+          try { recognition.stop(); } catch {}
+          sendToAI(msg);
+        }
+      }, 1500);
+    };
+
+    recognition.onerror = (e: any) => {
+      if (e.error === 'no-speech' || e.error === 'aborted') return;
+      setError(e.error === 'not-allowed' ? 'Permissão de microfone negada.' : 'Erro: ' + e.error);
+      setStatus('idle'); statusRef.current = 'idle';
+    };
+
+    recognition.onend = () => {
+      if (statusRef.current === 'listening' && transcriptRef.current.trim()) {
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = setTimeout(() => {
+          if (statusRef.current === 'listening' && transcriptRef.current.trim()) {
+            const msg = transcriptRef.current.trim();
+            transcriptRef.current = ''; setTranscript('');
+            sendToAI(msg);
+          }
+        }, 500);
+      } else if (statusRef.current === 'listening') {
+        try { recognition.start(); } catch {}
+      }
+    };
+
+    recognitionRef.current = recognition;
+    try { recognition.start(); } catch {}
+  };
+
+  // Auto-iniciar ao abrir
+  useEffect(() => {
+    if (open) {
+      setAudioReady(true);
+      setError('');
+      setStatus('idle');
+      statusRef.current = 'idle';
+      // Pequeno delay para garantir que o modal está renderizado
+      const timer = setTimeout(() => startListening(), 300);
+      return () => clearTimeout(timer);
+    } else {
+      stopAll();
+      setStatus('idle');
+      statusRef.current = 'idle';
+    }
+  }, [open]);
+
+  const statusColors = {
+    idle: { primary: '#6b7280', secondary: '#374151', glow: 'rgba(107,114,128,0.3)' },
+    listening: { primary: '#3b82f6', secondary: '#1e40af', glow: 'rgba(59,130,246,0.5)' },
+    thinking: { primary: '#f59e0b', secondary: '#b45309', glow: 'rgba(245,158,11,0.5)' },
+    speaking: { primary: '#10b981', secondary: '#047857', glow: 'rgba(16,185,129,0.5)' },
+  };
+
+  const colors = statusColors[status];
+  const statusLabel = {
+    idle: 'Iniciando...',
+    listening: 'Ouvindo',
+    thinking: 'Pensando',
+    speaking: 'Respondendo',
+  }[status];
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center" style={{ background: 'radial-gradient(ellipse at center, #0f172a 0%, #000000 100%)' }}>
+      {/* Botão fechar */}
+      <button
+        onClick={onClose}
+        className="absolute top-6 right-6 z-10 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+        title="Fechar"
+      >
+        <X className="w-6 h-6" />
+      </button>
+
+      {/* Indicador Cloud TTS */}
+      <div className="absolute top-6 left-6 z-10 flex items-center gap-2">
+        <span className={`w-2 h-2 rounded-full ${audioReady ? 'bg-green-500' : 'bg-amber-500'} animate-pulse`} />
+        <span className="text-xs text-white/50">{audioReady ? 'Cloud TTS Neural2' : 'Voz nativa'}</span>
+      </div>
+
+      {/* Robô central com animação Gemini Live style */}
+      <div className="relative flex items-center justify-center mb-12" style={{ width: 280, height: 280 }}>
+        {/* Anéis pulsantes concêntricos (Gemini Live style) */}
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="absolute rounded-full"
+            style={{
+              width: 100 + i * 45,
+              height: 100 + i * 45,
+              border: `2px solid ${colors.primary}`,
+              opacity: status === 'idle' ? 0.15 : 0.4 - i * 0.08,
+              animation: status !== 'idle' ? `livePulse 2s ease-out infinite ${i * 0.3}s` : 'none',
+              boxShadow: status !== 'idle' ? `0 0 ${20 + i * 10}px ${colors.glow}` : 'none',
+              transition: 'all 0.5s ease',
+            }}
+          />
+        ))}
+
+        {/* Globo central com robô */}
+        <div
+          className="relative rounded-full flex items-center justify-center transition-all duration-500"
+          style={{
+            width: 120,
+            height: 120,
+            background: `radial-gradient(circle, ${colors.secondary} 0%, ${colors.primary} 100%)`,
+            boxShadow: `0 0 60px ${colors.glow}, inset 0 0 30px rgba(255,255,255,0.1)`,
+            animation: status !== 'idle' ? 'liveFloat 3s ease-in-out infinite' : 'none',
+          }}
+        >
+          <Bot
+            className="w-14 h-14 text-white"
+            style={{ filter: `drop-shadow(0 0 10px ${colors.glow})` }}
+          />
+        </div>
+      </div>
+
+      {/* Status */}
+      <div className="text-white/80 text-sm font-medium mb-4 flex items-center gap-2">
+        <span
+          className="w-2 h-2 rounded-full animate-pulse"
+          style={{ backgroundColor: colors.primary }}
+        />
+        {statusLabel}
+      </div>
+
+      {/* Transcript (o que usuário está falando) */}
+      {transcript && (
+        <div className="max-w-md px-6 mb-2 text-center">
+          <p className="text-white/60 text-sm italic">{transcript}</p>
+        </div>
+      )}
+
+      {/* Resposta da IA */}
+      {aiResponse && (
+        <div className="max-w-md px-6 mb-2 text-center">
+          <p className="text-white text-sm">
+            {aiResponse}
+            <span className="inline-block w-1.5 h-3 ml-0.5 animate-pulse" style={{ backgroundColor: colors.primary }} />
+          </p>
+        </div>
+      )}
+
+      {/* Erro */}
+      {error && (
+        <div className="max-w-md px-6 text-center">
+          <p className="text-red-400 text-xs bg-red-500/10 rounded-lg px-4 py-2">{error}</p>
+        </div>
+      )}
+
+      {/* CSS para animações */}
+      <style>{`
+        @keyframes livePulse {
+          0% { transform: scale(0.8); opacity: 0.6; }
+          100% { transform: scale(1.4); opacity: 0; }
+        }
+        @keyframes liveFloat {
+          0%, 100% { transform: translateY(0) scale(1); }
+          50% { transform: translateY(-8px) scale(1.03); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 export default function App() {
   const { usuario, empresa, isAuthenticated, logout, updateEmpresa, preferencias, updatePreferencias } = useAuthStore();
   // Modo quiosque: fullscreen automático após login, re-entra se usuário sair
@@ -15523,6 +15901,7 @@ export default function App() {
   const [showPreferencias, setShowPreferencias] = useState(false);
   const [chatStreamOpen, setChatStreamOpen] = useState(false);
   const [chatVoiceOpen, setChatVoiceOpen] = useState(false);
+  const [chatLiveOpen, setChatLiveOpen] = useState(false);
   const [prefsUiScale, setPrefsUiScale] = useState(1.0);
   const [prefsImpressoraPreset, setPrefsImpressoraPreset] = useState('none');
   const [prefsSalvando, setPrefsSalvando] = useState(false);
@@ -15911,6 +16290,16 @@ export default function App() {
             >
               <Mic className="w-5 h-5" />
             </Button>
+            {/* Botão Chat IA Live (tela cheia estilo Gemini Live) */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setChatLiveOpen(true)}
+              className="text-purple-400 hover:text-purple-500 hover:bg-purple-500/10 h-8 w-8"
+              title="Chat IA Live (tela cheia)"
+            >
+              <Bot className="w-5 h-5" />
+            </Button>
             <button
               onClick={handleOpenPreferencias}
               className="text-right mr-1 hover:opacity-80 transition-opacity"
@@ -16095,6 +16484,14 @@ export default function App() {
       <ChatIAVoiceModal
         open={chatVoiceOpen}
         onClose={() => setChatVoiceOpen(false)}
+        empresaId={empresa?.id || ''}
+        usuarioId={usuario?.id || ''}
+      />
+
+      {/* Chat IA Live Modal — tela cheia estilo Gemini Live com robô animado */}
+      <ChatIALiveModal
+        open={chatLiveOpen}
+        onClose={() => setChatLiveOpen(false)}
         empresaId={empresa?.id || ''}
         usuarioId={usuario?.id || ''}
       />
