@@ -9218,17 +9218,18 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 {fotoCapturada && (
                   <div
                     className="min-w-full min-h-full flex items-center justify-center p-4"
-                    style={{
-                      width: `${zoomFoto * 100}%`,
-                      height: `${zoomFoto * 100}%`,
-                    }}
                   >
                     <img
                       src={fotoCapturada}
                       alt="Foto ampliada"
                       className="max-w-full max-h-full object-contain select-none"
                       draggable={false}
-                      style={{ touchAction: 'none' }}
+                      style={{
+                        touchAction: 'none',
+                        transform: `scale(${zoomFoto})`,
+                        transformOrigin: 'center center',
+                        transition: 'transform 0.15s ease-out',
+                      }}
                       onTouchStart={(e) => {
                         if (e.touches.length === 2) {
                           e.preventDefault();
