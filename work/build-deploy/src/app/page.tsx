@@ -15893,6 +15893,39 @@ export default function App() {
     (window as any).__caixafacil_requestFullscreenOnLogin = requestFullscreenOnLogin;
     return () => { delete (window as any).__caixafacil_requestFullscreenOnLogin; };
   }, [requestFullscreenOnLogin]);
+
+  // ============================================
+  // WAKE LOCK — impede tela de apagar (proteção de tela) quando app está aberto
+  // Usa Screen Wake Lock API (Chrome Android, iOS 17.4+)
+  // Re-adquire automaticamente se a página voltar a ficar visível
+  // ============================================
+  const wakeLockRef = useRef<any>(null);
+  const requestWakeLock = useCallback(async () => {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    // Solicitar wake lock quando autenticado
+    requestWakeLock();
+    // Re-adquire se a página voltar a ficar visível (ex: após trocar de aba)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && !wakeLockRef.current) {
+        requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      try { if (wakeLockRef.current) wakeLockRef.current.release(); } catch {}
+      wakeLockRef.current = null;
+    };
+  }, [isAuthenticated, requestWakeLock]);
+
   const [activeTab, setActiveTab] = useState('dashboard');
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
