@@ -101,92 +101,92 @@ export async function POST(request: NextRequest) {
 
     const leiturasCriadas = [];
 
-    // Usar transação para garantir consistência
-    await db.$transaction(async (tx) => {
-      // Salvar leituras se houver
-      if (temLeituras) {
-        for (const leitura of leituras) {
-          const {
+    // ⚠️ Sem transação interativa — Vercel serverless + Google Cloud SQL
+    // pode falhar com 'Transaction not found' em transações longas.
+    // Queries sequenciais com db direto são mais robustas em serverless.
+    // Salvar leituras se houver
+    if (temLeituras) {
+      for (const leitura of leituras) {
+        const {
+          maquinaId,
+          entradaAnterior,
+          entradaNova,
+          saidaAnterior,
+          saidaNova,
+          diferencaEntrada,
+          diferencaSaida,
+          saldo,
+          moeda,
+          observacoes,
+        } = leitura;
+
+        // Criar registro de leitura
+        const novaLeitura = await db.leitura.create({
+          data: {
             maquinaId,
-            entradaAnterior,
-            entradaNova,
-            saidaAnterior,
-            saidaNova,
-            diferencaEntrada,
-            diferencaSaida,
-            saldo,
-            moeda,
-            observacoes,
-          } = leitura;
-
-          // Criar registro de leitura
-          const novaLeitura = await tx.leitura.create({
-            data: {
-              maquinaId,
-              clienteId,
-              usuarioId,
-              entradaAnterior: entradaAnterior || 0,
-              entradaNova: entradaNova || 0,
-              saidaAnterior: saidaAnterior || 0,
-              saidaNova: saidaNova || 0,
-              diferencaEntrada: diferencaEntrada || 0,
-              diferencaSaida: diferencaSaida || 0,
-              saldo: saldo || 0,
-              moeda: moeda || 'M001',
-              observacoes: observacoes || null,
-              // Campos de despesa
-              despesa: despesa || null,
-              valorDespesa: valorDespesa || null,
-              // Campos de caixa (receitas detalhadas como JSON)
-              caixa: receita || null,
-              valorCaixa: valorReceita || null,
-              // Fotos criptografadas no GCS (compartilhado por batch)
-              fotoGcsPath: fotoGcsPath || null,
-            },
-          });
-
-          // Atualizar máquina com os novos valores
-          await tx.maquina.update({
-            where: { id: maquinaId },
-            data: {
-              entradaAtual: entradaNova || 0,
-              saidaAtual: saidaNova || 0,
-            },
-          });
-
-          leiturasCriadas.push(novaLeitura);
-        }
-      } else if (temDespesa) {
-        // Se não há leituras mas há despesa, criar um registro de despesa
-        // Buscar a primeira máquina do cliente para associar a despesa
-        const primeiraMaquina = await tx.maquina.findFirst({
-          where: { clienteId },
+            clienteId,
+            usuarioId,
+            entradaAnterior: entradaAnterior || 0,
+            entradaNova: entradaNova || 0,
+            saidaAnterior: saidaAnterior || 0,
+            saidaNova: saidaNova || 0,
+            diferencaEntrada: diferencaEntrada || 0,
+            diferencaSaida: diferencaSaida || 0,
+            saldo: saldo || 0,
+            moeda: moeda || 'M001',
+            observacoes: observacoes || null,
+            // Campos de despesa
+            despesa: despesa || null,
+            valorDespesa: valorDespesa || null,
+            // Campos de caixa (receitas detalhadas como JSON)
+            caixa: receita || null,
+            valorCaixa: valorReceita || null,
+            // Fotos criptografadas no GCS (compartilhado por batch)
+            fotoGcsPath: fotoGcsPath || null,
+          },
         });
 
-        if (primeiraMaquina) {
-          const novaLeitura = await tx.leitura.create({
-            data: {
-              maquinaId: primeiraMaquina.id,
-              clienteId,
-              usuarioId,
-              entradaAnterior: 0,
-              entradaNova: 0,
-              saidaAnterior: 0,
-              saidaNova: 0,
-              diferencaEntrada: 0,
-              diferencaSaida: 0,
-              saldo: 0,
-              moeda: 'M001',
-              despesa: despesa || null,
-              valorDespesa: valorDespesa || null,
-              caixa: receita || null,
-              valorCaixa: valorReceita || null,
-            },
-          });
-          leiturasCriadas.push(novaLeitura);
-        }
+        // Atualizar máquina com os novos valores
+        await db.maquina.update({
+          where: { id: maquinaId },
+          data: {
+            entradaAtual: entradaNova || 0,
+            saidaAtual: saidaNova || 0,
+          },
+        });
+
+        leiturasCriadas.push(novaLeitura);
       }
-    });
+    } else if (temDespesa) {
+      // Se não há leituras mas há despesa, criar um registro de despesa
+      // Buscar a primeira máquina do cliente para associar a despesa
+      const primeiraMaquina = await db.maquina.findFirst({
+        where: { clienteId },
+      });
+
+      if (primeiraMaquina) {
+        const novaLeitura = await db.leitura.create({
+          data: {
+            maquinaId: primeiraMaquina.id,
+            clienteId,
+            usuarioId,
+            entradaAnterior: 0,
+            entradaNova: 0,
+            saidaAnterior: 0,
+            saidaNova: 0,
+            diferencaEntrada: 0,
+            diferencaSaida: 0,
+            saldo: 0,
+            moeda: 'M001',
+            despesa: despesa || null,
+            valorDespesa: valorDespesa || null,
+            caixa: receita || null,
+            valorCaixa: valorReceita || null,
+          },
+        });
+        leiturasCriadas.push(novaLeitura);
+      }
+    }
 
     return NextResponse.json({
       success: true,
