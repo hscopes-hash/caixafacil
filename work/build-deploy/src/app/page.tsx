@@ -15084,6 +15084,33 @@ function ChatIAVoiceModal({ open, onClose, empresaId, usuarioId }: { open: boole
   };
 
   // Falar resposta via TTS
+  // Selecionar a melhor voz em português disponível no dispositivo
+  // Chrome Android geralmente tem "Google português do Brasil" que é mais natural
+  const getBestPortugueseVoice = (): SpeechSynthesisVoice | null => {
+    try {
+      const voices = window.speechSynthesis?.getVoices?.() || [];
+      if (voices.length === 0) return null;
+
+      // Prioridade 1: vozes Google pt-BR (mais naturais no Android)
+      const googleVoice = voices.find(v =>
+        v.lang === 'pt-BR' && v.name.toLowerCase().includes('google')
+      );
+      if (googleVoice) return googleVoice;
+
+      // Prioridade 2: qualquer voz pt-BR
+      const ptBrVoice = voices.find(v => v.lang === 'pt-BR');
+      if (ptBrVoice) return ptBrVoice;
+
+      // Prioridade 3: qualquer voz que comece com pt
+      const ptVoice = voices.find(v => v.lang.startsWith('pt'));
+      if (ptVoice) return ptVoice;
+
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
   const speakResponse = (text: string) => {
     if (!ttsEnabled || !text.trim()) return;
     stopTTS();
@@ -15099,8 +15126,16 @@ function ChatIAVoiceModal({ open, onClose, empresaId, usuarioId }: { open: boole
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
       utterance.lang = 'pt-BR';
-      utterance.rate = 1.1;
+      utterance.rate = 1.05; // um pouco mais lento para mais naturalidade
       utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+
+      // Selecionar a melhor voz disponível (Google pt-BR é mais natural)
+      const bestVoice = getBestPortugueseVoice();
+      if (bestVoice) {
+        utterance.voice = bestVoice;
+      }
+
       utterance.onend = () => {
         ttsUtteranceRef.current = null;
         // Após TTS terminar, voltar a escutar (conversa contínua)
