@@ -81,6 +81,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { leituras, clienteId, usuarioId, despesa, valorDespesa, receita, valorReceita, caixa, valorCaixa, fotoGcsPath } = body;
 
+    console.log('[LEITURAS POST] Recebido:', {
+      qtdLeituras: leituras?.length || 0,
+      clienteId,
+      usuarioId,
+      fotoGcsPath: fotoGcsPath || 'NULL',
+      temDespesa: !!despesa,
+      temReceita: !!receita,
+    });
+
     // Verificar se há leituras ou despesa
     const temLeituras = leituras && Array.isArray(leituras) && leituras.length > 0;
     const temDespesa = valorDespesa && valorDespesa > 0;

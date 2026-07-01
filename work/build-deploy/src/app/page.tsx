@@ -6258,12 +6258,19 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         fotoBase64: m.fotoProcessada as string,
       }));
 
+    console.log(`[salvarLeituras] Máquinas preenchidas: ${maquinasPreenchidas.length}`);
+    console.log(`[salvarLeituras] Máquinas com fotoProcessada: ${fotosParaUpload.length}`);
+    maquinasPreenchidas.forEach(m => {
+      console.log(`[salvarLeituras] Máquina ${m.codigo}: fotoProcessada=${m.fotoProcessada ? 'SIM (' + m.fotoProcessada.length + ' chars)' : 'NÃO'}`);
+    });
+
     let fotoGcsPath: string | null = null;
 
     // Upload das fotos ao GCS (criptografado) — antes de salvar leitura
     if (fotosParaUpload.length > 0) {
       try {
         const token = useAuthStore.getState().token;
+        console.log(`[salvarLeituras] Enviando ${fotosParaUpload.length} fotos ao GCS...`);
         const fotoRes = await fetch('/api/leituras/upload-fotos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -6276,14 +6283,19 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         if (fotoRes.ok) {
           const fotoData = await fotoRes.json();
           fotoGcsPath = fotoData.gcsPath;
-          console.log(`Fotos salvas no GCS: ${fotoGcsPath} (${fotoData.fotosSalvas} fotos)`);
+          console.log(`[salvarLeituras] Fotos salvas no GCS: ${fotoGcsPath} (${fotoData.fotosSalvas} fotos)`);
         } else {
-          console.error('Falha ao enviar fotos ao GCS, leitura será salva sem fotos');
+          const errText = await fotoRes.text().catch(() => '');
+          console.error('[salvarLeituras] Falha ao enviar fotos ao GCS. Status:', fotoRes.status, 'Resposta:', errText.substring(0, 300));
+          toast.error('Falha ao salvar fotos no servidor. Leituras serão salvas sem fotos.');
         }
       } catch (err) {
-        console.error('Erro ao enviar fotos ao GCS:', err);
+        console.error('[salvarLeituras] Erro ao enviar fotos ao GCS:', err);
+        toast.error('Erro ao enviar fotos: ' + (err instanceof Error ? err.message : 'erro desconhecido'));
         // Continua salvando leitura mesmo sem fotos
       }
+    } else {
+      console.log('[salvarLeituras] Nenhuma foto para upload (máquinas preenchidas sem fotoProcessada)');
     }
 
     try {

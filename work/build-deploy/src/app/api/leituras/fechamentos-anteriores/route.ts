@@ -43,11 +43,19 @@ export async function GET(request: NextRequest) {
       const day = String(d.getUTCDate()).padStart(2, '0');
       const h = String(d.getUTCHours()).padStart(2, '0');
       const min = String(d.getUTCMinutes()).padStart(2, '0');
+      // Converte para horário de São Paulo (America/Sao_Paulo, UTC-3)
+      // para exibir a data/hora correta no frontend
+      const utcDate = new Date(Date.UTC(y, parseInt(m) - 1, parseInt(day), parseInt(h), parseInt(min), 0));
+      const spDate = new Date(utcDate.getTime() - 3 * 60 * 60 * 1000); // UTC-3
+      const spDay = String(spDate.getUTCDate()).padStart(2, '0');
+      const spMonth = String(spDate.getUTCMonth() + 1).padStart(2, '0');
+      const spYear = spDate.getUTCFullYear();
+      const spHour = String(spDate.getUTCHours()).padStart(2, '0');
+      const spMin = String(spDate.getUTCMinutes()).padStart(2, '0');
       return {
-        data: `${day}/${m}/${y} ${h}:${min}`,
-        // ⚠️ dataISO é em UTC (sem sufixo 'Z' por compatibilidade com frontend,
-        // mas o frontend deve tratar como UTC ao montar Date objects)
-        dataISO: `${y}-${m}-${day}T${h}:${min}:00`,
+        data: `${spDay}/${spMonth}/${spYear} ${spHour}:${spMin}`,
+        // ⚠️ dataISO com sufixo 'Z' para indicar UTC — frontend cria Date correta
+        dataISO: `${y}-${m}-${day}T${h}:${min}:00Z`,
         operadores: f.operadores || '',
         qtdFotos: Number(f.qtd_fotos) || 0,
         qtdLeituras: Number(f.qtd_leituras) || 0,
