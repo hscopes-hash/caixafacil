@@ -9647,23 +9647,32 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground mb-2">Selecione o fechamento para excluir:</p>
                   <p className="text-xs text-amber-500 mb-2">⚠️ Apenas o último fechamento pode ser excluído.</p>
-                  {fechamentosAnteriores.map((f, idx) => (
+                  {fechamentosAnteriores.map((f, idx) => {
+                    const isUltimo = idx === 0;
+                    return (
                     <button
                       key={f.dataISO}
-                      onClick={() => selecionarExcluirLeitura(f)}
+                      onClick={() => {
+                        if (!isUltimo) {
+                          toast.warning('Apenas o último fechamento pode ser excluído.');
+                          return;
+                        }
+                        selecionarExcluirLeitura(f);
+                      }}
                       className={`w-full text-left px-3 py-2.5 rounded-lg border transition-colors text-sm ${
-                        idx === 0
+                        isUltimo
                           ? 'border-red-500/50 hover:bg-red-500/10 text-foreground'
                           : 'border-border opacity-50 cursor-not-allowed text-muted-foreground'
                       }`}
-                      title={idx === 0 ? 'Excluir este fechamento' : 'Apenas o último fechamento pode ser excluído'}
+                      title={isUltimo ? 'Excluir este fechamento' : 'Apenas o último fechamento pode ser excluído'}
                     >
                       <span className="font-medium">{f.data}</span>
-                      {idx === 0 && <span className="ml-2 text-[10px] text-red-500 font-bold">ÚLTIMO</span>}
+                      {isUltimo && <span className="ml-2 text-[10px] text-red-500 font-bold">ÚLTIMO</span>}
                       {f.operadores && <p className="text-xs opacity-60 mt-0.5">{f.operadores}</p>}
                       {f.qtdFotos > 0 && <p className="text-xs opacity-60">{f.qtdFotos} foto{f.qtdFotos === 1 ? '' : 's'}</p>}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
               <DialogFooter className="mt-4">
