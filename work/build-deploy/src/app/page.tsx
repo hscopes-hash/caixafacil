@@ -7251,6 +7251,349 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   };
 
   // =============================================
+  // RELATÓRIO PDF DO RESUMO (igual à 2a via, mas usando maquinasSalvas)
+  // =============================================
+  const gerarRelatorioPdfResumo = async (): Promise<Blob | null> => {
+    try {
+      if (!maquinasSalvas || maquinasSalvas.length === 0) return null;
+
+      const SCALE = 2;
+      const A4_W = 794;
+      const padding = 40;
+
+      const FONT_TITLE = 'bold 30px "Arial", sans-serif';
+      const FONT_SUBTITLE = '22px "Arial", sans-serif';
+      const FONT_LABEL = 'bold 24px "Arial", sans-serif';
+      const FONT_VALUE = '24px "Arial", sans-serif';
+      const FONT_TOTAL = 'bold 32px "Arial", sans-serif';
+
+      // Adaptar maquinasSalvas para o mesmo formato que gerarRelatorioPdf2aVia espera
+      const maquinasArr = maquinasSalvas.map(m => [m.id, m] as [string, any]);
+      const receitasFinal = receitasSalvas.filter(d => d.valor > 0);
+      const despesasFinal = despesasSalvas.filter(d => d.valor > 0);
+
+      let totalEntradas = 0, totalSaidas = 0;
+      maquinasSalvas.forEach(m => {
+        totalEntradas += calcularValor(m.moeda, m.diferencaEntrada);
+        totalSaidas += calcularValor(m.moeda, m.diferencaSaida);
+      });
+      const totalReceitas = receitasFinal.reduce((a, r) => a + r.valor, 0);
+      const totalDespesas = despesasFinal.reduce((a, d) => a + d.valor, 0);
+      const jogado = totalEntradas - totalSaidas;
+      const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
+      const valorCliente = jogado * (acertoPct / 100);
+      const temItensExtras = totalReceitas > 0 || totalDespesas > 0;
+      const fechamentoFinal = modoOperacao === 'COBRANCA'
+        ? (jogado - valorCliente - (debitosVencidosSalvos || 0))
+        : (temItensExtras ? (totalDespesas - totalReceitas) : jogado);
+
+      // Pré-carregar imagens das fotos processadas
+      const imagensPorMaquinaId = new Map<string, HTMLImageElement>();
+      const promessas: Promise<void>[] = [];
+      for (const m of maquinasSalvas) {
+        if (m.fotoProcessada) {
+          promessas.push(new Promise<void>((resolve) => {
+            const img = new Image();
+            img.onload = () => { imagensPorMaquinaId.set(m.id, img); resolve(); };
+            img.onerror = () => resolve();
+            img.src = m.fotoProcessada!;
+          }));
+        }
+      }
+      await Promise.race([Promise.all(promessas), new Promise<void>(r => setTimeout(r, 10000))]);
+
+      const CARD_HEIGHT = 320;
+      const temReceitasExtras = modoOperacao !== 'COBRANCA' && receitasFinal.length > 0;
+      const temDespesasExtras = modoOperacao !== 'COBRANCA' && despesasFinal.length > 0;
+
+      let alturaFinal = padding + 40 + 30 + 30 + 30 + 10 + 30;
+      alturaFinal += maquinasSalvas.length * (CARD_HEIGHT + 20);
+      alturaFinal += 10 + 30;
+      if (temReceitasExtras || temDespesasExtras) {
+        const maxItens = Math.max(temReceitasExtras ? receitasFinal.length : 0, temDespesasExtras ? despesasFinal.length : 0);
+        alturaFinal += 30 + maxItens * 30 + 40 + 20 + 20;
+      }
+      alturaFinal += 60 + 140 + 40 + padding;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = A4_W * SCALE;
+      canvas.height = alturaFinal * SCALE;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.scale(SCALE, SCALE);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, A4_W, alturaFinal);
+
+      let y = padding;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#000000';
+      ctx.font = FONT_TITLE;
+      ctx.fillText(modoOperacao === 'COBRANCA' ? 'RELATÓRIO DE COBRANÇA' : 'RELATÓRIO DE LEITURA', A4_W / 2, y); y += 35;
+      ctx.font = FONT_SUBTITLE;
+      ctx.fillText(clienteSelecionado?.nome?.toUpperCase() || '', A4_W / 2, y); y += 30;
+      ctx.font = FONT_VALUE;
+      ctx.fillText(`Data: ${dataFormatada}`, A4_W / 2, y); y += 30;
+      ctx.fillText(`Operador: ${usuarioNome}`, A4_W / 2, y); y += 30;
+      y += 10;
+      ctx.strokeStyle = '#000000'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(padding, y); ctx.lineTo(A4_W - padding, y); ctx.stroke(); y += 30;
+
+      // Cards de máquinas
+      ctx.textAlign = 'left';
+      for (const m of maquinasSalvas) {
+        ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
+        ctx.strokeRect(padding, y, A4_W - padding * 2, CARD_HEIGHT - 20);
+        const img = imagensPorMaquinaId.get(m.id);
+        const fotoX = padding + 10, fotoY = y + 10, fotoW = 280, fotoH = 280;
+        ctx.fillStyle = '#f0f0f0'; ctx.fillRect(fotoX, fotoY, fotoW, fotoH);
+        if (img && img.complete && img.naturalWidth > 0) {
+          const ar = img.naturalWidth / img.naturalHeight;
+          let dw = fotoW, dh = fotoH;
+          if (ar > 1) { dw = fotoW; dh = Math.round(fotoW / ar); } else { dh = fotoH; dw = Math.round(fotoH * ar); }
+          ctx.drawImage(img, fotoX + Math.round((fotoW - dw) / 2), fotoY + Math.round((fotoH - dh) / 2), dw, dh);
+        } else {
+          ctx.fillStyle = '#999999'; ctx.font = '14px Arial'; ctx.textAlign = 'center';
+          ctx.fillText('sem foto', fotoX + fotoW / 2, fotoY + fotoH / 2); ctx.textAlign = 'left';
+        }
+        const multMap: Record<string, number> = { M001: 0.01, M005: 0.05, M010: 0.10, M025: 0.25 };
+        const mult = multMap[m.moeda || 'M001'] ?? 0.01;
+        const textX = fotoX + fotoW + 20;
+        ctx.fillStyle = '#000000'; ctx.font = FONT_LABEL;
+        ctx.fillText(`${m.codigo} - ${(m.tipo?.descricao || '').toUpperCase()}`, textX, y + 40);
+        ctx.font = FONT_VALUE;
+        ctx.fillText(`x${mult.toString().replace('.', ',')}`, textX, y + 70);
+        ctx.fillText(`E: ${m.novaEntrada || 0} - ${m.entradaAtual || 0} = ${(parseInt(m.novaEntrada) || 0) - (m.entradaAtual || 0)}`, textX, y + 110);
+        ctx.fillText(`S: ${m.novaSaida || 0} - ${m.saidaAtual || 0} = ${(parseInt(m.novaSaida) || 0) - (m.saidaAtual || 0)}`, textX, y + 145);
+        ctx.font = FONT_LABEL;
+        ctx.fillText(`Saldo: ${formatNumber(m.saldoMaquina || 0)}`, textX, y + 185);
+        y += CARD_HEIGHT;
+      }
+
+      y += 10;
+      ctx.strokeStyle = '#000000'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(padding, y); ctx.lineTo(A4_W - padding, y); ctx.stroke(); y += 30;
+
+      // Receitas/Despesas extras
+      if (temReceitasExtras || temDespesasExtras) {
+        const colW = (A4_W - padding * 2 - 20) / 2;
+        if (temReceitasExtras) {
+          ctx.strokeStyle = '#1d4ed8'; ctx.lineWidth = 3;
+          ctx.strokeRect(padding, y, colW, 40 + receitasFinal.length * 30 + 10);
+          ctx.fillStyle = '#eff6ff'; ctx.fillRect(padding, y, colW, 40 + receitasFinal.length * 30 + 10);
+          ctx.fillStyle = '#1d4ed8'; ctx.font = FONT_LABEL; ctx.textAlign = 'left';
+          ctx.fillText('ENTRADA', padding + 10, y + 30);
+          receitasFinal.forEach((r, i) => {
+            ctx.font = FONT_VALUE;
+            ctx.fillText(`  ${r.descricao}: ${formatNumber(r.valor)}`, padding + 10, y + 60 + i * 30);
+          });
+          ctx.font = FONT_LABEL;
+          ctx.fillText(`Total: ${formatNumber(totalReceitas)}`, padding + 10, y + 60 + receitasFinal.length * 30);
+        }
+        if (temDespesasExtras) {
+          const dx = padding + colW + 20;
+          ctx.strokeStyle = '#b91c1c'; ctx.lineWidth = 3;
+          ctx.strokeRect(dx, y, colW, 40 + despesasFinal.length * 30 + 10);
+          ctx.fillStyle = '#fef2f2'; ctx.fillRect(dx, y, colW, 40 + despesasFinal.length * 30 + 10);
+          ctx.fillStyle = '#b91c1c'; ctx.font = FONT_LABEL;
+          ctx.fillText('SAÍDA', dx + 10, y + 30);
+          despesasFinal.forEach((d, i) => {
+            ctx.font = FONT_VALUE;
+            ctx.fillText(`  ${d.descricao}: ${formatNumber(d.valor)}`, dx + 10, y + 60 + i * 30);
+          });
+          ctx.font = FONT_LABEL;
+          ctx.fillText(`Total: ${formatNumber(totalDespesas)}`, dx + 10, y + 60 + despesasFinal.length * 30);
+        }
+        y += Math.max(40 + (temReceitasExtras ? receitasFinal.length * 30 : 0), 40 + (temDespesasExtras ? despesasFinal.length * 30 : 0)) + 60;
+      }
+
+      // Cards de totais (3 lado a lado)
+      const cardW = (A4_W - padding * 2 - 20) / 3;
+      const cardH = 100;
+      // ENTRADA
+      ctx.strokeStyle = '#1d4ed8'; ctx.lineWidth = 3;
+      ctx.strokeRect(padding, y, cardW, cardH);
+      ctx.fillStyle = '#eff6ff'; ctx.fillRect(padding, y, cardW, cardH);
+      ctx.fillStyle = '#1d4ed8'; ctx.font = FONT_LABEL; ctx.textAlign = 'center';
+      ctx.fillText('ENTRADA', padding + cardW / 2, y + 35);
+      ctx.font = FONT_TOTAL; ctx.fillStyle = '#1e3a8a';
+      ctx.fillText(formatNumber(modoOperacao === 'COBRANCA' ? jogado : totalReceitas), padding + cardW / 2, y + 75);
+      // SAÍDA
+      const sx = padding + cardW + 10;
+      ctx.strokeStyle = '#b91c1c';
+      ctx.strokeRect(sx, y, cardW, cardH);
+      ctx.fillStyle = '#fef2f2'; ctx.fillRect(sx, y, cardW, cardH);
+      ctx.fillStyle = '#b91c1c'; ctx.font = FONT_LABEL;
+      ctx.fillText('SAÍDA', sx + cardW / 2, y + 35);
+      ctx.font = FONT_TOTAL; ctx.fillStyle = '#7f1d1d';
+      ctx.fillText(formatNumber(modoOperacao === 'COBRANCA' ? (valorCliente + (debitosVencidosSalvos || 0)) : totalDespesas), sx + cardW / 2, y + 75);
+      // FECHAMENTO
+      const fx = sx + cardW + 10;
+      if (fechamentoFinal > 0) {
+        ctx.strokeStyle = '#15803d';
+        ctx.strokeRect(fx, y, cardW, cardH);
+        ctx.fillStyle = '#f0fdf4'; ctx.fillRect(fx, y, cardW, cardH);
+        ctx.fillStyle = '#15803d'; ctx.font = FONT_LABEL;
+        ctx.fillText('SOBROU', fx + cardW / 2, y + 35);
+        ctx.font = FONT_TOTAL; ctx.fillStyle = '#14532d';
+      } else if (fechamentoFinal === 0) {
+        ctx.strokeStyle = '#1d4ed8';
+        ctx.strokeRect(fx, y, cardW, cardH);
+        ctx.fillStyle = '#eff6ff'; ctx.fillRect(fx, y, cardW, cardH);
+        ctx.fillStyle = '#1d4ed8'; ctx.font = FONT_LABEL;
+        ctx.fillText('FECHOU', fx + cardW / 2, y + 35);
+        ctx.font = FONT_TOTAL; ctx.fillStyle = '#1e3a8a';
+      } else {
+        ctx.strokeStyle = '#b91c1c';
+        ctx.strokeRect(fx, y, cardW, cardH);
+        ctx.fillStyle = '#fef2f2'; ctx.fillRect(fx, y, cardW, cardH);
+        ctx.fillStyle = '#b91c1c'; ctx.font = FONT_LABEL;
+        ctx.fillText('FALTOU', fx + cardW / 2, y + 35);
+        ctx.font = FONT_TOTAL; ctx.fillStyle = '#7f1d1d';
+      }
+      ctx.fillText(formatNumber(fechamentoFinal), fx + cardW / 2, y + 75);
+      y += cardH + 20;
+
+      if (modoOperacao === 'COBRANCA') {
+        ctx.fillStyle = '#000000'; ctx.font = FONT_VALUE; ctx.textAlign = 'center';
+        ctx.fillText(`Cliente (${acertoPct}%): ${formatNumber(valorCliente)}`, A4_W / 2, y);
+      }
+
+      // Converter canvas para PDF
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const { jsPDF } = await import('jspdf');
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [A4_W, alturaFinal] });
+      pdf.addImage(imgData, 'JPEG', 0, 0, A4_W, alturaFinal);
+      return pdf.output('blob');
+    } catch (err) {
+      console.error('Erro ao gerar PDF do resumo:', err);
+      return null;
+    }
+  };
+
+  // Enviar relatório PDF do resumo via WhatsApp (igual à 2a via)
+  const enviarWhatsAppRelatorioResumo = async () => {
+    if (!clienteSelecionado || maquinasSalvas.length === 0) {
+      toast.error('Nenhum dado para gerar relatório');
+      return;
+    }
+
+    toast.loading('Gerando PDF do relatório...', { id: 'relatorio-wa-resumo' });
+
+    try {
+      const pdfBlob = await gerarRelatorioPdfResumo();
+      if (!pdfBlob) {
+        toast.dismiss('relatorio-wa-resumo');
+        toast.error('Falha ao gerar relatório');
+        return;
+      }
+
+      const now = new Date();
+      const fileName = `relatorio_${clienteSelecionado.nome.replace(/\s+/g, '_')}_${now.getTime()}.pdf`;
+      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+
+      const modo2via = modoOperacao === 'COBRANCA' ? 'COBRANÇA' : 'LEITURA';
+      const caption = `RELATÓRIO DE ${modo2via} - ${clienteSelecionado.nome.toUpperCase()}\nData: ${dataFormatada}`;
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            title: `Relatório - ${clienteSelecionado.nome}`,
+            text: caption,
+            files: [file],
+          });
+          toast.dismiss('relatorio-wa-resumo');
+          toast.success('PDF do relatório enviado!');
+          return;
+        } catch (shareError: unknown) {
+          if (shareError instanceof Error && shareError.name === 'AbortError') {
+            toast.dismiss('relatorio-wa-resumo');
+            return;
+          }
+        }
+      }
+
+      toast.dismiss('relatorio-wa-resumo');
+      const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
+      const phone = clienteSelecionado.telefone?.replace(/\D/g, '') || '';
+
+      const downloadLink = document.createElement('a');
+      downloadLink.href = URL.createObjectURL(file);
+      downloadLink.download = fileName;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+
+      if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
+        const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
+        setTimeout(() => abrirWhatsAppLink(grupoUrl), 500);
+        toast.info('PDF baixado! Anexe como documento no grupo do WhatsApp.');
+      } else if (phone) {
+        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 500);
+        toast.info('PDF baixado! Anexe como documento no WhatsApp do cliente.');
+      } else {
+        toast.success('PDF baixado! Compartilhe manualmente.');
+      }
+    } catch (error) {
+      toast.dismiss('relatorio-wa-resumo');
+      console.error('Erro ao gerar/enviar relatório WhatsApp:', error);
+      toast.error('Erro ao gerar relatório');
+    }
+  };
+
+  // Enviar relatório PDF do resumo via Telegram (igual à 2a via)
+  const enviarTelegramRelatorioResumo = async () => {
+    if (!clienteSelecionado || maquinasSalvas.length === 0) return;
+    const telegramGroupId = (clienteSelecionado as any).telegramGroupId;
+    if (!telegramGroupId) {
+      toast.error('Cliente não possui grupo Telegram cadastrado');
+      return;
+    }
+    try {
+      toast.loading('Gerando PDF do relatório...', { id: 'telegram-resumo-rel' });
+
+      const pdfBlob = await gerarRelatorioPdfResumo();
+      if (!pdfBlob) {
+        toast.dismiss('telegram-resumo-rel');
+        toast.error('Falha ao gerar relatório');
+        return;
+      }
+
+      const reader = new FileReader();
+      const pdfDataUrl = await new Promise<string>((resolve) => {
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(pdfBlob);
+      });
+
+      const res = await fetch('/api/telegram/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          empresaId: empresa?.id,
+          clienteId: clienteSelecionado?.id,
+          mensagem: null,
+          fotos: [pdfDataUrl],
+          primeiraFotoComoDocumento: true,
+        }),
+      });
+      const data = await res.json().catch(() => ({ success: false, error: 'Resposta inválida' }));
+      toast.dismiss('telegram-resumo-rel');
+      if (res.ok && data.success) {
+        toast.success('PDF do relatório enviado!');
+        setResumoTelegramEnviado(true);
+      } else {
+        toast.error(data.errorDetail || data.error || 'Erro ao enviar PDF', { duration: 10000 });
+      }
+    } catch (error) {
+      toast.dismiss('telegram-resumo-rel');
+      const errMsg = error instanceof Error ? error.message : 'Erro ao enviar para Telegram';
+      toast.error(errMsg, { duration: 8000 });
+    }
+  };
+
+  // =============================================
   // Enviar extrato + fotos processadas via Telegram (silencioso)
   // =============================================
   const enviarTelegramResumo = async () => {
@@ -10253,39 +10596,51 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 })()}
               </div>
 
-              {/* Botões de Ação */}
-              <div className="grid grid-cols-3 gap-3 mt-4">
+              {/* Botões de Ação — iguais aos da 2a via */}
+              <div className="grid grid-cols-2 gap-2 mt-4">
                 <Button
                   variant="outline"
                   onClick={imprimirResumo}
-                  className="flex flex-col items-center justify-center min-h-[4.5rem] py-3 px-2"
+                  className="flex flex-col items-center justify-center min-h-[4rem] py-2 px-2"
                 >
-                  <Printer className="w-7 h-7 mb-1" />
+                  <Printer className="w-6 h-6 mb-1" />
                   <span className="text-xs">Imprimir</span>
                 </Button>
                 <Button
                   onClick={enviarWhatsApp}
-                  className="bg-green-600 hover:bg-green-700 flex flex-col items-center justify-center min-h-[4.5rem] py-3 px-2"
+                  className="bg-green-600 hover:bg-green-700 flex flex-col items-center justify-center min-h-[4rem] py-2 px-2"
                 >
-                  <svg className="w-7 h-7 mb-1" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                  </svg>
-                  <span className="text-xs">WhatsApp</span>
+                  <MessageCircle className="w-6 h-6 mb-1" />
+                  <span className="text-xs">WhatsApp (Extrato)</span>
+                </Button>
+                <Button
+                  onClick={enviarWhatsAppRelatorioResumo}
+                  className="bg-gradient-to-r from-green-500 to-emerald-600 flex flex-col items-center justify-center min-h-[4rem] py-2 px-2"
+                >
+                  <FileText className="w-6 h-6 mb-1" />
+                  <span className="text-xs">WhatsApp (Relatório PDF)</span>
                 </Button>
                 <Button
                   onClick={enviarTelegramResumo}
                   disabled={resumoTelegramEnviado}
-                  className={`flex flex-col items-center justify-center min-h-[4.5rem] py-3 px-2 text-white ${resumoTelegramEnviado ? 'bg-sky-300 cursor-not-allowed' : 'bg-sky-500 hover:bg-sky-600'}`}
+                  className={`flex flex-col items-center justify-center min-h-[4rem] py-2 px-2 text-white ${resumoTelegramEnviado ? 'bg-sky-300 cursor-not-allowed' : 'bg-sky-500 hover:bg-sky-600'}`}
                 >
-                  <Send className="w-7 h-7 mb-1" />
-                  <span className="text-xs">{resumoTelegramEnviado ? 'Enviado' : 'Telegram'}</span>
+                  <Send className="w-6 h-6 mb-1" />
+                  <span className="text-xs">{resumoTelegramEnviado ? 'Enviado' : 'Telegram (Fotos + Extrato)'}</span>
+                </Button>
+                <Button
+                  onClick={enviarTelegramRelatorioResumo}
+                  className="bg-gradient-to-r from-sky-500 to-blue-600 flex flex-col items-center justify-center min-h-[4rem] py-2 px-2 text-white"
+                >
+                  <FileText className="w-6 h-6 mb-1" />
+                  <span className="text-xs">Telegram (Relatório PDF)</span>
                 </Button>
                 <Button
                   variant="secondary"
                   onClick={fecharResumo}
-                  className="flex flex-col items-center justify-center min-h-[4.5rem] py-3 px-2"
+                  className="flex flex-col items-center justify-center min-h-[4rem] py-2 px-2"
                 >
-                  <X className="w-7 h-7 mb-1" />
+                  <X className="w-6 h-6 mb-1" />
                   <span className="text-xs">Sair</span>
                 </Button>
               </div>
