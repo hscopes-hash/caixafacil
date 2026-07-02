@@ -14883,6 +14883,50 @@ export default function App() {
     return () => { delete (window as any).__caixafacil_requestFullscreenOnLogin; };
   }, [requestFullscreenOnLogin]);
 
+  // ============================================
+  // WAKE LOCK — impede tela de apagar (proteção de tela) quando app está aberto
+  // Usa Screen Wake Lock API (Chrome Android, iOS 17.4+)
+  // Re-adquire automaticamente se a página voltar a ficar visível
+  // Importante: durante processamento de lote de fotos, a tela pode apagar
+  // se o usuário não tocar na tela por ~30s. Wake Lock impede isso.
+  // ============================================
+  const wakeLockRef = useRef<any>(null);
+  const requestWakeLock = useCallback(async () => {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+        console.log('[WakeLock] Acquirado com sucesso');
+      }
+    } catch (err) {
+      console.warn('[WakeLock] Falha ao adquirir:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    // Solicitar wake lock quando autenticado
+    requestWakeLock();
+    // Re-adquire se a página voltar a ficar visível (ex: após trocar de aba)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && !wakeLockRef.current) {
+        requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    // Re-adquire periodicamente a cada 30s (caso o navegador tenha liberado)
+    const interval = setInterval(() => {
+      if (!wakeLockRef.current && document.visibilityState === 'visible') {
+        requestWakeLock();
+      }
+    }, 30000);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      clearInterval(interval);
+      try { if (wakeLockRef.current) wakeLockRef.current.release(); } catch {}
+      wakeLockRef.current = null;
+    };
+  }, [isAuthenticated, requestWakeLock]);
+
   const [activeTab, setActiveTab] = useState('dashboard');
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
