@@ -9966,109 +9966,168 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               <DialogHeader>
                 <DialogTitle className="text-center text-xl">{modoOperacao === 'COBRANCA' ? '✅ Cobrança Salva!' : modoOperacao === 'LEITURA' ? '✅ Leitura Processada!' : '✅ Ajustes Salvos!'}</DialogTitle>
               </DialogHeader>
-              
-              {/* Resumo das Máquinas Salvas - Formato Extrato */}
-              <div className="bg-white text-black p-4 rounded-lg font-mono text-sm">
-                <div className="text-center mb-2">
-                  <p className="font-bold">{clienteSelecionado?.nome?.toUpperCase()}</p>
-                </div>
-                <p>Data: {dataFormatada}</p>
-                <p>Lançado por: {usuarioNome}</p>
-                <div className="border-b border-black my-2"></div>
-                
-                {maquinasSalvas.map((m) => {
-                  const nomeMaquina = (m.tipo?.descricao || m.codigo || 'MÁQUINA').toUpperCase();
-                  return (
-                    <div key={m.id}>
-                      <p className="font-bold">{m.codigo} - {nomeMaquina}</p>
-                      <p>E {String(m.entradaAtual || 0).padStart(8)} {String(m.novaEntrada || m.entradaAtual || 0).padStart(8)}{modoOperacao !== 'AJUSTE' ? `___${formatNumber(calcularValor(m.moeda, m.diferencaEntrada))}` : ''}</p>
-                      <p>S {String(m.saidaAtual || 0).padStart(8)} {String(m.novaSaida || m.saidaAtual || 0).padStart(8)}{modoOperacao !== 'AJUSTE' ? `___${formatNumber(calcularValor(m.moeda, m.diferencaSaida))}` : ''}</p>
-                      {modoOperacao !== 'AJUSTE' && <p>Saldo: {formatNumber(m.saldoMaquina || 0)}</p>}
-                    </div>
-                  );
-                })}
 
-                {/* Separador apos cards das maquinas */}
-                <div className="border-b border-black my-2"></div>
-
-                {/* Totalizacao das maquinas - logo apos as maquinas */}
-                {modoOperacao !== 'AJUSTE' && (() => {
-                  const ts = calcularTotaisSalvos();
-                  return (
-                <div className="mt-1 space-y-1">
-                  <p>Qtde Maqs....: {String(maquinasSalvas.length).padStart(2, '0')}</p>
-                  <p>Entradas.....: {formatNumber(ts.entradas)}</p>
-                  <p>Saídas.......: {formatNumber(ts.saidas)}</p>
-                  <p className="font-bold">Jogado.......: {formatNumber(ts.jogado)}</p>
-                  {modoOperacao === 'COBRANCA' && <p>Cliente ({clienteSelecionado?.acertoPercentual ?? 50}%): {formatNumber(ts.cliente)}</p>}
-                  {modoOperacao === 'COBRANCA' && <p>Débitos (Saldo): {formatNumber(ts.debitoSalvo || 0)}</p>}
-                  <div className="border-b border-black my-2"></div>
+              {/* Preview no formato RELATÓRIO (igual à 2a via) — cards com fotos e molduras coloridas */}
+              <div className="bg-white text-black p-3 rounded-lg" id="relatorio-resumo">
+                <div className="text-center mb-3">
+                  <p className="font-bold text-base mb-1">
+                    {modoOperacao === 'COBRANCA' ? 'RELATÓRIO DE COBRANÇA' : modoOperacao === 'LEITURA' ? 'RELATÓRIO DE LEITURA' : 'RELATÓRIO DE AJUSTE'}
+                  </p>
+                  <p className="font-bold text-sm">{clienteSelecionado?.nome?.toUpperCase()}</p>
+                  <p className="text-sm">Data: {dataFormatada}</p>
+                  <p className="text-sm">Operador: {usuarioNome}</p>
                 </div>
-                  );
-                })()}
 
-                {/* Receitas detalhadas (so > 0) */}
-                {receitasSalvas.filter(d => d.valor > 0).length > 0 && (
-                  <div>
-                    {receitasSalvas.filter(d => d.valor > 0).map((d, i) => (
-                      <p key={`rec-${i}`}>  {d.descricao.padEnd(13)}: {formatNumber(d.valor)}</p>
-                    ))}
-                    <p className="font-bold">Total ENTRADAS: {formatNumber(calcularTotaisSalvos().receita)}</p>
-                    <div className="border-b border-black my-2"></div>
-                  </div>
-                )}
-                {/* Despesas detalhadas (so > 0) */}
-                {despesasSalvas.filter(d => d.valor > 0).length > 0 && (
-                  <div>
-                    {despesasSalvas.filter(d => d.valor > 0).map((d, i) => (
-                      <p key={`desp-${i}`}>  {d.descricao.padEnd(13)}: {formatNumber(d.valor)}</p>
-                    ))}
-                    <p className="font-bold">Total SAÍDAS: {formatNumber(calcularTotaisSalvos().despesa)}</p>
-                    <div className="border-b border-black my-2"></div>
-                  </div>
-                )}
-                {/* FECHAMENTO final */}
-                {modoOperacao !== 'AJUSTE' && (() => {
-                  const ts = calcularTotaisSalvos();
+                {/* Cards de máquinas com foto em miniatura */}
+                {(() => {
+                  const modo2via = modoOperacao;
+                  const maquinasArr = maquinasSalvas.map(m => [m.id, m] as [string, any]);
+                  let totalEntradas = 0;
+                  let totalSaidas = 0;
+                  maquinasSalvas.forEach(m => {
+                    totalEntradas += calcularValor(m.moeda, m.diferencaEntrada);
+                    totalSaidas += calcularValor(m.moeda, m.diferencaSaida);
+                  });
+                  const totalReceitas = receitasSalvas.reduce((a, r) => a + r.valor, 0);
+                  const totalDespesas = despesasSalvas.reduce((a, d) => a + d.valor, 0);
+                  const jogado = totalEntradas - totalSaidas;
+                  const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
+                  const valorCliente = jogado * (acertoPct / 100);
+                  const temItensExtras = totalReceitas > 0 || totalDespesas > 0;
+                  const fechamentoFinal = modoOperacao === 'COBRANCA'
+                    ? (jogado - valorCliente - (debitosVencidosSalvos || 0))
+                    : (temItensExtras ? (totalDespesas - totalReceitas) : jogado);
+                  const entradaFinal = modoOperacao === 'COBRANCA' ? jogado : (temItensExtras ? totalReceitas : jogado);
+                  const saidaFinal = temItensExtras ? totalDespesas : 0;
+
                   return (
-                <div className="mt-3 space-y-1">
-                  <p>ENTRADA......: {formatNumber(modoOperacao === 'COBRANCA' ? ts.jogado : ts.receita)}</p>
-                  <p>SAÍDA........: {formatNumber(ts.despesa)}</p>
-                  <p className="font-bold">{modoOperacao === 'COBRANCA' ? 'TOTALIZAÇÃO' : 'FECHAMENTO'}..: {formatNumber(ts.fechamento)} {ts.fechamento >= 0 ? '[sobrou]' : '[faltou]'}</p>
-                </div>
+                    <>
+                      {/* Cards de cada máquina */}
+                      <div className="space-y-2 mb-3">
+                        {maquinasSalvas.map((m) => {
+                          const multMap: Record<string, number> = { M001: 0.01, M005: 0.05, M010: 0.10, M025: 0.25 };
+                          const mult = multMap[m.moeda || 'M001'] ?? 0.01;
+                          return (
+                            <div key={m.id} className="border border-gray-700 rounded p-2 flex gap-3">
+                              {/* Miniatura da foto */}
+                              <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
+                                {m.fotoProcessada ? (
+                                  <img src={m.fotoProcessada} alt={m.codigo} className="w-full h-full object-contain" />
+                                ) : (
+                                  <span className="text-xs text-gray-500">sem foto</span>
+                                )}
+                              </div>
+                              {/* Dados da máquina */}
+                              <div className="flex-1 text-sm">
+                                <p className="text-base">
+                                  <span className="font-bold">{m.codigo} - {(m.tipo?.descricao || '').toUpperCase()}</span>{' '}
+                                  <span className="font-normal">x{mult.toString().replace('.', ',')}</span>
+                                </p>
+                                <p>{m.novaEntrada || 0} - {m.entradaAtual || 0} = {(parseInt(m.novaEntrada) || 0) - (m.entradaAtual || 0)}</p>
+                                <p>{m.novaSaida || 0} - {m.saidaAtual || 0} = {(parseInt(m.novaSaida) || 0) - (m.saidaAtual || 0)}</p>
+                                <p className="font-medium">Saldo: {formatNumber(m.saldoMaquina || 0)}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Receitas/Despesas extras — lado a lado com moldura */}
+                      {modoOperacao !== 'COBRANCA' && (receitasSalvas.filter(d => d.valor > 0).length > 0 || despesasSalvas.filter(d => d.valor > 0).length > 0) && (
+                        <div className="grid grid-cols-2 gap-2 mb-3">
+                          {receitasSalvas.filter(d => d.valor > 0).length > 0 && (
+                            <div className="border-2 border-blue-700 bg-blue-50 rounded p-2 text-sm">
+                              <p className="font-bold text-blue-700 mb-1">ENTRADA</p>
+                              {receitasSalvas.filter(d => d.valor > 0).map((r, i) => <p key={i}>  {r.descricao}: {formatNumber(r.valor)}</p>)}
+                              <p className="font-bold text-blue-700 mt-1">Total: {formatNumber(totalReceitas)}</p>
+                            </div>
+                          )}
+                          {despesasSalvas.filter(d => d.valor > 0).length > 0 && (
+                            <div className="border-2 border-red-700 bg-red-50 rounded p-2 text-sm">
+                              <p className="font-bold text-red-700 mb-1">SAÍDA</p>
+                              {despesasSalvas.filter(d => d.valor > 0).map((d, i) => <p key={i}>  {d.descricao}: {formatNumber(d.valor)}</p>)}
+                              <p className="font-bold text-red-700 mt-1">Total: {formatNumber(totalDespesas)}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Cards de totais em molduras (3 lado a lado) — ENTRADA, SAÍDA, FECHAMENTO */}
+                      <div className="grid grid-cols-3 gap-2 mt-3">
+                        {/* Card 1: Total Entrada (azul) */}
+                        <div className="border-2 border-blue-700 bg-blue-50 rounded p-2 text-center">
+                          <p className="font-bold text-blue-700 text-xs">ENTRADA</p>
+                          <p className="font-bold text-base text-blue-900">{formatNumber(modoOperacao === 'COBRANCA' ? jogado : totalReceitas)}</p>
+                        </div>
+                        {/* Card 2: Total Saída (vermelho) */}
+                        <div className="border-2 border-red-700 bg-red-50 rounded p-2 text-center">
+                          <p className="font-bold text-red-700 text-xs">SAÍDA</p>
+                          <p className="font-bold text-base text-red-900">{formatNumber(modoOperacao === 'COBRANCA' ? (valorCliente + (debitosVencidosSalvos || 0)) : totalDespesas)}</p>
+                        </div>
+                        {/* Card 3: Fechamento — título dinâmico (SOBROU/FECHOU/FALTOU) e cor conforme valor */}
+                        {(() => {
+                          if (fechamentoFinal > 0) {
+                            return (
+                              <div className="border-2 border-green-700 bg-green-50 rounded p-2 text-center">
+                                <p className="font-bold text-green-700 text-xs">SOBROU</p>
+                                <p className="font-bold text-base text-green-900">{formatNumber(fechamentoFinal)}</p>
+                              </div>
+                            );
+                          } else if (fechamentoFinal === 0) {
+                            return (
+                              <div className="border-2 border-blue-700 bg-blue-50 rounded p-2 text-center">
+                                <p className="font-bold text-blue-700 text-xs">FECHOU</p>
+                                <p className="font-bold text-base text-blue-900">{formatNumber(fechamentoFinal)}</p>
+                              </div>
+                            );
+                          } else {
+                            return (
+                              <div className="border-2 border-red-700 bg-red-50 rounded p-2 text-center">
+                                <p className="font-bold text-red-700 text-xs">FALTOU</p>
+                                <p className="font-bold text-base text-red-900">{formatNumber(fechamentoFinal)}</p>
+                              </div>
+                            );
+                          }
+                        })()}
+                      </div>
+
+                      {modoOperacao === 'COBRANCA' && (
+                        <p className="text-center mt-2 text-sm">Cliente ({acertoPct}%): {formatNumber(valorCliente)}</p>
+                      )}
+                    </>
                   );
                 })()}
               </div>
 
               {/* Botões de Ação */}
               <div className="grid grid-cols-3 gap-3 mt-4">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={imprimirResumo}
                   className="flex flex-col items-center justify-center min-h-[4.5rem] py-3 px-2"
                 >
                   <Printer className="w-7 h-7 mb-1" />
                   <span className="text-xs">Imprimir</span>
                 </Button>
-                <Button 
+                <Button
                   onClick={enviarWhatsApp}
                   className="bg-green-600 hover:bg-green-700 flex flex-col items-center justify-center min-h-[4.5rem] py-3 px-2"
                 >
                   <svg className="w-7 h-7 mb-1" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                   </svg>
-                  <span className="text-xs">WhatsApp (Somente Extrato)</span>
+                  <span className="text-xs">WhatsApp</span>
                 </Button>
-                <Button 
+                <Button
                   onClick={enviarTelegramResumo}
                   disabled={resumoTelegramEnviado}
                   className={`flex flex-col items-center justify-center min-h-[4.5rem] py-3 px-2 text-white ${resumoTelegramEnviado ? 'bg-sky-300 cursor-not-allowed' : 'bg-sky-500 hover:bg-sky-600'}`}
                 >
                   <Send className="w-7 h-7 mb-1" />
-                  <span className="text-xs">{resumoTelegramEnviado ? 'Enviado' : 'Telegram (Fotos + Extrato)'}</span>
+                  <span className="text-xs">{resumoTelegramEnviado ? 'Enviado' : 'Telegram'}</span>
                 </Button>
-                <Button 
-                  variant="secondary" 
+                <Button
+                  variant="secondary"
                   onClick={fecharResumo}
                   className="flex flex-col items-center justify-center min-h-[4.5rem] py-3 px-2"
                 >
@@ -14823,38 +14882,6 @@ export default function App() {
     (window as any).__caixafacil_requestFullscreenOnLogin = requestFullscreenOnLogin;
     return () => { delete (window as any).__caixafacil_requestFullscreenOnLogin; };
   }, [requestFullscreenOnLogin]);
-
-  // ============================================
-  // WAKE LOCK — impede tela de apagar (proteção de tela) quando app está aberto
-  // Usa Screen Wake Lock API (Chrome Android, iOS 17.4+)
-  // Re-adquire automaticamente se a página voltar a ficar visível
-  // ============================================
-  const wakeLockRef = useRef<any>(null);
-  const requestWakeLock = useCallback(async () => {
-    try {
-      if ('wakeLock' in navigator) {
-        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-      }
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    // Solicitar wake lock quando autenticado
-    requestWakeLock();
-    // Re-adquire se a página voltar a ficar visível (ex: após trocar de aba)
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && !wakeLockRef.current) {
-        requestWakeLock();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibility);
-      try { if (wakeLockRef.current) wakeLockRef.current.release(); } catch {}
-      wakeLockRef.current = null;
-    };
-  }, [isAuthenticated, requestWakeLock]);
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
