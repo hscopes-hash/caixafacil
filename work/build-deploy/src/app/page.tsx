@@ -4377,6 +4377,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
     setExtraindoLeitura(true);
     try {
+      // ⚠️ Corrigir inclinação da foto antes do OCR (melhora precisão)
+      const fotoCorrigida = await corrigirInclinacao(fotoCapturada);
+
       // Usar o MESMO endpoint do lote (processar-lote-foto) que tem melhor taxa de acerto
       // — prompt estruturado (identifica máquina + lê valores) e temperature 0.05
       const token = useAuthStore.getState().token;
@@ -4393,7 +4396,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
-          imagem: fotoCapturada,
+          imagem: fotoCorrigida,
           codigosMaquinas,
           modelosMap,
           empresaId: empresa?.id,
@@ -4608,7 +4611,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${useAuthStore.getState().token}` },
             signal: controller.signal,
             body: JSON.stringify({
-              imagem: foto.imagem,
+              imagem: await corrigirInclinacao(foto.imagem),
               codigosMaquinas,
               modelosMap,
               empresaId: empresa?.id,
@@ -4951,7 +4954,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${useAuthStore.getState().token}` },
           signal: controller.signal,
           body: JSON.stringify({
-            imagem: imagemBase64,
+            imagem: await corrigirInclinacao(imagemBase64),
             codigosMaquinas,
             modelosMap,
             empresaId: currentEmpresa?.id,
@@ -5155,6 +5158,149 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     panOffsetY.current = 0;
     setPanX(0);
     setPanY(0);
+  };
+
+  // ============================================
+  // CORREÇÃO AUTOMÁTICA DE INCLINAÇÃO (deskew)
+  // Detecta o ângulo de inclinação da foto analisando bordas horizontais
+  // e rotaciona a imagem para alinhá-la. Melhora a precisão do OCR.
+  // ============================================
+  const corrigirInclinacao = (imagemBase64: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          // Redimensionar para análise (max 400px para performance)
+          const maxAnalyze = 400;
+          let w = img.width, h = img.height;
+          if (w > maxAnalyze || h > maxAnalyze) {
+            if (w > h) { h = Math.round(h * maxAnalyze / w); w = maxAnalyze; }
+            else { w = Math.round(w * maxAnalyze / h); h = maxAnalyze; }
+          }
+
+          // Canvas para análise (tons de cinza)
+          const analyzeCanvas = document.createElement('canvas');
+          analyzeCanvas.width = w;
+          analyzeCanvas.height = h;
+          const actx = analyzeCanvas.getContext('2d');
+          if (!actx) { resolve(imagemBase64); return; }
+          actx.drawImage(img, 0, 0, w, h);
+          const imageData = actx.getImageData(0, 0, w, h);
+          const data = imageData.data;
+
+          // Converter para tons de cinza
+          const gray = new Uint8ClampedArray(w * h);
+          for (let i = 0; i < w * h; i++) {
+            gray[i] = Math.round(data[i * 4] * 0.299 + data[i * 4 + 1] * 0.587 + data[i * 4 + 2] * 0.114);
+          }
+
+          // Detectar ângulo testando rotações de -15 a +15 graus (passo 1 grau)
+          // Para cada ângulo, projeta as linhas horizontais e mede a variância
+          // O ângulo com maior variância é o mais alinhado (texto/bordas ficam nítidos)
+          let melhorAngulo = 0;
+          let melhorVariancia = 0;
+
+          for (let angulo = -15; angulo <= 15; angulo++) {
+            const rad = angulo * Math.PI / 180;
+            const cos = Math.cos(rad);
+            const sin = Math.sin(rad);
+
+            // Para cada linha y, somar os pixels e calcular variância entre linhas
+            const somaLinhas = new Float64Array(h);
+            for (let y = 0; y < h; y++) {
+              let soma = 0;
+              for (let x = 0; x < w; x++) {
+                // Rotacionar ponto de volta para a imagem original
+                const rx = Math.round((x - w / 2) * cos + (y - h / 2) * sin + w / 2);
+                const ry = Math.round(-(x - w / 2) * sin + (y - h / 2) * cos + h / 2);
+                if (rx >= 0 && rx < w && ry >= 0 && ry < h) {
+                  soma += gray[ry * w + rx];
+                }
+              }
+              somaLinhas[y] = soma;
+            }
+
+            // Calcular variância das somas das linhas (maior = mais alinhado)
+            const media = somaLinhas.reduce((a, b) => a + b, 0) / h;
+            let variancia = 0;
+            for (let y = 0; y < h; y++) {
+              variancia += (somaLinhas[y] - media) ** 2;
+            }
+            variancia /= h;
+
+            if (variancia > melhorVariancia) {
+              melhorVariancia = variancia;
+              melhorAngulo = angulo;
+            }
+          }
+
+          // Refinar com passo de 0.5 grau perto do melhor ângulo
+          for (let angulo = melhorAngulo - 1; angulo <= melhorAngulo + 1; angulo += 0.5) {
+            const rad = angulo * Math.PI / 180;
+            const cos = Math.cos(rad);
+            const sin = Math.sin(rad);
+            const somaLinhas = new Float64Array(h);
+            for (let y = 0; y < h; y++) {
+              let soma = 0;
+              for (let x = 0; x < w; x++) {
+                const rx = Math.round((x - w / 2) * cos + (y - h / 2) * sin + w / 2);
+                const ry = Math.round(-(x - w / 2) * sin + (y - h / 2) * cos + h / 2);
+                if (rx >= 0 && rx < w && ry >= 0 && ry < h) {
+                  soma += gray[ry * w + rx];
+                }
+              }
+              somaLinhas[y] = soma;
+            }
+            const media = somaLinhas.reduce((a, b) => a + b, 0) / h;
+            let variancia = 0;
+            for (let y = 0; y < h; y++) {
+              variancia += (somaLinhas[y] - media) ** 2;
+            }
+            variancia /= h;
+            if (variancia > melhorVariancia) {
+              melhorVariancia = variancia;
+              melhorAngulo = angulo;
+            }
+          }
+
+          // Só rotacionar se o ângulo for significativo (> 2 graus)
+          if (Math.abs(melhorAngulo) < 2) {
+            console.log(`[Deskew] Ângulo ${melhorAngulo}° — muito pequeno, não precisa corrigir`);
+            resolve(imagemBase64);
+            return;
+          }
+
+          console.log(`[Deskew] Corrigindo inclinação de ${melhorAngulo}°`);
+
+          // Rotacionar a imagem original no canvas
+          const ow = img.width, oh = img.height;
+          const rad = -melhorAngulo * Math.PI / 180; // negativo para corrigir
+          const cos = Math.abs(Math.cos(rad));
+          const sin = Math.abs(Math.sin(rad));
+          const newW = Math.round(ow * cos + oh * sin);
+          const newH = Math.round(ow * sin + oh * cos);
+
+          const rotCanvas = document.createElement('canvas');
+          rotCanvas.width = newW;
+          rotCanvas.height = newH;
+          const rctx = rotCanvas.getContext('2d');
+          if (!rctx) { resolve(imagemBase64); return; }
+
+          rctx.fillStyle = '#ffffff';
+          rctx.fillRect(0, 0, newW, newH);
+          rctx.translate(newW / 2, newH / 2);
+          rctx.rotate(rad);
+          rctx.drawImage(img, -ow / 2, -oh / 2);
+
+          resolve(rotCanvas.toDataURL('image/jpeg', 0.85));
+        } catch (err) {
+          console.warn('[Deskew] Erro ao corrigir inclinação:', err);
+          resolve(imagemBase64); // retorna original em caso de erro
+        }
+      };
+      img.onerror = () => resolve(imagemBase64); // retorna original se falhar
+      img.src = imagemBase64;
+    });
   };
 
   // Função para adicionar tarja vermelha com informações na foto
@@ -9355,6 +9501,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         <span className="text-sm text-muted-foreground font-medium">Galeria</span>
                       </div>
                     </label>
+                  </div>
+                  {/* Dica de alinhamento */}
+                  <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                    <svg className="w-4 h-4 text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                    <p className="text-xs text-blue-400">
+                      Dica: mantenha a câmera alinhada com o display para melhor precisão do OCR.
+                      Inclinações são corrigidas automaticamente.
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-3">
