@@ -3085,6 +3085,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [maquinasSalvas, setMaquinasSalvas] = useState<MaquinaLeitura[]>([]);
   // Estado para Extrato 2a Via
   const [segundaViaOpen, setSegundaViaOpen] = useState(false);
+  // Estado para Excluir Leitura (mesmo padrão da 2a via)
+  const [excluirLeituraOpen, setExcluirLeituraOpen] = useState(false);
+  const [excluirLeituraLoading, setExcluirLeituraLoading] = useState(false);
+  const [excluirLeituraSelecionada, setExcluirLeituraSelecionada] = useState<{ data: string; dataISO: string } | null>(null);
+  const [excluirLeituraConfirmOpen, setExcluirLeituraConfirmOpen] = useState(false);
   const [fechamentosAnteriores, setFechamentosAnteriores] = useState<{ data: string; dataISO: string; operadores: string; qtdFotos: number }[]>([]);
   const [segundaViaLoading, setSegundaViaLoading] = useState(false);
   const [segundaViaSelecionada, setSegundaViaSelecionada] = useState<{ data: string; dataISO: string } | null>(null);
@@ -5418,6 +5423,56 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     }
   };
 
+  // =============================================
+  // EXCLUIR LEITURA — mesmo padrão da 2a via
+  // =============================================
+  const abrirExcluirLeitura = async () => {
+    if (!clienteSelecionado) return;
+    setExcluirLeituraLoading(true);
+    setExcluirLeituraOpen(true);
+    setExcluirLeituraSelecionada(null);
+    try {
+      const res = await fetch(`/api/leituras/fechamentos-anteriores?clienteId=${clienteSelecionado.id}`);
+      if (!res.ok) throw new Error('Erro ao buscar fechamentos');
+      const fechamentos: { data: string; dataISO: string; operadores: string; qtdFotos: number }[] = await res.json();
+      setFechamentosAnteriores(fechamentos);
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao buscar fechamentos');
+      setExcluirLeituraOpen(false);
+    } finally {
+      setExcluirLeituraLoading(false);
+    }
+  };
+
+  const selecionarExcluirLeitura = (fechamento: { data: string; dataISO: string }) => {
+    setExcluirLeituraSelecionada(fechamento);
+    setExcluirLeituraConfirmOpen(true);
+  };
+
+  const confirmarExclusaoLeitura = async () => {
+    if (!clienteSelecionado || !excluirLeituraSelecionada) return;
+    setExcluirLeituraLoading(true);
+    try {
+      const res = await fetch(`/api/leituras?clienteId=${clienteSelecionado.id}&dataISO=${encodeURIComponent(excluirLeituraSelecionada.dataISO)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Erro ao excluir leitura');
+      }
+      toast.success(data.message || 'Leitura excluída com sucesso!');
+      setExcluirLeituraConfirmOpen(false);
+      setExcluirLeituraOpen(false);
+      setExcluirLeituraSelecionada(null);
+      // Recarregar máquinas para refletir valores restaurados
+      await loadMaquinasCliente(clienteSelecionado.id, undefined, true);
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao excluir leitura');
+    } finally {
+      setExcluirLeituraLoading(false);
+    }
+  };
+
   const selecionarSegundaVia = async (fechamento: { data: string; dataISO: string }) => {
     if (!clienteSelecionado) return;
     setSegundaViaLoading(true);
@@ -7735,6 +7790,18 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 ))}
               </SelectContent>
             </Select>
+            {/* Botão Excluir Leitura — logo abaixo do seletor de cliente */}
+            {clienteSelecionado && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={abrirExcluirLeitura}
+                className="w-full border-red-500/30 text-red-500 hover:bg-red-500/10"
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1" />
+                <span className="text-xs font-medium">Excluir Leitura</span>
+              </Button>
+            )}
 
           </div>
         </CardContent>
@@ -9562,6 +9629,84 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           </Dialog>
 
           {/* Modal de Resumo após Salvar */}
+
+          {/* Modal Excluir Leitura — Lista de Fechamentos (igual 2a via) */}
+          <Dialog open={excluirLeituraOpen} onOpenChange={setExcluirLeituraOpen}>
+            <DialogContent className="bg-card border-border text-foreground max-w-sm max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="text-center text-base text-red-500">Excluir Leitura</DialogTitle>
+              </DialogHeader>
+              {excluirLeituraLoading ? (
+                <div className="text-center py-8 text-muted-foreground">Carregando fechamentos...</div>
+              ) : fechamentosAnteriores.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Trash2 className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">Nenhum fechamento encontrado para este cliente.</p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground mb-2">Selecione o fechamento para excluir:</p>
+                  <p className="text-xs text-amber-500 mb-2">⚠️ Apenas o último fechamento pode ser excluído.</p>
+                  {fechamentosAnteriores.map((f, idx) => (
+                    <button
+                      key={f.dataISO}
+                      onClick={() => selecionarExcluirLeitura(f)}
+                      className={`w-full text-left px-3 py-2.5 rounded-lg border transition-colors text-sm ${
+                        idx === 0
+                          ? 'border-red-500/50 hover:bg-red-500/10 text-foreground'
+                          : 'border-border opacity-50 cursor-not-allowed text-muted-foreground'
+                      }`}
+                      title={idx === 0 ? 'Excluir este fechamento' : 'Apenas o último fechamento pode ser excluído'}
+                    >
+                      <span className="font-medium">{f.data}</span>
+                      {idx === 0 && <span className="ml-2 text-[10px] text-red-500 font-bold">ÚLTIMO</span>}
+                      {f.operadores && <p className="text-xs opacity-60 mt-0.5">{f.operadores}</p>}
+                      {f.qtdFotos > 0 && <p className="text-xs opacity-60">{f.qtdFotos} foto{f.qtdFotos === 1 ? '' : 's'}</p>}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <DialogFooter className="mt-4">
+                <Button variant="outline" onClick={() => setExcluirLeituraOpen(false)}>Sair</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Modal Excluir Leitura — Confirmação */}
+          <Dialog open={excluirLeituraConfirmOpen} onOpenChange={setExcluirLeituraConfirmOpen}>
+            <DialogContent className="bg-card border-border text-foreground max-w-sm">
+              <DialogHeader>
+                <DialogTitle className="text-center text-base text-red-500">Confirmar Exclusão</DialogTitle>
+              </DialogHeader>
+              <div className="py-4 text-center space-y-2">
+                <p className="text-sm text-foreground">
+                  Deseja realmente excluir o fechamento de:
+                </p>
+                <p className="font-bold text-foreground">{excluirLeituraSelecionada?.data}</p>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Os valores de entrada e saída das máquinas serão restaurados aos valores anteriores.
+                  Esta ação não pode ser desfeita.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => { setExcluirLeituraConfirmOpen(false); setExcluirLeituraSelecionada(null); }}
+                  disabled={excluirLeituraLoading}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                  onClick={confirmarExclusaoLeitura}
+                  disabled={excluirLeituraLoading}
+                >
+                  {excluirLeituraLoading ? 'Excluindo...' : 'Excluir'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {/* Modal Extrato 2a Via — Lista de Fechamentos */}
           <Dialog open={segundaViaOpen} onOpenChange={setSegundaViaOpen}>

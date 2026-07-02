@@ -211,3 +211,107 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// ============================================
+// DELETE — Excluir leituras de um fechamento e restaurar valores anteriores
+// das máquinas. Só permite excluir o ÚLTIMO fechamento do cliente.
+// ============================================
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const clienteId = searchParams.get('clienteId');
+    const dataISO = searchParams.get('dataISO'); // ISO do fechamento a excluir
+
+    if (!clienteId || !dataISO) {
+      return NextResponse.json(
+        { error: 'clienteId e dataISO são obrigatórios' },
+        { status: 400 }
+      );
+    }
+
+    // 1. Buscar todas as leituras do cliente no mesmo horário (±5 min)
+    const targetIso = dataISO.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(dataISO)
+      ? dataISO
+      : `${dataISO}Z`;
+    const targetMs = new Date(targetIso).getTime();
+    const JANELA_MS = 5 * 60 * 1000;
+
+    const [datePart] = dataISO.split('T');
+    const inicioUtc = new Date(`${datePart}T00:00:00Z`);
+    const fimUtc = new Date(`${datePart}T23:59:59Z`);
+
+    const leiturasDoDia = await db.leitura.findMany({
+      where: {
+        clienteId,
+        dataLeitura: { gte: inicioUtc, lte: fimUtc },
+      },
+      include: { maquina: { select: { id: true, codigo: true } } },
+      orderBy: { dataLeitura: 'desc' },
+    });
+
+    // Filtrar para o mesmo horário (±5 min)
+    const leiturasFechamento = leiturasDoDia.filter((l: any) => {
+      if (!l.dataLeitura) return false;
+      return Math.abs(new Date(l.dataLeitura).getTime() - targetMs) <= JANELA_MS;
+    });
+
+    if (leiturasFechamento.length === 0) {
+      return NextResponse.json(
+        { error: 'Nenhuma leitura encontrada para este fechamento.' },
+        { status: 404 }
+      );
+    }
+
+    // 2. Verificar se é o ÚLTIMO fechamento do cliente
+    // Buscar a data da leitura mais recente do cliente
+    const leituraMaisRecente = await db.leitura.findFirst({
+      where: { clienteId },
+      orderBy: { dataLeitura: 'desc' },
+      select: { dataLeitura: true },
+    });
+
+    if (leituraMaisRecente && leituraMaisRecente.dataLeitura) {
+      const recentMs = new Date(leituraMaisRecente.dataLeitura).getTime();
+      // Se a leitura mais recente NÃO está no fechamento selecionado (±5 min),
+      // então não é o último fechamento
+      const isUltimo = Math.abs(recentMs - targetMs) <= JANELA_MS;
+      if (!isUltimo) {
+        return NextResponse.json(
+          { error: 'Apenas o último fechamento pode ser excluído. Selecione o fechamento mais recente.' },
+          { status: 403 }
+        );
+      }
+    }
+
+    // 3. Para cada leitura do fechamento, restaurar valores anteriores da máquina
+    // entradaAtual volta para entradaAnterior, saidaAtual volta para saidaAnterior
+    for (const leitura of leiturasFechamento) {
+      await db.maquina.update({
+        where: { id: leitura.maquinaId },
+        data: {
+          entradaAtual: leitura.entradaAnterior,
+          saidaAtual: leitura.saidaAnterior,
+        },
+      });
+    }
+
+    // 4. Excluir as leituras do fechamento
+    const leituraIds = leiturasFechamento.map(l => l.id);
+    await db.leitura.deleteMany({
+      where: { id: { in: leituraIds } },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `${leiturasFechamento.length} leitura(s) excluída(s) e valores das máquinas restaurados.`,
+      leiturasExcluidas: leiturasFechamento.length,
+    });
+  } catch (error) {
+    console.error('Erro ao excluir leituras:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json(
+      { error: 'Erro ao excluir leituras', details: errorMsg },
+      { status: 500 }
+    );
+  }
+}
