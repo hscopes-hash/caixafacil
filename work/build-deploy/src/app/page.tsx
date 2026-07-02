@@ -9472,6 +9472,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
                 {/* Botões de ação */}
                 {!fotoCapturada ? (
+                  <>
                   <div className="grid grid-cols-2 gap-3">
                     {/* Botão Tirar Foto */}
                     <label className="cursor-pointer">
@@ -9508,10 +9509,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                     </svg>
                     <p className="text-xs text-blue-400">
-                      Dica: mantenha a câmera alinhada com o display para melhor precisão do OCR.
-                      Inclinações são corrigidas automaticamente.
+                      Dica: mantenha a câmera alinhada com o display para melhor precisão do OCR. Inclinações são corrigidas automaticamente.
                     </p>
                   </div>
+                  </>
                 ) : (
                   <div className="space-y-3">
                     {/* Botão Extraír Leitura */}
