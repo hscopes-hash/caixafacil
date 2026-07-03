@@ -7607,12 +7607,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         ctx.fillText(`Cliente (${acertoPct}%): ${formatNumber(valorCliente)}`, A4_W / 2, y);
       }
 
-      // Converter canvas para PDF
+      // Converter canvas para PDF (usando criarPdfDeImagem — sem jspdf)
       const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const { jsPDF } = await import('jspdf');
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [A4_W, alturaFinal] });
-      pdf.addImage(imgData, 'JPEG', 0, 0, A4_W, alturaFinal);
-      return pdf.output('blob');
+      return await criarPdfDeImagem(imgData);
     } catch (err) {
       console.error('Erro ao gerar PDF do resumo:', err);
       return null;
@@ -10764,26 +10761,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   <span className="text-xs">Imprimir</span>
                 </Button>
                 <Button
-                  onClick={enviarWhatsApp}
-                  className="bg-green-600 hover:bg-green-700 flex flex-col items-center justify-center min-h-[4rem] py-2 px-2"
-                >
-                  <MessageCircle className="w-6 h-6 mb-1" />
-                  <span className="text-xs">WhatsApp (Extrato)</span>
-                </Button>
-                <Button
                   onClick={enviarWhatsAppRelatorioResumo}
                   className="bg-gradient-to-r from-green-500 to-emerald-600 flex flex-col items-center justify-center min-h-[4rem] py-2 px-2"
                 >
                   <FileText className="w-6 h-6 mb-1" />
                   <span className="text-xs">WhatsApp (Relatório PDF)</span>
-                </Button>
-                <Button
-                  onClick={enviarTelegramResumo}
-                  disabled={resumoTelegramEnviado}
-                  className={`flex flex-col items-center justify-center min-h-[4rem] py-2 px-2 text-white ${resumoTelegramEnviado ? 'bg-sky-300 cursor-not-allowed' : 'bg-sky-500 hover:bg-sky-600'}`}
-                >
-                  <Send className="w-6 h-6 mb-1" />
-                  <span className="text-xs">{resumoTelegramEnviado ? 'Enviado' : 'Telegram (Fotos + Extrato)'}</span>
                 </Button>
                 <Button
                   onClick={enviarTelegramRelatorioResumo}
