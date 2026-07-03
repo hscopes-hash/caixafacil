@@ -8729,14 +8729,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 <h3 className="font-semibold text-foreground mb-3">
                   RESULTADO DA LEITURA
                 </h3>
-                <div className="grid grid-cols-1 gap-3 text-sm">
+                <div className="grid grid-cols-1 gap-3 text-base">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">ENTRADAS:</span>
-                    <span className="text-success font-bold">R$ {formatNumber(totais.totalReceitas)}</span>
+                    <span className="text-foreground font-bold text-lg">R$ {formatNumber(totais.totalReceitas)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">SAÍDAS:</span>
-                    <span className="text-danger font-bold">R$ {formatNumber(totais.totalDespesas)}</span>
+                    <span className="text-foreground font-bold text-lg">R$ {formatNumber(totais.totalDespesas)}</span>
                   </div>
                   <div className="flex justify-between items-center border-t border-border pt-2 mt-1">
                     <span className="text-foreground font-semibold">Resultado:</span>
