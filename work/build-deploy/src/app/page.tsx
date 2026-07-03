@@ -3068,6 +3068,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [numpadOpen, setNumpadOpen] = useState(false);
   const [numpadCampo, setNumpadCampo] = useState<'entrada' | 'saida' | null>(null);
   const [numpadMaquinaId, setNumpadMaquinaId] = useState<string | null>(null);
+  // Numpad para valores de receitas/despesas
+  const [numpadValorOpen, setNumpadValorOpen] = useState(false);
+  const [numpadValorTipo, setNumpadValorTipo] = useState<'receita' | 'despesa' | null>(null);
+  const [numpadValorId, setNumpadValorId] = useState<string | null>(null);
   // ⚠️ Ref para a foto COM tarja vermelha — evita race condition com estado assíncrono
   // Usado em aplicarLeituraExtraida() para garantir que fotoProcessada sempre tenha tarja
   const fotoComTarjaRef = useRef<string | null>(null);
@@ -8501,20 +8505,19 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                             <Calculator className="w-4 h-4 text-muted-foreground shrink-0" />
                           )}
                         </div>
-                        <Input
-                          type="text"
-                          inputMode="decimal"
-                          autoComplete="new-password"
-                          autoCapitalize="off"
-                          autoCorrect="off"
-                          spellCheck={false}
-                          value={item.valor}
-                          onChange={(e) => atualizarReceita(item.id, 'valor', e.target.value)}
-                          onBlur={(e) => formatarValorReceita(item.id, e.target.value)}
-                          placeholder="0,00"
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (item.readonly) return;
+                            setNumpadValorTipo('receita');
+                            setNumpadValorId(item.id);
+                            setNumpadValorOpen(true);
+                          }}
                           disabled={item.readonly || false}
-                          className={`bg-muted border-border text-foreground text-sm h-8 text-right ${item.readonly ? 'bg-primary/10 border-primary/20 font-bold text-primary cursor-not-allowed' : ''}`}
-                        />
+                          className={`bg-muted border border-border text-foreground text-sm h-8 text-right px-2 rounded-md font-mono w-[100px] ${item.readonly ? 'bg-primary/10 border-primary/20 font-bold text-primary cursor-not-allowed' : 'hover:bg-muted/80'}`}
+                        >
+                          {item.valor || <span className="text-muted-foreground/50">0,00</span>}
+                        </button>
                         {!item.fixo && !item.readonly ? (
                           <Button
                             type="button"
@@ -8604,19 +8607,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                             </Button>
                           )}
                         </div>
-                        <Input
-                          type="text"
-                          inputMode="decimal"
-                          autoComplete="new-password"
-                          autoCapitalize="off"
-                          autoCorrect="off"
-                          spellCheck={false}
-                          value={item.valor}
-                          onChange={(e) => atualizarDespesa(item.id, 'valor', e.target.value)}
-                          onBlur={(e) => formatarValorDespesa(item.id, e.target.value)}
-                          placeholder="0,00"
-                          className="bg-muted border-border text-foreground text-sm h-8 text-right"
-                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNumpadValorTipo('despesa');
+                            setNumpadValorId(item.id);
+                            setNumpadValorOpen(true);
+                          }}
+                          className="bg-muted border border-border text-foreground text-sm h-8 text-right px-2 rounded-md font-mono w-[100px] hover:bg-muted/80"
+                        >
+                          {item.valor || <span className="text-muted-foreground/50">0,00</span>}
+                        </button>
                         {!item.fixo ? (
                           <Button
                             type="button"
@@ -10893,6 +10894,33 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         onConfirm={numpadConfirm}
         titulo={`${numpadCampo === 'entrada' ? 'ENTRADA' : 'SAÍDA'} — ${maquinas.find(m => m.id === numpadMaquinaId)?.codigo || ''}`}
         valorInicial={numpadMaquinaId && numpadCampo ? (maquinas.find(m => m.id === numpadMaquinaId)?.[numpadCampo === 'entrada' ? 'novaEntrada' : 'novaSaida'] || '') : ''}
+      />
+
+      {/* Numpad para valores de receitas/despesas */}
+      <NumpadModal
+        open={numpadValorOpen}
+        onClose={() => { setNumpadValorOpen(false); setNumpadValorId(null); setNumpadValorTipo(null); }}
+        onConfirm={(valor) => {
+          if (numpadValorTipo === 'receita' && numpadValorId) {
+            atualizarReceita(numpadValorId, 'valor', valor);
+            formatarValorReceita(numpadValorId, valor);
+          } else if (numpadValorTipo === 'despesa' && numpadValorId) {
+            atualizarDespesa(numpadValorId, 'valor', valor);
+            formatarValorDespesa(numpadValorId, valor);
+          }
+        }}
+        titulo={numpadValorTipo === 'receita' ? 'ENTRADA — VALOR' : 'SAÍDA — VALOR'}
+        valorInicial={(() => {
+          if (!numpadValorId) return '';
+          if (numpadValorTipo === 'receita') {
+            const item = receitasItens.find(r => r.id === numpadValorId);
+            return item?.valor || '';
+          } else if (numpadValorTipo === 'despesa') {
+            const item = despesasItens.find(d => d.id === numpadValorId);
+            return item?.valor || '';
+          }
+          return '';
+        })()}
       />
     </form>
   );
