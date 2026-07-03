@@ -7522,37 +7522,35 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       ctx.strokeStyle = '#000000'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(padding, y); ctx.lineTo(A4_W - padding, y); ctx.stroke(); y += 30;
 
-      // Receitas/Despesas extras
+      // Receitas/Despesas extras — mesmo padrão do gerarRelatorioPdf2aVia
       if (temReceitasExtras || temDespesasExtras) {
         const colW = (A4_W - padding * 2 - 20) / 2;
+        const maxItens = Math.max(temReceitasExtras ? receitasFinal.length : 0, temDespesasExtras ? despesasFinal.length : 0);
+        const sectionH = 30 + maxItens * 30 + 40 + 20;
         if (temReceitasExtras) {
-          ctx.strokeStyle = '#1d4ed8'; ctx.lineWidth = 3;
-          ctx.strokeRect(padding, y, colW, 40 + receitasFinal.length * 30 + 10);
-          ctx.fillStyle = '#eff6ff'; ctx.fillRect(padding, y, colW, 40 + receitasFinal.length * 30 + 10);
-          ctx.fillStyle = '#1d4ed8'; ctx.font = FONT_LABEL; ctx.textAlign = 'left';
-          ctx.fillText('ENTRADA', padding + 10, y + 30);
-          receitasFinal.forEach((r, i) => {
-            ctx.font = FONT_VALUE;
-            ctx.fillText(`  ${r.descricao}: ${formatNumber(r.valor)}`, padding + 10, y + 60 + i * 30);
-          });
-          ctx.font = FONT_LABEL;
-          ctx.fillText(`Total: ${formatNumber(totalReceitas)}`, padding + 10, y + 60 + receitasFinal.length * 30);
+          ctx.strokeStyle = '#0066cc'; ctx.lineWidth = 3; ctx.strokeRect(padding, y, colW, sectionH);
+          ctx.fillStyle = '#e6f0ff'; ctx.fillRect(padding, y, colW, sectionH);
+          ctx.textAlign = 'left'; ctx.fillStyle = '#0066cc'; ctx.font = FONT_LABEL;
+          ctx.fillText('ENTRADA', padding + 15, y + 30);
+          ctx.fillStyle = '#000000'; ctx.font = FONT_VALUE;
+          let yRec = y + 60;
+          receitasFinal.forEach((r) => { ctx.fillText(`${r.descricao || 'OUTROS'}: ${formatNumber(r.valor)}`, padding + 15, yRec); yRec += 30; });
+          ctx.fillStyle = '#0066cc'; ctx.font = FONT_LABEL;
+          ctx.fillText(`Total: ${formatNumber(totalReceitas)}`, padding + 15, y + sectionH - 20);
         }
         if (temDespesasExtras) {
-          const dx = padding + colW + 20;
-          ctx.strokeStyle = '#b91c1c'; ctx.lineWidth = 3;
-          ctx.strokeRect(dx, y, colW, 40 + despesasFinal.length * 30 + 10);
-          ctx.fillStyle = '#fef2f2'; ctx.fillRect(dx, y, colW, 40 + despesasFinal.length * 30 + 10);
-          ctx.fillStyle = '#b91c1c'; ctx.font = FONT_LABEL;
-          ctx.fillText('SAÍDA', dx + 10, y + 30);
-          despesasFinal.forEach((d, i) => {
-            ctx.font = FONT_VALUE;
-            ctx.fillText(`  ${d.descricao}: ${formatNumber(d.valor)}`, dx + 10, y + 60 + i * 30);
-          });
-          ctx.font = FONT_LABEL;
-          ctx.fillText(`Total: ${formatNumber(totalDespesas)}`, dx + 10, y + 60 + despesasFinal.length * 30);
+          const col2X = padding + colW + 20;
+          ctx.strokeStyle = '#cc3300'; ctx.strokeRect(col2X, y, colW, sectionH);
+          ctx.fillStyle = '#ffe6e6'; ctx.fillRect(col2X, y, colW, sectionH);
+          ctx.textAlign = 'left'; ctx.fillStyle = '#cc3300'; ctx.font = FONT_LABEL;
+          ctx.fillText('SAÍDA', col2X + 15, y + 30);
+          ctx.fillStyle = '#000000'; ctx.font = FONT_VALUE;
+          let yDesp = y + 60;
+          despesasFinal.forEach((d) => { ctx.fillText(`${d.descricao || 'OUTROS'}: ${formatNumber(d.valor)}`, col2X + 15, yDesp); yDesp += 30; });
+          ctx.fillStyle = '#cc3300'; ctx.font = FONT_LABEL;
+          ctx.fillText(`Total: ${formatNumber(totalDespesas)}`, col2X + 15, y + sectionH - 20);
         }
-        y += Math.max(40 + (temReceitasExtras ? receitasFinal.length * 30 : 0), 40 + (temDespesasExtras ? despesasFinal.length * 30 : 0)) + 60;
+        y += sectionH + 20;
       }
 
       // Cards de totais (3 lado a lado)
