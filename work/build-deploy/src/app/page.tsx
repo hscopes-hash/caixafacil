@@ -8668,22 +8668,22 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               </h3>
               {modoOperacao === 'LEITURA' ? (
                 /* MODO LEITURA: apenas Entradas, Saidas e Fechamento */
-                <div className="grid grid-cols-1 gap-3 text-sm">
+                <div className="grid grid-cols-1 gap-3 text-lg">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total das Entradas:</span>
-                    <span className="text-success font-bold">R$ {formatNumber(totais.entradas)}</span>
+                    <span className="text-foreground font-bold text-xl">R$ {formatNumber(totais.entradas)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total das Saídas:</span>
-                    <span className="text-danger font-bold">R$ {formatNumber(totais.saidas)}</span>
+                    <span className="text-foreground font-bold text-xl">R$ {formatNumber(totais.saidas)}</span>
                   </div>
                   <div className="flex justify-between border-t border-border pt-2 mt-1">
-                    <span className="text-foreground font-semibold">Fechamento:</span>
+                    <span className="text-foreground font-semibold text-xl">Fechamento:</span>
                     <div className="flex items-center gap-2">
-                      <Badge className={`${Math.abs(totais.jogado) < 0.01 ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : totais.jogado > 0 ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'} text-[10px] px-1.5 py-0`}>
+                      <Badge className={`${Math.abs(totais.jogado) < 0.01 ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : totais.jogado > 0 ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'} text-xs px-2 py-0.5`}>
                         {Math.abs(totais.jogado) < 0.01 ? 'Fechou' : totais.jogado > 0 ? 'Sobrou' : 'Faltou'}
                       </Badge>
-                      <span className={`font-bold ${Math.abs(totais.jogado) < 0.01 ? 'text-green-400' : totais.jogado > 0 ? 'text-blue-400' : 'text-red-400'}`}>
+                      <span className={`font-bold text-xl ${Math.abs(totais.jogado) < 0.01 ? 'text-green-400' : totais.jogado > 0 ? 'text-blue-400' : 'text-red-400'}`}>
                         R$ {formatNumber(Math.abs(totais.jogado))}{totais.jogado < 0 ? ' (-)' : ''}
                       </span>
                     </div>
@@ -8739,17 +8739,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     <span className="text-foreground font-bold text-xl">R$ {formatNumber(totais.totalDespesas)}</span>
                   </div>
                   <div className="flex justify-between items-center border-t border-border pt-2 mt-1">
-                    <span className="text-foreground font-semibold">Resultado:</span>
+                    <span className="text-foreground font-semibold text-xl">Resultado:</span>
                     <div className="flex items-center gap-2">
                     {(() => {
                       const resultado = totais.fechamento;
                       const isZero = Math.abs(resultado) < 0.01;
                       return (
                         <>
-                          <Badge className={`${isZero ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : resultado > 0 ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'} text-[10px] px-1.5 py-0`}>
+                          <Badge className={`${isZero ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : resultado > 0 ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'} text-xs px-2 py-0.5`}>
                             {isZero ? 'Fechou' : resultado > 0 ? 'Sobrou' : 'Faltou'}
                           </Badge>
-                          <span className={`font-bold ${isZero ? 'text-green-400' : resultado > 0 ? 'text-blue-400' : 'text-red-400'}`}>
+                          <span className={`font-bold text-xl ${isZero ? 'text-green-400' : resultado > 0 ? 'text-blue-400' : 'text-red-400'}`}>
                             R$ {formatNumber(Math.abs(resultado))}{resultado < 0 ? ' (-)' : ''}
                           </span>
                         </>
