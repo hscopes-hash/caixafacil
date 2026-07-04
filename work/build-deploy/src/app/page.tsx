@@ -6463,6 +6463,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         fotoBase64: m.fotoProcessada as string,
       }));
 
+    // Adicionar foto do canhoto de cartão (se houver) ao upload
+    if (cartaoFotoProcessada) {
+      fotosParaUpload.push({
+        maquinaId: 'cartao-canhoto',
+        codigo: 'CARTAO',
+        fotoBase64: cartaoFotoProcessada,
+      });
+      console.log('[salvarLeituras] Foto do canhoto de cartão adicionada ao upload');
+    }
+
     console.log(`[salvarLeituras] Máquinas preenchidas: ${maquinasPreenchidas.length}`);
     console.log(`[salvarLeituras] Máquinas com fotoProcessada: ${fotosParaUpload.length}`);
     maquinasPreenchidas.forEach(m => {
@@ -7458,6 +7468,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       let alturaFinal = padding + 40 + 30 + 30 + 30 + 10 + 30;
       alturaFinal += maquinasSalvas.length * (CARD_HEIGHT + 20);
+      // Espaço para card CARTÃO (se houver foto)
+      if (cartaoFotoProcessada) alturaFinal += 200 + 10;
       alturaFinal += 10 + 30;
       if (temReceitasExtras || temDespesasExtras) {
         const maxItens = Math.max(temReceitasExtras ? receitasFinal.length : 0, temDespesasExtras ? despesasFinal.length : 0);
@@ -7520,6 +7532,32 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         ctx.font = FONT_LABEL;
         ctx.fillText(`Saldo: ${formatNumber(m.saldoMaquina || 0)}`, textX, y + 185);
         y += CARD_HEIGHT;
+      }
+
+      // Card CARTÃO (canhotos) — só se houver foto
+      if (cartaoFotoProcessada) {
+        const cartaoCardH = 200;
+        ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
+        ctx.strokeRect(padding, y, A4_W - padding * 2, cartaoCardH);
+        const fotoX = padding + 10, fotoY = y + 10, fotoW = 180, fotoH = 180;
+        ctx.fillStyle = '#f0f0f0'; ctx.fillRect(fotoX, fotoY, fotoW, fotoH);
+        try {
+          const cartaoImg = await new Promise<HTMLImageElement>((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(img);
+            img.src = cartaoFotoProcessada!;
+          });
+          if (cartaoImg.complete && cartaoImg.naturalWidth > 0) {
+            const ar = cartaoImg.naturalWidth / cartaoImg.naturalHeight;
+            let dw = fotoW, dh = fotoH;
+            if (ar > 1) { dw = fotoW; dh = Math.round(fotoW / ar); } else { dh = fotoH; dw = Math.round(fotoH * ar); }
+            ctx.drawImage(cartaoImg, fotoX + Math.round((fotoW - dw) / 2), fotoY + Math.round((fotoH - dh) / 2), dw, dh);
+          }
+        } catch {}
+        ctx.fillStyle = '#000000'; ctx.font = FONT_LABEL; ctx.textAlign = 'left';
+        ctx.fillText('CARTÃO — Canhotos', fotoX + fotoW + 20, y + 60);
+        y += cartaoCardH + 10;
       }
 
       y += 10;
@@ -9609,7 +9647,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             </DialogContent>
           </Dialog>
 
-          {/* Modal Capturar Canhotos de Cartão */}
+          {/* Modal Capturar Canhotos de Cartão — apenas foto, sem IA */}
           <Dialog open={cartaoModalOpen} onOpenChange={setCartaoModalOpen}>
             <DialogContent className="bg-card border-border text-foreground max-w-md max-h-[90vh] overflow-y-auto">
               <DialogHeader>
@@ -9618,7 +9656,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   Capturar Canhotos de Cartão
                 </DialogTitle>
                 <DialogDescription className="text-muted-foreground">
-                  Tire uma foto dos canhotos ou selecione da galeria. A IA irá identificar e totalizar os valores.
+                  Tire uma foto dos canhotos ou selecione da galeria. A foto será preservada e enviada junto com as fotos da leitura.
                 </DialogDescription>
               </DialogHeader>
 
@@ -9679,76 +9717,18 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {/* Botão Extrair Valores */}
+                    {/* Botão Confirmar Foto — apenas preserva a foto, sem IA */}
                     <Button
-                      className="w-full bg-gradient-to-r from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700"
-                      onClick={extrairValoresCartao}
-                      disabled={extraindoCartao}
+                      className="w-full bg-gradient-to-r from-green-500 to-emerald-600"
+                      onClick={() => {
+                        setCartaoFotoProcessada(cartaoFotoCapturada);
+                        toast.success('Foto do canhoto salva! Será enviada junto com a leitura.');
+                        setCartaoModalOpen(false);
+                      }}
                     >
-                      {extraindoCartao ? (
-                        <>
-                          <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          Analisando canhotos...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-4 h-4 mr-2" />
-                          EXTRAIR VALORES
-                        </>
-                      )}
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      CONFIRMAR FOTO
                     </Button>
-
-                    {/* Resultado da extração */}
-                    {cartaoResultado && (
-                      <div className="bg-card rounded-lg p-3 border border-border space-y-2">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs text-muted-foreground">Resultado da leitura:</p>
-                          <span className="text-xs text-success font-medium">{cartaoResultado.quantidade} ticket(s)</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="text-center p-2 bg-success-bg rounded border border-success/30">
-                            <p className="text-xs text-success">TICKETS</p>
-                            <p className="text-lg font-bold text-success">{cartaoResultado.quantidade}</p>
-                          </div>
-                          {cartaoResultado.totalConferido ? (
-                            <div className="text-center p-2 bg-blue-50 rounded border border-blue-300">
-                              <p className="text-xs text-blue-600">TOTAL</p>
-                              <p className="text-lg font-bold text-blue-600">R$ {cartaoResultado.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                            </div>
-                          ) : (
-                            <div className="text-center p-2 bg-amber-50 rounded border border-amber-300">
-                              <p className="text-xs text-amber-600">TOTAL (CORRIGIDO)</p>
-                              <p className="text-lg font-bold text-amber-600">R$ {cartaoResultado.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                            </div>
-                          )}
-                        </div>
-                        {/* Build 130: Aviso de discrepancia na soma da IA */}
-                        {!cartaoResultado.totalConferido && cartaoResultado.totalIA !== undefined && (
-                          <div className="flex items-center gap-2 p-2 bg-amber-50 border border-amber-300 rounded-lg">
-                            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-                            <p className="text-xs text-amber-700">
-                              A IA informou R$ {cartaoResultado.totalIA!.toFixed(2)} mas a soma dos valores e R$ {cartaoResultado.total.toFixed(2)}. O total foi corrigido automaticamente.
-                            </p>
-                          </div>
-                        )}
-                        {cartaoResultado.tickets.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {cartaoResultado.tickets.map((t, i) => (
-                              <span key={i} className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
-                                R$ {t.toFixed(2)}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        <Button
-                          className="w-full mt-2 bg-gradient-to-r from-green-500 to-emerald-600"
-                          onClick={aplicarValoresCartao}
-                        >
-                          <CheckCircle className="w-4 h-4 mr-2" />
-                          APLICAR AO CAMPO CARTÃO
-                        </Button>
-                      </div>
-                    )}
 
                     {/* Botão Nova Foto */}
                     <Button
@@ -10509,6 +10489,18 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                                 );
                               })}
                             </div>
+
+                            {/* Card CARTÃO (canhotos) — só se houver foto */}
+                            {cartaoFotoProcessada && (
+                              <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
+                                <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
+                                  <img src={cartaoFotoProcessada} alt="Canhotos" className="w-full h-full object-contain" />
+                                </div>
+                                <div className="flex-1 text-sm flex items-center">
+                                  <p className="text-base font-bold">CARTÃO — Canhotos</p>
+                                </div>
+                              </div>
+                            )}
 
                             {/* Receitas/Despesas extras — lado a lado com moldura */}
                             {modo2via !== 'COBRANCA' && (receitasFinal.length > 0 || despesasFinal.length > 0) && (
