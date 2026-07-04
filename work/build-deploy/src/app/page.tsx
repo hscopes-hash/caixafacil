@@ -6472,6 +6472,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       });
       console.log('[salvarLeituras] Foto do canhoto de cartão adicionada ao upload');
     }
+    // Adicionar foto dos cupons fiscais do mercado (se houver) ao upload
+    if (mercadoFotoProcessada) {
+      fotosParaUpload.push({
+        maquinaId: 'mercado-cupons',
+        codigo: 'MERCADO',
+        fotoBase64: mercadoFotoProcessada,
+      });
+      console.log('[salvarLeituras] Foto dos cupons do mercado adicionada ao upload');
+    }
 
     console.log(`[salvarLeituras] Máquinas preenchidas: ${maquinasPreenchidas.length}`);
     console.log(`[salvarLeituras] Máquinas com fotoProcessada: ${fotosParaUpload.length}`);
@@ -7470,6 +7479,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       alturaFinal += maquinasSalvas.length * (CARD_HEIGHT + 20);
       // Espaço para card CARTÃO (se houver foto)
       if (cartaoFotoProcessada) alturaFinal += 200 + 10;
+      // Espaço para card MERCADO (se houver foto)
+      if (mercadoFotoProcessada) alturaFinal += 200 + 10;
       alturaFinal += 10 + 30;
       if (temReceitasExtras || temDespesasExtras) {
         const maxItens = Math.max(temReceitasExtras ? receitasFinal.length : 0, temDespesasExtras ? despesasFinal.length : 0);
@@ -7558,6 +7569,32 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         ctx.fillStyle = '#000000'; ctx.font = FONT_LABEL; ctx.textAlign = 'left';
         ctx.fillText('CARTÃO — Canhotos', fotoX + fotoW + 20, y + 60);
         y += cartaoCardH + 10;
+      }
+
+      // Card MERCADO (cupons) — só se houver foto
+      if (mercadoFotoProcessada) {
+        const mercadoCardH = 200;
+        ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
+        ctx.strokeRect(padding, y, A4_W - padding * 2, mercadoCardH);
+        const mfotoX = padding + 10, mfotoY = y + 10, mfotoW = 180, mfotoH = 180;
+        ctx.fillStyle = '#f0f0f0'; ctx.fillRect(mfotoX, mfotoY, mfotoW, mfotoH);
+        try {
+          const mercadoImg = await new Promise<HTMLImageElement>((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(img);
+            img.src = mercadoFotoProcessada!;
+          });
+          if (mercadoImg.complete && mercadoImg.naturalWidth > 0) {
+            const ar = mercadoImg.naturalWidth / mercadoImg.naturalHeight;
+            let dw = mfotoW, dh = mfotoH;
+            if (ar > 1) { dw = mfotoW; dh = Math.round(mfotoW / ar); } else { dh = mfotoH; dw = Math.round(mfotoH * ar); }
+            ctx.drawImage(mercadoImg, mfotoX + Math.round((mfotoW - dw) / 2), mfotoY + Math.round((mfotoH - dh) / 2), dw, dh);
+          }
+        } catch {}
+        ctx.fillStyle = '#000000'; ctx.font = FONT_LABEL; ctx.textAlign = 'left';
+        ctx.fillText('MERCADO — Cupons Fiscais', mfotoX + mfotoW + 20, y + 60);
+        y += mercadoCardH + 10;
       }
 
       y += 10;
@@ -7804,6 +7841,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       }
       // Adicionar foto dos canhotos de cartão
       if (cartaoFotoProcessada) fotos.push(cartaoFotoProcessada);
+      // Adicionar foto dos cupons do mercado
+      if (mercadoFotoProcessada) fotos.push(mercadoFotoProcessada);
       console.log('[Telegram Resumo] Fotos processadas:', fotos.length);
 
       // 3) Montar lista final: extrato (imagem) + fotos
@@ -9753,7 +9792,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   Capturar Cupons Fiscais
                 </DialogTitle>
                 <DialogDescription className="text-muted-foreground">
-                  Tire uma foto dos cupons fiscais ou selecione da galeria. A IA ira identificar e totalizar os valores.
+                  Tire uma foto dos cupons fiscais ou selecione da galeria. A foto será preservada e enviada junto com as fotos da leitura.
                 </DialogDescription>
               </DialogHeader>
 
@@ -9801,57 +9840,18 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <Button className="w-full bg-gradient-to-r from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700" onClick={extrairValoresMercado} disabled={extraindoMercado}>
-                      {extraindoMercado ? (
-                        <><div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />Analisando cupons...</>
-                      ) : (
-                        <><Sparkles className="w-4 h-4 mr-2" />EXTRAIR VALORES</>
-                      )}
+                    {/* Botão Confirmar Foto — apenas preserva a foto, sem IA */}
+                    <Button
+                      className="w-full bg-gradient-to-r from-green-500 to-emerald-600"
+                      onClick={() => {
+                        setMercadoFotoProcessada(mercadoFotoCapturada);
+                        toast.success('Foto dos cupons salva! Será enviada junto com a leitura.');
+                        setMercadoModalOpen(false);
+                      }}
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      CONFIRMAR FOTO
                     </Button>
-
-                    {mercadoResultado && (
-                      <div className="bg-card rounded-lg p-3 border border-border space-y-2">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs text-muted-foreground">Resultado da leitura:</p>
-                          <span className="text-xs text-success font-medium">{mercadoResultado.quantidade} cupom(ns)</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="text-center p-2 bg-success-bg rounded border border-success/30">
-                            <p className="text-xs text-success">CUPONS</p>
-                            <p className="text-lg font-bold text-success">{mercadoResultado.quantidade}</p>
-                          </div>
-                          {mercadoResultado.totalConferido ? (
-                            <div className="text-center p-2 bg-blue-50 rounded border border-blue-300">
-                              <p className="text-xs text-blue-600">TOTAL</p>
-                              <p className="text-lg font-bold text-blue-600">R$ {mercadoResultado.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                            </div>
-                          ) : (
-                            <div className="text-center p-2 bg-amber-50 rounded border border-amber-300">
-                              <p className="text-xs text-amber-600">TOTAL (CORRIGIDO)</p>
-                              <p className="text-lg font-bold text-amber-600">R$ {mercadoResultado.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                            </div>
-                          )}
-                        </div>
-                        {!mercadoResultado.totalConferido && mercadoResultado.totalIA !== undefined && (
-                          <div className="flex items-center gap-2 p-2 bg-amber-50 border border-amber-300 rounded-lg">
-                            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-                            <p className="text-xs text-amber-700">
-                              A IA informou R$ {mercadoResultado.totalIA!.toFixed(2)} mas a soma dos valores e R$ {mercadoResultado.total.toFixed(2)}. O total foi corrigido automaticamente.
-                            </p>
-                          </div>
-                        )}
-                        {mercadoResultado.tickets.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {mercadoResultado.tickets.map((t, i) => (
-                              <span key={i} className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">R$ {t.toFixed(2)}</span>
-                            ))}
-                          </div>
-                        )}
-                        <Button className="w-full mt-2 bg-gradient-to-r from-green-500 to-emerald-600" onClick={aplicarValoresMercado}>
-                          <CheckCircle className="w-4 h-4 mr-2" />APLICAR AO CAMPO MERCADO
-                        </Button>
-                      </div>
-                    )}
 
                     <Button className="w-full bg-red-600 hover:bg-red-700 text-white" onClick={() => { setMercadoFotoCapturada(null); setMercadoFotoProcessada(null); setMercadoResultado(null); }}>
                       <X className="w-4 h-4 mr-2" />Nova Foto
@@ -10498,6 +10498,18 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                                 </div>
                                 <div className="flex-1 text-sm flex items-center">
                                   <p className="text-base font-bold">CARTÃO — Canhotos</p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Card MERCADO (cupons) — só se houver foto */}
+                            {mercadoFotoProcessada && (
+                              <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
+                                <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
+                                  <img src={mercadoFotoProcessada} alt="Cupons" className="w-full h-full object-contain" />
+                                </div>
+                                <div className="flex-1 text-sm flex items-center">
+                                  <p className="text-base font-bold">MERCADO — Cupons Fiscais</p>
                                 </div>
                               </div>
                             )}
