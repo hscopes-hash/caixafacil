@@ -192,6 +192,8 @@ function NumpadModal({
     setValor(prev => {
       if (prev === '' && d === '0') return '0';
       if (prev === '0' && d !== '') return d;
+      // Limite de 15 dígitos para não estourar os cards do relatório
+      if (prev.length >= 15) return prev;
       return prev + d;
     });
   };
@@ -3957,8 +3959,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   };
 
   const handleNovaEntrada = (index: number, valor: string) => {
-    // Só permite dígitos numéricos
-    const valorNumerico = valor.replace(/[^0-9]/g, '');
+    // Só permite dígitos numéricos (máximo 15 dígitos)
+    const valorNumerico = valor.replace(/[^0-9]/g, '').substring(0, 15);
     
     const novasMaquinas = [...maquinas];
     novasMaquinas[index].novaEntrada = valorNumerico;
@@ -4012,8 +4014,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   };
 
   const handleNovaSaida = (index: number, valor: string) => {
-    // Só permite dígitos numéricos
-    const valorNumerico = valor.replace(/[^0-9]/g, '');
+    // Só permite dígitos numéricos (máximo 15 dígitos)
+    const valorNumerico = valor.replace(/[^0-9]/g, '').substring(0, 15);
     
     const novasMaquinas = [...maquinas];
     novasMaquinas[index].novaSaida = valorNumerico;
