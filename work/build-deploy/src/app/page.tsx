@@ -420,7 +420,7 @@ function LoginPage() {
         // Show cached companies immediately for instant rendering
         setDeviceEmpresas(companies as unknown as Empresa[]);
 
-        // Then refresh from API in background
+        // Then refresh from API in segundo plano
         const ids = companies.map(c => c.id).join(',');
         fetch(`/api/empresas?ids=${ids}`)
           .then((res) => {
@@ -3756,7 +3756,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     };
   }, [fotoTelaCheia]);
   
-  // Salvar estado e liberar memória quando o app vai para background (troca de janela)
+  // Salvar estado e liberar memória quando o app vai para segundo plano (troca de janela)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -4909,7 +4909,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   };
 
   // =============================================
-  // PROCESSAMENTO EM BACKGROUND DO LOTE
+  // PROCESSAMENTO EM SEGUNDO PLANO DO LOTE
   // Processa fotos automaticamente conforme sao adicionadas
   // OTIMIZADO: 1 unica chamada de IA (antes eram 2)
   // =============================================
@@ -5074,7 +5074,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     console.log(`[Lote] Foto ${fotoId} finalizada`);
   };
 
-  // Efeito: processar automaticamente fotos pendentes em background
+  // Efeito: processar automaticamente fotos pendentes em segundo plano
   // Delay de 2s entre fotos (reduzido: agora é 1 chamada IA por foto, antes eram 2)
   const ultimaFotoProcessadaRef = useRef<number>(0);
   const DELAY_ENTRE_FOTOS = 2000; // 2 segundos entre cada processamento
@@ -6399,7 +6399,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   useEffect(() => {
     const handler = () => { salvarDigitacaoLS(); };
     window.addEventListener('beforeunload', handler);
-    // Também salvar quando visibility muda para hidden (PWA em background)
+    // Também salvar quando visibility muda para hidden (PWA em segundo plano)
     const visHandler = () => {
       if (document.visibilityState === 'hidden') salvarDigitacaoLS();
     };
@@ -9420,7 +9420,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">
-                        {processandoLote ? 'Processando lote...' : 'Processando em background...'}
+                        {processandoLote ? 'Processando lote...' : 'Processando em segundo plano...'}
                       </span>
                       <span className="font-medium text-foreground">
                         {fotosLote.filter(f => f.status === 'concluido' || f.status === 'erro').length}/{fotosLote.length}
