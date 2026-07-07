@@ -3850,6 +3850,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         if (savedData.formaPagamento !== undefined) setFormaPagamento(savedData.formaPagamento);
         if (savedData.valorPago !== undefined) setValorPago(savedData.valorPago);
         if (savedData.saldoAnterior !== undefined) setSaldoAnterior(savedData.saldoAnterior);
+        // Restaurar fotos de canhoto de cartão e cupons do mercado
+        if (savedData.cartaoFotoProcessada !== undefined) setCartaoFotoProcessada(savedData.cartaoFotoProcessada);
+        if (savedData.mercadoFotoProcessada !== undefined) setMercadoFotoProcessada(savedData.mercadoFotoProcessada);
       }
     } catch (error) {
       toast.error('Erro ao carregar máquinas');
@@ -6320,12 +6323,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         formaPagamento,
         valorPago,
         saldoAnterior,
+        cartaoFotoProcessada,
+        mercadoFotoProcessada,
       };
       localStorage.setItem(LS_KEY(modoOperacao, clienteSelecionado.id), JSON.stringify(dados));
     } catch {
       // localStorage cheio ou indisponivel — silencioso
     }
-  }, [clienteSelecionado, maquinas, receitasItens, despesasItens, modoOperacao, recebido, formaPagamento, valorPago, saldoAnterior]);
+  }, [clienteSelecionado, maquinas, receitasItens, despesasItens, modoOperacao, recebido, formaPagamento, valorPago, saldoAnterior, cartaoFotoProcessada, mercadoFotoProcessada]);
 
   const carregarDigitacaoLS = useCallback(() => {
     if (!clienteSelecionado) return false;
@@ -6369,6 +6374,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       if (dados.formaPagamento !== undefined) { setFormaPagamento(dados.formaPagamento); restaurou = true; }
       if (dados.valorPago !== undefined) { setValorPago(dados.valorPago); restaurou = true; }
       if (dados.saldoAnterior !== undefined) { setSaldoAnterior(dados.saldoAnterior); restaurou = true; }
+      // Restaurar fotos de canhoto de cartão e cupons do mercado
+      if (dados.cartaoFotoProcessada !== undefined) { setCartaoFotoProcessada(dados.cartaoFotoProcessada); restaurou = true; }
+      if (dados.mercadoFotoProcessada !== undefined) { setMercadoFotoProcessada(dados.mercadoFotoProcessada); restaurou = true; }
       return restaurou;
     } catch {
       return false;
@@ -6421,6 +6429,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setValorPago('');
     resetReceitas();
     resetDespesas();
+    // Limpar fotos de canhoto de cartão e cupons do mercado ao cancelar
+    setCartaoFotoProcessada(null);
+    setCartaoFotoCapturada(null);
+    setCartaoResultado(null);
+    setMercadoFotoProcessada(null);
+    setMercadoFotoCapturada(null);
+    setMercadoResultado(null);
     setMaquinasAlteradas(new Map());
     limparDigitacaoLS();
     loadMaquinasCliente(clienteSelecionado.id, undefined, true); // skipRestore=true
@@ -6646,6 +6661,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       resetReceitas();
       resetDespesas();
       setMaquinasAlteradas(new Map());
+      // Limpar fotos de canhoto de cartão e cupons do mercado após salvar
+      setCartaoFotoProcessada(null);
+      setCartaoFotoCapturada(null);
+      setCartaoResultado(null);
+      setMercadoFotoProcessada(null);
+      setMercadoFotoCapturada(null);
+      setMercadoResultado(null);
       limparDigitacaoLS();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Erro ao salvar leituras';
