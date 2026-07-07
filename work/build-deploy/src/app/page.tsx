@@ -192,8 +192,6 @@ function NumpadModal({
     setValor(prev => {
       if (prev === '' && d === '0') return '0';
       if (prev === '0' && d !== '') return d;
-      // Limite de 15 dígitos para não estourar os cards do relatório
-      if (prev.length >= 15) return prev;
       return prev + d;
     });
   };
@@ -3211,7 +3209,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
   const atualizarReceita = (id: string, campo: 'descricao' | 'valor', valor: string) => {
     setReceitasItens(prev => prev.map(item =>
-      item.id === id ? { ...item, [campo]: campo === 'valor' ? valor.replace(/[^\d.,]/g, '') : valor.toUpperCase() } : item
+      item.id === id ? { ...item, [campo]: campo === 'valor' ? valor.replace(/[^\d.,]/g, '') : valor.toUpperCase().substring(0, 15) } : item
     ));
   };
 
@@ -3638,7 +3636,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
   const atualizarDespesa = (id: string, campo: 'descricao' | 'valor', valor: string) => {
     setDespesasItens(prev => prev.map(item =>
-      item.id === id ? { ...item, [campo]: campo === 'valor' ? valor.replace(/[^\d.,]/g, '') : valor.toUpperCase() } : item
+      item.id === id ? { ...item, [campo]: campo === 'valor' ? valor.replace(/[^\d.,]/g, '') : valor.toUpperCase().substring(0, 15) } : item
     ));
   };
 
@@ -3959,8 +3957,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   };
 
   const handleNovaEntrada = (index: number, valor: string) => {
-    // Só permite dígitos numéricos (máximo 15 dígitos)
-    const valorNumerico = valor.replace(/[^0-9]/g, '').substring(0, 15);
+    // Só permite dígitos numéricos
+    const valorNumerico = valor.replace(/[^0-9]/g, '');
     
     const novasMaquinas = [...maquinas];
     novasMaquinas[index].novaEntrada = valorNumerico;
@@ -4014,8 +4012,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   };
 
   const handleNovaSaida = (index: number, valor: string) => {
-    // Só permite dígitos numéricos (máximo 15 dígitos)
-    const valorNumerico = valor.replace(/[^0-9]/g, '').substring(0, 15);
+    // Só permite dígitos numéricos
+    const valorNumerico = valor.replace(/[^0-9]/g, '');
     
     const novasMaquinas = [...maquinas];
     novasMaquinas[index].novaSaida = valorNumerico;
@@ -7428,6 +7426,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     try {
       if (!maquinasSalvas || maquinasSalvas.length === 0) return null;
 
+      console.log('[gerarRelatorioPdfResumo] cartaoFotoProcessada:', cartaoFotoProcessada ? 'SIM (' + cartaoFotoProcessada.length + ' chars)' : 'NÃO');
+      console.log('[gerarRelatorioPdfResumo] mercadoFotoProcessada:', mercadoFotoProcessada ? 'SIM (' + mercadoFotoProcessada.length + ' chars)' : 'NÃO');
+
       const SCALE = 2;
       const A4_W = 794;
       const padding = 40;
@@ -8573,6 +8574,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         <div className="flex items-center gap-1">
                           <Input
                             type="text"
+                            maxLength={15}
                             value={item.descricao}
                             onChange={(e) => atualizarReceita(item.id, 'descricao', e.target.value)}
                             placeholder={item.fixo ? item.descricao : 'DESCRIÇÃO...'}
@@ -8654,6 +8656,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         <div className="flex items-center gap-1">
                           <Input
                             type="text"
+                            maxLength={15}
                             value={item.descricao}
                             onChange={(e) => atualizarDespesa(item.id, 'descricao', e.target.value)}
                             placeholder={item.fixo ? item.descricao : 'DESCRIÇÃO...'}
