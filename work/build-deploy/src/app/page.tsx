@@ -9493,6 +9493,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       <p className="font-medium text-foreground">
                         {fotosLote.filter(f => f.status === 'concluido').length} de {fotosLote.length} processadas
                       </p>
+                      {(() => {
+                        const tempoTotal = fotosLote.reduce((acc, f) => acc + (f.tempoMs || 0), 0);
+                        return tempoTotal > 0 ? (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Tempo total de IA: {(tempoTotal / 1000).toFixed(1)}s
+                          </p>
+                        ) : null;
+                      })()}
                       <p className="text-xs text-muted-foreground mt-1">Valores aplicados as maquinas correspondentes</p>
                     </div>
 
