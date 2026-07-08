@@ -4582,6 +4582,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setProcessandoLote(true);
     setLoteProgresso(0);
 
+    // Re-adquirir Wake Lock para impedir tela de apagar durante o processamento
+    try { (window as any).__caixafacil_requestWakeLock?.(); } catch {}
+
     // Preparar lista de códigos de máquinas e mapa de nomes E/S
     const codigosMaquinas = maquinas.map(m => m.codigo);
     const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string }> = {};
@@ -4733,6 +4736,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       }
 
       setLoteProgresso(i + 1);
+
+      // Re-adquirir Wake Lock a cada foto (mantém tela acesa durante todo o lote)
+      try { (window as any).__caixafacil_requestWakeLock?.(); } catch {}
 
       // Delay entre processamentos (reduzido de 5s para 2s pois agora é 1 chamada por foto)
       if (i < fotosLote.length - 1) {
@@ -5072,6 +5078,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       clearTimeout(globalTimeout);
     }
 
+    // Re-adquirir Wake Lock (mantém tela acesa durante processamento em segundo plano)
+    try { (window as any).__caixafacil_requestWakeLock?.(); } catch {}
     console.log(`[Lote] Foto ${fotoId} finalizada`);
   };
 
@@ -15599,6 +15607,8 @@ export default function App() {
   const requestWakeLock = useCallback(async () => {
     try {
       if ('wakeLock' in navigator) {
+        // Libera o anterior se existir
+        try { if (wakeLockRef.current) wakeLockRef.current.release(); } catch {}
         wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
         console.log('[WakeLock] Acquirado com sucesso');
       }
@@ -15606,6 +15616,12 @@ export default function App() {
       console.warn('[WakeLock] Falha ao adquirir:', err);
     }
   }, []);
+
+  // Disponibiliza globalmente para que processarLote possa re-adquirir
+  useEffect(() => {
+    (window as any).__caixafacil_requestWakeLock = requestWakeLock;
+    return () => { delete (window as any).__caixafacil_requestWakeLock; };
+  }, [requestWakeLock]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
