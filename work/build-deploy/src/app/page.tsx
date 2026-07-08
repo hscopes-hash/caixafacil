@@ -3670,7 +3670,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [debitosVencidosSalvos, setDebitosVencidosSalvos] = useState<number>(0);
   // Estados para Lançamento de Lote
   const [loteModalOpen, setLoteModalOpen] = useState(false);
-  const [fotosLote, setFotosLote] = useState<{ id: string; imagem: string; status: 'pendente' | 'processando' | 'concluido' | 'erro'; origem?: 'CÂMERA' | 'GALERIA' | 'LOTE'; resultado?: { codigoMaquina: string; codigoReconhecido: boolean; entrada?: number | null; saida?: number | null; confianca: number; observacoes: string; confiancaOCR?: number }; erro?: string }[]>([]);
+  const [fotosLote, setFotosLote] = useState<{ id: string; imagem: string; status: 'pendente' | 'processando' | 'concluido' | 'erro'; origem?: 'CÂMERA' | 'GALERIA' | 'LOTE'; resultado?: { codigoMaquina: string; codigoReconhecido: boolean; entrada?: number | null; saida?: number | null; confianca: number; observacoes: string; confiancaOCR?: number }; erro?: string; tempoMs?: number }[]>([]);
   const [processandoLote, setProcessandoLote] = useState(false);
   const [loteProgresso, setLoteProgresso] = useState(0);
   const loteIdCounter = useRef(0);
@@ -4612,6 +4612,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         // UNICA CHAMADA: identificar + extrair valores
         // (antes eram 2 chamadas sequenciais)
         // =============================================
+        const tempoInicio = Date.now();
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 90000);
         let res: Response;
@@ -4632,6 +4633,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         }
 
         const data = await res.json();
+        const tempoGasto = Date.now() - tempoInicio;
 
         if (!res.ok) {
           throw new Error(data.error || 'Erro ao processar foto');
@@ -4643,6 +4645,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             idx === i ? {
               ...f,
               status: 'concluido',
+              tempoMs: tempoGasto,
               resultado: {
                 codigoMaquina: data.codigoMaquina,
                 codigoReconhecido: true,
@@ -4719,6 +4722,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             idx === i ? {
               ...f,
               status: 'concluido',
+              tempoMs: tempoGasto,
               resultado: {
                 codigoMaquina: data.codigoMaquina,
                 codigoReconhecido: false,
@@ -4731,7 +4735,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
         setFotosLote(prev => prev.map((f, idx) =>
-          idx === i ? { ...f, status: 'erro', erro: errorMsg } : f
+          idx === i ? { ...f, status: 'erro', erro: errorMsg, tempoMs: Date.now() - tempoInicio } : f
         ));
       }
 
@@ -4957,6 +4961,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       }
 
       // UNICA CHAMADA: identificar + extrair
+      const tempoInicioBg = Date.now();
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60000);
       globalController.signal.addEventListener(() => controller.abort(), { once: true });
@@ -4994,6 +4999,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           f.id === fotoId ? {
             ...f,
             status: 'concluido' as const,
+            tempoMs: Date.now() - tempoInicioBg,
             resultado: {
               codigoMaquina: data.codigoMaquina,
               codigoReconhecido: true,
@@ -5059,6 +5065,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           f.id === fotoId ? {
             ...f,
             status: 'concluido' as const,
+            tempoMs: Date.now() - tempoInicioBg,
             resultado: {
               codigoMaquina: data.codigoMaquina,
               codigoReconhecido: false,
@@ -5072,7 +5079,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
       console.error(`[Lote] Erro foto ${fotoId}:`, errorMsg);
       setFotosLote(prev => prev.map(f =>
-        f.id === fotoId ? { ...f, status: 'erro' as const, erro: errorMsg } : f
+        f.id === fotoId ? { ...f, status: 'erro' as const, erro: errorMsg, tempoMs: Date.now() - tempoInicioBg } : f
       ));
     } finally {
       clearTimeout(globalTimeout);
@@ -9379,7 +9386,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                             className="w-14 h-14 object-cover rounded border border-border flex-shrink-0"
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-foreground">Foto {idx + 1}</p>
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-medium text-foreground">Foto {idx + 1}</p>
+                              {foto.tempoMs !== undefined && (foto.status === 'concluido' || foto.status === 'erro') && (
+                                <span className="text-xs text-muted-foreground ml-2 shrink-0">{(foto.tempoMs / 1000).toFixed(1)}s</span>
+                              )}
+                            </div>
                             {foto.status === 'pendente' && (
                               <p className="text-xs text-muted-foreground">Aguardando processamento...</p>
                             )}
