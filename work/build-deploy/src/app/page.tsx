@@ -6669,13 +6669,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       resetReceitas();
       resetDespesas();
       setMaquinasAlteradas(new Map());
-      // Limpar fotos de canhoto de cartão e cupons do mercado após salvar
-      setCartaoFotoProcessada(null);
-      setCartaoFotoCapturada(null);
-      setCartaoResultado(null);
-      setMercadoFotoProcessada(null);
-      setMercadoFotoCapturada(null);
-      setMercadoResultado(null);
+      // ⚠️ NÃO limpar fotos de cartão/mercado aqui — precisam estar disponíveis
+      // no resumo modal para gerar o relatório PDF. São limpas no fecharResumo().
       limparDigitacaoLS();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Erro ao salvar leituras';
@@ -8096,6 +8091,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setMaquinasSalvas([]);
     setValorDespesaSalva(0);
     setValorReceitaSalva(0);
+    // Limpar fotos de canhoto de cartão e cupons do mercado após fechar resumo
+    setCartaoFotoProcessada(null);
+    setCartaoFotoCapturada(null);
+    setCartaoResultado(null);
+    setMercadoFotoProcessada(null);
+    setMercadoFotoCapturada(null);
+    setMercadoResultado(null);
   };
 
   const totais = calcularTotais();
