@@ -3087,6 +3087,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   // Estado para o modal de resumo
   const [resumoModalOpen, setResumoModalOpen] = useState(false);
   const [maquinasSalvas, setMaquinasSalvas] = useState<MaquinaLeitura[]>([]);
+  // Snapshots de fotos de cartão/mercado no momento do save (para o relatório)
+  const [resumoCartaoFoto, setResumoCartaoFoto] = useState<string | null>(null);
+  const [resumoMercadoFoto, setResumoMercadoFoto] = useState<string | null>(null);
   // Estado para Extrato 2a Via
   const [segundaViaOpen, setSegundaViaOpen] = useState(false);
   // Estado para Excluir Leitura (mesmo padrão da 2a via)
@@ -6598,6 +6601,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       
       // Guarda as máquinas salvas para o resumo
       setMaquinasSalvas([...maquinasPreenchidas]);
+      // Guarda fotos de cartão/mercado para o resumo (snapshot no momento do save)
+      setResumoCartaoFoto(cartaoFotoProcessada);
+      setResumoMercadoFoto(mercadoFotoProcessada);
       // Guarda o valor da despesa para o resumo
       setValorDespesaSalva(totalDesp);
       // Guarda o valor da receita para o resumo
@@ -7458,8 +7464,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     try {
       if (!maquinasSalvas || maquinasSalvas.length === 0) return null;
 
-      console.log('[gerarRelatorioPdfResumo] cartaoFotoProcessada:', cartaoFotoProcessada ? 'SIM (' + cartaoFotoProcessada.length + ' chars)' : 'NÃO');
-      console.log('[gerarRelatorioPdfResumo] mercadoFotoProcessada:', mercadoFotoProcessada ? 'SIM (' + mercadoFotoProcessada.length + ' chars)' : 'NÃO');
+      console.log('[gerarRelatorioPdfResumo] resumoCartaoFoto:', resumoCartaoFoto ? 'SIM (' + resumoCartaoFoto.length + ' chars)' : 'NÃO');
+      console.log('[gerarRelatorioPdfResumo] resumoMercadoFoto:', resumoMercadoFoto ? 'SIM (' + resumoMercadoFoto.length + ' chars)' : 'NÃO');
 
       const SCALE = 2;
       const A4_W = 794;
@@ -7513,9 +7519,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       let alturaFinal = padding + 40 + 30 + 30 + 30 + 10 + 30;
       alturaFinal += maquinasSalvas.length * (CARD_HEIGHT + 20);
       // Espaço para card CARTÃO (se houver foto)
-      if (cartaoFotoProcessada) alturaFinal += 200 + 10;
+      if (resumoCartaoFoto) alturaFinal += 200 + 10;
       // Espaço para card MERCADO (se houver foto)
-      if (mercadoFotoProcessada) alturaFinal += 200 + 10;
+      if (resumoMercadoFoto) alturaFinal += 200 + 10;
       alturaFinal += 10 + 30;
       if (temReceitasExtras || temDespesasExtras) {
         const maxItens = Math.max(temReceitasExtras ? receitasFinal.length : 0, temDespesasExtras ? despesasFinal.length : 0);
@@ -7581,7 +7587,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       }
 
       // Card CARTÃO (canhotos) — só se houver foto
-      if (cartaoFotoProcessada) {
+      if (resumoCartaoFoto) {
         const cartaoCardH = 200;
         ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
         ctx.strokeRect(padding, y, A4_W - padding * 2, cartaoCardH);
@@ -7592,7 +7598,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             const img = new Image();
             img.onload = () => resolve(img);
             img.onerror = () => resolve(img);
-            img.src = cartaoFotoProcessada!;
+            img.src = resumoCartaoFoto!;
           });
           if (cartaoImg.complete && cartaoImg.naturalWidth > 0) {
             const ar = cartaoImg.naturalWidth / cartaoImg.naturalHeight;
@@ -7607,7 +7613,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       }
 
       // Card MERCADO (cupons) — só se houver foto
-      if (mercadoFotoProcessada) {
+      if (resumoMercadoFoto) {
         const mercadoCardH = 200;
         ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
         ctx.strokeRect(padding, y, A4_W - padding * 2, mercadoCardH);
@@ -7618,7 +7624,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             const img = new Image();
             img.onload = () => resolve(img);
             img.onerror = () => resolve(img);
-            img.src = mercadoFotoProcessada!;
+            img.src = resumoMercadoFoto!;
           });
           if (mercadoImg.complete && mercadoImg.naturalWidth > 0) {
             const ar = mercadoImg.naturalWidth / mercadoImg.naturalHeight;
@@ -8098,6 +8104,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setMaquinasSalvas([]);
     setValorDespesaSalva(0);
     setValorReceitaSalva(0);
+    // Limpar snapshots de fotos de cartão/mercado
+    setResumoCartaoFoto(null);
+    setResumoMercadoFoto(null);
     // Limpar fotos de canhoto de cartão e cupons do mercado após fechar resumo
     setCartaoFotoProcessada(null);
     setCartaoFotoCapturada(null);
@@ -10548,10 +10557,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                             </div>
 
                             {/* Card CARTÃO (canhotos) — só se houver foto */}
-                            {cartaoFotoProcessada && (
+                            {resumoCartaoFoto && (
                               <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
                                 <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
-                                  <img src={cartaoFotoProcessada} alt="Canhotos" className="w-full h-full object-contain" />
+                                  <img src={resumoCartaoFoto} alt="Canhotos" className="w-full h-full object-contain" />
                                 </div>
                                 <div className="flex-1 text-sm flex items-center">
                                   <p className="text-base font-bold">CARTÃO — Canhotos</p>
@@ -10560,10 +10569,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                             )}
 
                             {/* Card MERCADO (cupons) — só se houver foto */}
-                            {mercadoFotoProcessada && (
+                            {resumoMercadoFoto && (
                               <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
                                 <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
-                                  <img src={mercadoFotoProcessada} alt="Cupons" className="w-full h-full object-contain" />
+                                  <img src={resumoMercadoFoto} alt="Cupons" className="w-full h-full object-contain" />
                                 </div>
                                 <div className="flex-1 text-sm flex items-center">
                                   <p className="text-base font-bold">MERCADO — Cupons Fiscais</p>
