@@ -4154,8 +4154,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const img = new Image();
         img.onload = () => {
           try {
-            // Limitar tamanho máximo para 1920px (mantendo proporção)
-            const maxDimensao = 1920;
+            // Limitar tamanho máximo para 800px (otimizado para OCR)
+            const maxDimensao = 800;
             let largura = img.width;
             let altura = img.height;
             
@@ -4177,7 +4177,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             
             if (ctx) {
               ctx.drawImage(img, 0, 0, largura, altura);
-              const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.8);
+              const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.6);
               setFotoCapturada(imagemRedimensionada);
             } else {
               // Se não conseguir redimensionar, usa original
@@ -4545,7 +4545,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const url = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => {
-        const maxDim = 1280;
+        // Reduzido de 1280 para 800px — economiza upload e processamento IA
+        // 800px é suficiente para OCR de displays de 7 segmentos
+        const maxDim = 800;
         let w = img.width, h = img.height;
         if (w > maxDim || h > maxDim) {
           if (w > h) { h = Math.round((h / w) * maxDim); w = maxDim; }
@@ -4556,7 +4558,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, w, h);
-          const base64 = canvas.toDataURL('image/jpeg', 0.75);
+          // Reduzido de 0.75 para 0.6 — economiza ~30% do tamanho base64
+          const base64 = canvas.toDataURL('image/jpeg', 0.6);
           setFotosLote(prev => [...prev, {
             id: `lote_${++loteIdCounter.current}_${Date.now()}`,
             imagem: base64,
