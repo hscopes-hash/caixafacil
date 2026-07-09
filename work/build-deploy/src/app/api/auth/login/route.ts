@@ -67,8 +67,10 @@ export async function POST(request: NextRequest) {
     // Super admin
     if (emailNorm === SUPER_ADMIN_EMAIL) {
       step = 'find-super-admin';
+      // ⚠️ Buscar pelo email + nivelAcesso ADMINISTRADOR para garantir que
+      // retorna o super admin e não um usuário com o mesmo email em outra empresa
       const superAdmin = await db.usuario.findFirst({
-        where: { email: SUPER_ADMIN_EMAIL, ativo: true },
+        where: { email: SUPER_ADMIN_EMAIL, ativo: true, nivelAcesso: 'ADMINISTRADOR' },
         select: { id: true, nome: true, email: true, telefone: true, foto: true, ativo: true, nivelAcesso: true, empresaId: true, ultimoAcesso: true, senha: true, createdAt: true, updatedAt: true },
       });
 
