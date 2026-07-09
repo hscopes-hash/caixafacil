@@ -16058,8 +16058,8 @@ export default function App() {
               className="text-right mr-1 hover:opacity-80 transition-opacity"
               title="Minhas Preferências"
             >
-              <p className="text-sm font-medium text-foreground">{usuario?.nome}</p>
-              <p className="text-xs text-muted-foreground">{usuario?.nivelAcesso}</p>
+              <p className="text-sm font-medium text-foreground">{usuario?.nome || 'Usuário'}</p>
+              <p className="text-xs text-muted-foreground">{isSuperAdmin ? 'SUPER ADMIN' : usuario?.nivelAcesso || ''}</p>
             </button>
             <div className="flex flex-col">
               <Button
