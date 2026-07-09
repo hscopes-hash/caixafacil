@@ -4744,10 +4744,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       // Re-adquirir Wake Lock a cada foto (mantém tela acesa durante todo o lote)
       try { (window as any).__caixafacil_requestWakeLock?.(); } catch {}
 
-      // Delay entre processamentos (reduzido de 5s para 2s pois agora é 1 chamada por foto)
-      if (i < fotosLote.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
+      // Sem delay entre fotos — processa imediatamente a próxima
     }
 
     setProcessandoLote(false);
@@ -5093,7 +5090,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   // Efeito: processar automaticamente fotos pendentes em segundo plano
   // Delay de 2s entre fotos (reduzido: agora é 1 chamada IA por foto, antes eram 2)
   const ultimaFotoProcessadaRef = useRef<number>(0);
-  const DELAY_ENTRE_FOTOS = 2000; // 2 segundos entre cada processamento
+  const DELAY_ENTRE_FOTOS = 0; // Sem delay — processa imediatamente
 
   useEffect(() => {
     const pendentes = fotosLote.filter(f => f.status === 'pendente');
