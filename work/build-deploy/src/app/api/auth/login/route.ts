@@ -64,48 +64,54 @@ export async function POST(request: NextRequest) {
     step = 'hash';
     const senhaHash = await hashSenha(senha);
 
-    // Super admin
+    // Super admin — não busca na tabela de usuários, usa dados fixos
     if (emailNorm === SUPER_ADMIN_EMAIL) {
-      step = 'find-super-admin';
-      // ⚠️ Buscar TODOS os usuários com o email do super admin e pegar o
-      // mais antigo (createdAt ASC) — que é o registro original do super admin.
-      // findFirst sem orderBy podia retornar qualquer um (incluindo cadastros
-      // em outras empresas onde o mesmo email foi usado).
-      const superAdmins = await db.usuario.findMany({
+      step = 'verify-super-admin-password';
+      // Verificar senha: comparar com a senha de qualquer registro ADMINISTRADOR
+      // que tenha esse email (apenas para validar a senha)
+      const anyAdminRecord = await db.usuario.findFirst({
         where: { email: SUPER_ADMIN_EMAIL, ativo: true, nivelAcesso: 'ADMINISTRADOR' },
-        select: { id: true, nome: true, email: true, telefone: true, foto: true, ativo: true, nivelAcesso: true, empresaId: true, ultimoAcesso: true, senha: true, createdAt: true, updatedAt: true },
-        orderBy: { createdAt: 'asc' },
-        take: 1,
+        select: { id: true, senha: true },
       });
-      const superAdmin = superAdmins[0];
 
-      if (!superAdmin || superAdmin.senha !== senhaHash) {
+      if (!anyAdminRecord || anyAdminRecord.senha !== senhaHash) {
         return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 });
       }
 
+      // Atualizar último acesso
       step = 'update-acesso';
       await db.usuario.update({
-        where: { id: superAdmin.id },
+        where: { id: anyAdminRecord.id },
         data: { ultimoAcesso: new Date() },
       });
 
-      step = 'build-token';
-      const token = Buffer.from(`${superAdmin.id}:${Date.now()}`).toString('base64');
-      const { senha: _, ...usuarioSemSenha } = superAdmin;
+      // Usuário fixo do super admin — não depende de nenhum cadastro de empresa
+      const token = Buffer.from(`superadmin:${Date.now()}`).toString('base64');
+      const usuarioFixo = {
+        id: 'super-admin',
+        nome: 'Super Admin',
+        email: SUPER_ADMIN_EMAIL,
+        telefone: null,
+        foto: null,
+        ativo: true,
+        nivelAcesso: 'ADMINISTRADOR' as const,
+        empresaId: '',
+        ultimoAcesso: new Date().toISOString(),
+      };
 
-      // Buscar empresa: priorizar empresaId do body, fallback superAdmin.empresaId
+      // Buscar empresa selecionada
       step = 'find-empresa';
       let empresa = null;
       const targetEmpresaId = (empresaId && typeof empresaId === 'string' && empresaId.trim().length > 0)
         ? empresaId.trim()
-        : (superAdmin.empresaId || null);
+        : null;
 
       if (targetEmpresaId) {
         empresa = await db.empresa.findUnique({ where: { id: targetEmpresaId } });
       }
 
       step = 'return';
-      return NextResponse.json({ usuario: usuarioSemSenha, empresa, token, isSuperAdmin: true });
+      return NextResponse.json({ usuario: usuarioFixo, empresa, token, isSuperAdmin: true });
     }
 
     // Login normal
