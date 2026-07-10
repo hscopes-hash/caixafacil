@@ -6607,10 +6607,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       setResumoCartaoFoto(cartaoFotoProcessada);
       setResumoMercadoFoto(mercadoFotoProcessada);
       // Guarda o valor da despesa para o resumo
+      console.log('[salvarLeituras] valorDespesaSalva:', totalDesp, 'valorReceitaSalva:', totalRec);
       setValorDespesaSalva(totalDesp);
       // Guarda o valor da receita para o resumo
       setValorReceitaSalva(totalRec);
       // Guarda as descrições detalhadas das receitas e despesas
+      console.log('[salvarLeituras] receitasParaSalvar:', JSON.stringify(receitasParaSalvar));
+      console.log('[salvarLeituras] despesasParaSalvar:', JSON.stringify(despesasParaSalvar));
       setReceitasSalvas(receitasParaSalvar);
       setDespesasSalvas(despesasParaSalvar);
       // Guardar valor dos débitos ANTES de zerar para exibir no resumo/extrato
@@ -10798,6 +10801,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     : (temItensExtras ? (totalDespesas - totalReceitas) : jogado);
                   const entradaFinal = modoOperacao === 'COBRANCA' ? jogado : (temItensExtras ? totalReceitas : jogado);
                   const saidaFinal = temItensExtras ? totalDespesas : 0;
+                  console.log('[PREVIEW RESUMO] receitasSalvas:', JSON.stringify(receitasSalvas));
+                  console.log('[PREVIEW RESUMO] despesasSalvas:', JSON.stringify(despesasSalvas));
+                  console.log('[PREVIEW RESUMO] totalReceitas:', totalReceitas, 'totalDespesas:', totalDespesas, 'jogado:', jogado, 'temItensExtras:', temItensExtras, 'fechamentoFinal:', fechamentoFinal);
 
                   return (
                     <>
