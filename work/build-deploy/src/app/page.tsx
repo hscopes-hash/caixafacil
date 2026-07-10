@@ -7260,6 +7260,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       // Calcular altura total (sem paginação)
       let alturaFinal = padding + 40 + 30 + 30 + (operadores.size > 0 ? 30 : 0) + 10 + 30;
       alturaFinal += maquinasArr.length * (CARD_HEIGHT + 20);
+      // Espaço para card CARTÃO e MERCADO (se houver fotos no GCS)
+      const temCartao2via = segundaViaFotos.some(f => f.codigo === 'CARTAO' || f.maquinaId === 'cartao-canhoto');
+      const temMercado2via = segundaViaFotos.some(f => f.codigo === 'MERCADO' || f.maquinaId === 'mercado-cupons');
+      if (temCartao2via) alturaFinal += 200 + 10;
+      if (temMercado2via) alturaFinal += 200 + 10;
       alturaFinal += 10 + 30; // separador
       if (temReceitasExtras || temDespesasExtras) {
         const maxItens = Math.max(temReceitasExtras ? receitasFinal.length : 0, temDespesasExtras ? despesasFinal.length : 0);
@@ -7331,6 +7336,64 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         ctx.font = FONT_LABEL; ctx.fillStyle = '#000000';
         ctx.fillText(`Saldo: ${formatNumber(lws[0].saldo)}`, textX, y + 155);
         y += CARD_HEIGHT + 10;
+      }
+
+      // Card CARTÃO (canhotos) — se houver foto no GCS
+      if (temCartao2via) {
+        const cartaoFoto = segundaViaFotos.find(f => f.codigo === 'CARTAO' || f.maquinaId === 'cartao-canhoto');
+        const cartaoCardH = 200;
+        ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
+        ctx.strokeRect(padding, y, A4_W - padding * 2, cartaoCardH);
+        const cfotoX = padding + 10, cfotoY = y + 10, cfotoW = 180, cfotoH = 180;
+        ctx.fillStyle = '#f0f0f0'; ctx.fillRect(cfotoX, cfotoY, cfotoW, cfotoH);
+        if (cartaoFoto) {
+          try {
+            const cImg = await new Promise<HTMLImageElement>((resolve) => {
+              const img = new Image();
+              img.onload = () => resolve(img);
+              img.onerror = () => resolve(img);
+              img.src = cartaoFoto.fotoBase64;
+            });
+            if (cImg.complete && cImg.naturalWidth > 0) {
+              const ar = cImg.naturalWidth / cImg.naturalHeight;
+              let dw = cfotoW, dh = cfotoH;
+              if (ar > 1) { dw = cfotoW; dh = Math.round(cfotoW / ar); } else { dh = cfotoH; dw = Math.round(cfotoH * ar); }
+              ctx.drawImage(cImg, cfotoX + Math.round((cfotoW - dw) / 2), cfotoY + Math.round((cfotoH - dh) / 2), dw, dh);
+            }
+          } catch {}
+        }
+        ctx.fillStyle = '#000000'; ctx.font = FONT_LABEL; ctx.textAlign = 'left';
+        ctx.fillText('CARTÃO — Canhotos', cfotoX + cfotoW + 20, y + 60);
+        y += cartaoCardH + 10;
+      }
+
+      // Card MERCADO (cupons) — se houver foto no GCS
+      if (temMercado2via) {
+        const mercadoFoto = segundaViaFotos.find(f => f.codigo === 'MERCADO' || f.maquinaId === 'mercado-cupons');
+        const mercadoCardH = 200;
+        ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
+        ctx.strokeRect(padding, y, A4_W - padding * 2, mercadoCardH);
+        const mfotoX = padding + 10, mfotoY = y + 10, mfotoW = 180, mfotoH = 180;
+        ctx.fillStyle = '#f0f0f0'; ctx.fillRect(mfotoX, mfotoY, mfotoW, mfotoH);
+        if (mercadoFoto) {
+          try {
+            const mImg = await new Promise<HTMLImageElement>((resolve) => {
+              const img = new Image();
+              img.onload = () => resolve(img);
+              img.onerror = () => resolve(img);
+              img.src = mercadoFoto.fotoBase64;
+            });
+            if (mImg.complete && mImg.naturalWidth > 0) {
+              const ar = mImg.naturalWidth / mImg.naturalHeight;
+              let dw = mfotoW, dh = mfotoH;
+              if (ar > 1) { dw = mfotoW; dh = Math.round(mfotoW / ar); } else { dh = mfotoH; dw = Math.round(mfotoH * ar); }
+              ctx.drawImage(mImg, mfotoX + Math.round((mfotoW - dw) / 2), mfotoY + Math.round((mfotoH - dh) / 2), dw, dh);
+            }
+          } catch {}
+        }
+        ctx.fillStyle = '#000000'; ctx.font = FONT_LABEL; ctx.textAlign = 'left';
+        ctx.fillText('MERCADO — Cupons Fiscais', mfotoX + mfotoW + 20, y + 60);
+        y += mercadoCardH + 10;
       }
 
       // Separador
@@ -10681,7 +10744,21 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               )}
             </DialogContent>
           </Dialog>
-          <Dialog open={resumoModalOpen} onOpenChange={setResumoModalOpen}>
+          <Dialog open={resumoModalOpen} onOpenChange={(open) => {
+            // Bloqueia clique fora e ESC — só fecha via botão Sair (fecharResumo)
+            if (open === false) {
+              const activeEl = document.activeElement as HTMLElement | null;
+              const isExplicitClose =
+                activeEl?.closest('[data-slot="dialog-close"]') ||
+                activeEl?.closest('[data-close-resumo="true"]');
+              if (isExplicitClose) {
+                fecharResumo();
+              }
+              // Caso contrário (clique fora, ESC), não faz nada
+            } else {
+              setResumoModalOpen(true);
+            }
+          }}>
             <DialogContent className="bg-card border-border text-foreground max-w-md max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="text-center text-xl">{modoOperacao === 'COBRANCA' ? '✅ Cobrança Salva!' : modoOperacao === 'LEITURA' ? '✅ Leitura Processada!' : '✅ Ajustes Salvos!'}</DialogTitle>
@@ -10845,6 +10922,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 </Button>
                 <Button
                   variant="secondary"
+                  data-close-resumo="true"
                   onClick={fecharResumo}
                   className="flex flex-col items-center justify-center min-h-[4rem] py-2 px-2"
                 >
