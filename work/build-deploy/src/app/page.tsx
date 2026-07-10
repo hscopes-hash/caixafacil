@@ -10831,6 +10831,30 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         })}
                       </div>
 
+                      {/* Card CARTÃO (canhotos) — só se houver foto */}
+                      {resumoCartaoFoto && (
+                        <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
+                          <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
+                            <img src={resumoCartaoFoto} alt="Canhotos" className="w-full h-full object-contain" />
+                          </div>
+                          <div className="flex-1 text-sm flex items-center">
+                            <p className="text-base font-bold">CARTÃO — Canhotos</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Card MERCADO (cupons) — só se houver foto */}
+                      {resumoMercadoFoto && (
+                        <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
+                          <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
+                            <img src={resumoMercadoFoto} alt="Cupons" className="w-full h-full object-contain" />
+                          </div>
+                          <div className="flex-1 text-sm flex items-center">
+                            <p className="text-base font-bold">MERCADO — Cupons Fiscais</p>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Receitas/Despesas extras — lado a lado com moldura */}
                       {modoOperacao !== 'COBRANCA' && (receitasSalvas.filter(d => d.valor > 0).length > 0 || despesasSalvas.filter(d => d.valor > 0).length > 0) && (
                         <div className="grid grid-cols-2 gap-2 mb-3">
