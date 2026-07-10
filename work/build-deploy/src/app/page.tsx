@@ -6478,9 +6478,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     const despesasParaSalvar = despesasItens
       .filter(d => (parseFloat(d.valor.replace(',', '.')) || 0) > 0)
       .map(d => ({ descricao: d.descricao || 'OUTROS', valor: parseFloat(d.valor.replace(',', '.')) || 0 }));
-    console.log('[salvarLeituras] receitasItens:', JSON.stringify(receitasItens.map(d => ({ id: d.id, descricao: d.descricao, valor: d.valor }))));
-    console.log('[salvarLeituras] receitasParaSalvar:', JSON.stringify(receitasParaSalvar));
-    console.log('[salvarLeituras] totalRec:', totalRec, 'totalDesp:', totalDesp);
+
 
     if (maquinasPreenchidas.length === 0 && !temReceita && !temDespesa) {
       toast.error('Nenhuma leitura ou despesa para salvar');
@@ -8856,20 +8854,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           </Collapsible>
           )}
 
-          {/* DEBUG OVERLAY — mostra LEITURA/jogado antes de salvar */}
-          {modoOperacao === 'LEITURA' && (
-            <div className="bg-yellow-100 border-2 border-yellow-600 text-black text-xs p-2 rounded mb-2 font-mono break-all">
-              <p className="font-bold">DEBUG TELA:</p>
-              <p>jogado (soma saldos máquinas): {totais.jogado}</p>
-              <p>totalReceitas (soma itens caixa): {totais.totalReceitas}</p>
-              <p>LEITURA item: {receitasItens.find(r => r.id === 'leitura')?.valor || '(vazio)'}</p>
-              <p>receitasItens: {JSON.stringify(receitasItens.map(r => ({ id: r.id, valor: r.valor })))}</p>
-              <p className="font-bold mt-1">
-                {totais.jogado < 0 ? '⚠️ JOGADO NEGATIVO — será salvo no banco' : '✓ jogado positivo ou zero'}
-              </p>
-            </div>
-          )}
-
           {/* Resultado da Leitura - ocultar se houver receita, despesa, e no modo AJUSTE */}
           {modoOperacao !== 'AJUSTE' && totais.totalReceitas === 0 && totais.totalDespesas === 0 && (
           <Card className="border-0 shadow-lg bg-card">
@@ -10786,15 +10770,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 <DialogTitle className="text-center text-xl">{modoOperacao === 'COBRANCA' ? '✅ Cobrança Salva!' : modoOperacao === 'LEITURA' ? '✅ Leitura Processada!' : '✅ Ajustes Salvos!'}</DialogTitle>
               </DialogHeader>
 
-              {/* DEBUG OVERLAY TEMPORÁRIO — mostra receitasSalvas/despesasSalvas na tela */}
-              <div className="bg-yellow-100 border-2 border-yellow-600 text-black text-xs p-2 rounded mb-2 font-mono break-all">
-                <p className="font-bold">DEBUG RESUMO:</p>
-                <p>receitasSalvas: {JSON.stringify(receitasSalvas)}</p>
-                <p>despesasSalvas: {JSON.stringify(despesasSalvas)}</p>
-                <p>valorReceitaSalva: {valorReceitaSalva}</p>
-                <p>valorDespesaSalva: {valorDespesaSalva}</p>
-              </div>
-
               {/* Preview no formato RELATÓRIO (igual à 2a via) — cards com fotos e molduras coloridas */}
               <div className="bg-white text-black p-3 rounded-lg" id="relatorio-resumo">
                 <div className="text-center mb-3">
@@ -10827,9 +10802,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     : (temItensExtras ? (totalDespesas - totalReceitas) : jogado);
                   const entradaFinal = modoOperacao === 'COBRANCA' ? jogado : (temItensExtras ? totalReceitas : jogado);
                   const saidaFinal = temItensExtras ? totalDespesas : 0;
-                  console.log('[PREVIEW RESUMO 1a VIA] receitasSalvas:', JSON.stringify(receitasSalvas));
-                  console.log('[PREVIEW RESUMO 1a VIA] despesasSalvas:', JSON.stringify(despesasSalvas));
-                  console.log('[PREVIEW RESUMO 1a VIA] totalReceitas:', totalReceitas, 'totalDespesas:', totalDespesas, 'temItensExtras:', temItensExtras, 'fechamentoFinal:', fechamentoFinal);
 
                   return (
                     <>
