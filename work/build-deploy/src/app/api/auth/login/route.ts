@@ -67,12 +67,17 @@ export async function POST(request: NextRequest) {
     // Super admin
     if (emailNorm === SUPER_ADMIN_EMAIL) {
       step = 'find-super-admin';
-      // ⚠️ Buscar pelo email + nivelAcesso ADMINISTRADOR para garantir que
-      // retorna o super admin e não um usuário com o mesmo email em outra empresa
-      const superAdmin = await db.usuario.findFirst({
+      // ⚠️ Buscar TODOS os usuários com o email do super admin e pegar o
+      // mais antigo (createdAt ASC) — que é o registro original do super admin.
+      // findFirst sem orderBy podia retornar qualquer um (incluindo cadastros
+      // em outras empresas onde o mesmo email foi usado).
+      const superAdmins = await db.usuario.findMany({
         where: { email: SUPER_ADMIN_EMAIL, ativo: true, nivelAcesso: 'ADMINISTRADOR' },
         select: { id: true, nome: true, email: true, telefone: true, foto: true, ativo: true, nivelAcesso: true, empresaId: true, ultimoAcesso: true, senha: true, createdAt: true, updatedAt: true },
+        orderBy: { createdAt: 'asc' },
+        take: 1,
       });
+      const superAdmin = superAdmins[0];
 
       if (!superAdmin || superAdmin.senha !== senhaHash) {
         return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 });
