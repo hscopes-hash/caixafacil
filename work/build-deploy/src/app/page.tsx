@@ -6478,6 +6478,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     const despesasParaSalvar = despesasItens
       .filter(d => (parseFloat(d.valor.replace(',', '.')) || 0) > 0)
       .map(d => ({ descricao: d.descricao || 'OUTROS', valor: parseFloat(d.valor.replace(',', '.')) || 0 }));
+    console.log('[salvarLeituras] receitasItens:', JSON.stringify(receitasItens.map(d => ({ id: d.id, descricao: d.descricao, valor: d.valor }))));
+    console.log('[salvarLeituras] receitasParaSalvar:', JSON.stringify(receitasParaSalvar));
+    console.log('[salvarLeituras] totalRec:', totalRec, 'totalDesp:', totalDesp);
 
     if (maquinasPreenchidas.length === 0 && !temReceita && !temDespesa) {
       toast.error('Nenhuma leitura ou despesa para salvar');
