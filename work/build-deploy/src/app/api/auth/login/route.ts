@@ -64,32 +64,32 @@ export async function POST(request: NextRequest) {
     step = 'hash';
     const senhaHash = await hashSenha(senha);
 
-    // Super admin — não busca na tabela de usuários, usa dados fixos
+    // Super admin — não busca na tabela de usuários para o nome, usa dados fixos
     if (emailNorm === SUPER_ADMIN_EMAIL) {
       step = 'verify-super-admin-password';
-      // Verificar senha: comparar com a senha de qualquer registro ADMINISTRADOR
-      // que tenha esse email (apenas para validar a senha)
-      const anyAdminRecord = await db.usuario.findFirst({
+      // Buscar qualquer registro ADMINISTRADOR com o email (para validar senha E pegar o ID real)
+      const adminRecord = await db.usuario.findFirst({
         where: { email: SUPER_ADMIN_EMAIL, ativo: true, nivelAcesso: 'ADMINISTRADOR' },
         select: { id: true, senha: true },
       });
 
-      if (!anyAdminRecord || anyAdminRecord.senha !== senhaHash) {
+      if (!adminRecord || adminRecord.senha !== senhaHash) {
         return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 });
       }
 
       // Atualizar último acesso
       step = 'update-acesso';
       await db.usuario.update({
-        where: { id: anyAdminRecord.id },
+        where: { id: adminRecord.id },
         data: { ultimoAcesso: new Date() },
       });
 
-      // Usuário fixo do super admin — não depende de nenhum cadastro de empresa
-      const token = Buffer.from(`superadmin:${Date.now()}`).toString('base64');
+      // Usuário fixo do super admin — nome fixo, mas ID real do banco
+      // (necessário para foreign key em leituras, contas, etc.)
+      const token = Buffer.from(`${adminRecord.id}:${Date.now()}`).toString('base64');
       const usuarioFixo = {
-        id: 'super-admin',
-        nome: 'Super Admin',
+        id: adminRecord.id, // ID real do banco — necessário para foreign keys
+        nome: 'Super Admin', // Nome fixo — não depende de nenhum cadastro de empresa
         email: SUPER_ADMIN_EMAIL,
         telefone: null,
         foto: null,
