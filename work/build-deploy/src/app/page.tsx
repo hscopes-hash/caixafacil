@@ -3962,6 +3962,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     return diferenca * multiplicador;
   };
 
+  // Helper: normaliza nome do operador — super admin mostra 'Super Admin'
+  // (o nome no banco é o da empresa, mas o login usa nome fixo)
+  const normalizarOperador = (usuario: any): string => {
+    if (!usuario?.nome) return '';
+    if (usuario.email === SUPER_ADMIN_EMAIL) return 'Super Admin';
+    return usuario.nome;
+  };
+
   const handleNovaEntrada = (index: number, valor: string) => {
     // Só permite dígitos numéricos
     const valorNumerico = valor.replace(/[^0-9]/g, '');
@@ -5755,7 +5763,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     let texto = `__________________\n`;
     texto += `${clienteSelecionado.nome.toUpperCase()}\n`;
     texto += `Data: ${segundaViaSelecionada?.data}\n`;
-    const operadoresSet = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => l.usuario.nome));
+    const operadoresSet = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => normalizarOperador(l.usuario)));
     const opList = Array.from(operadoresSet);
     if (opList.length > 0) texto += `Operador(es): ${opList.join(', ')}\n`;
     const qtdFotos2via = segundaViaDados.filter((l: any) => l.fotoGcsPath).length;
@@ -5769,7 +5777,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const m = lws[0].maquina;
       if (idx > 0) texto += `_____________\n`;
       texto += `${m.codigo} - ${(m.tipo?.descricao || '').toUpperCase()}\n`;
-      if (lws[0].usuario?.nome) texto += `Operador: ${lws[0].usuario.nome}\n`;
+      if (lws[0].usuario?.nome) texto += `Operador: ${normalizarOperador(lws[0].usuario)}\n`;
       lws.forEach((l: any) => {
         const e = calcularValor(l.moeda, l.diferencaEntrada);
         const s = calcularValor(l.moeda, l.diferencaSaida);
@@ -6933,7 +6941,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         }
         await Promise.race([Promise.all(promessasCarregamento), new Promise<void>((resolve) => setTimeout(resolve, 10000))]);
 
-        const operadores = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => l.usuario.nome));
+        const operadores = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => normalizarOperador(l.usuario)));
         const CARD_HEIGHT = 280;
         const MAX_CARDS_POR_PAGINA = 8;
 
@@ -7258,7 +7266,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       }
       await Promise.race([Promise.all(promessas), new Promise<void>(r => setTimeout(r, 10000))]);
 
-      const operadores = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => l.usuario.nome));
+      const operadores = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => normalizarOperador(l.usuario)));
       const CARD_HEIGHT = 320;
       const temReceitasExtras = modo2via !== 'COBRANCA' && receitasFinal.length > 0;
       const temDespesasExtras = modo2via !== 'COBRANCA' && despesasFinal.length > 0;
@@ -10418,7 +10426,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     </div>
                     <p>Data: {segundaViaSelecionada?.data}</p>
                     {(() => {
-                      const operadores = new Set(segundaViaDados.filter(l => l.usuario?.nome).map(l => l.usuario.nome));
+                      const operadores = new Set(segundaViaDados.filter(l => l.usuario?.nome).map(l => normalizarOperador(l.usuario)));
                       const qtdFotos = segundaViaDados.filter(l => l.fotoGcsPath).length;
                       const opTexto = Array.from(operadores).join(', ');
                       return opTexto ? <p>Operador(es): {opTexto}</p> : null;
@@ -10478,7 +10486,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                             return (
                               <div key={id}>
                                 <p className="font-bold">{m.codigo} - {(m.tipo?.descricao || '').toUpperCase()}</p>
-                                {lws[0].usuario?.nome && <p className="text-xs opacity-70">Operador: {lws[0].usuario.nome}</p>}
+                                {lws[0].usuario?.nome && <p className="text-xs opacity-70">Operador: {normalizarOperador(lws[0].usuario)}</p>}
                                 <p>E {String(lws[0].entradaAnterior || 0).padStart(10)} {String(lws[0].entradaNova || 0).padStart(10)}___{formatNumber(e)}</p>
                                 <p>S {String(lws[0].saidaAnterior || 0).padStart(10)} {String(lws[0].saidaNova || 0).padStart(10)}___{formatNumber(s)}</p>
                                 <p>Saldo: {formatNumber(lws[0].saldo)}</p>
@@ -10538,7 +10546,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         <p className="font-bold text-sm">{clienteSelecionado?.nome?.toUpperCase()}</p>
                         <p className="text-sm">Data: {segundaViaSelecionada?.data}</p>
                         {(() => {
-                          const operadores = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => l.usuario.nome));
+                          const operadores = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => normalizarOperador(l.usuario)));
                           return operadores.size > 0 ? <p className="text-sm">Operador(es): {Array.from(operadores).join(', ')}</p> : null;
                         })()}
                       </div>

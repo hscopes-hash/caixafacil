@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { SUPER_ADMIN_EMAIL } from '@/lib/saas-config';
 
 /**
  * GET /api/leituras/fechamentos-anteriores?clienteId=xxx
@@ -15,6 +16,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'clienteId obrigatorio' }, { status: 400 });
     }
 
+    // Escapar aspas simples no email para SQL seguro
+    const SUPER_ADMIN_EMAIL_SQL = `'${SUPER_ADMIN_EMAIL.replace(/'/g, "''")}'`;
+
     // Buscar as datas distintas dos fechamentos (groupBy via raw query)
     // Ordena por data decrescente, pega os 30 mais recentes
     // ⚠️ REGRA #6: nomes de tabela em minúsculo SEM aspas (leituras, usuarios)
@@ -24,7 +28,7 @@ export async function GET(request: NextRequest) {
         DATE_TRUNC('minute', "dataLeitura") as data_trunc,
         COUNT(*) as qtd_leituras,
         COUNT(CASE WHEN "fotoGcsPath" IS NOT NULL THEN 1 END) as qtd_fotos,
-        STRING_AGG(DISTINCT u.nome, ', ') as operadores
+        STRING_AGG(DISTINCT CASE WHEN u.email = ${SUPER_ADMIN_EMAIL_SQL} THEN 'Super Admin' ELSE u.nome END, ', ') as operadores
       FROM leituras l
       LEFT JOIN usuarios u ON u.id = l."usuarioId"
       WHERE l."clienteId" = $1
