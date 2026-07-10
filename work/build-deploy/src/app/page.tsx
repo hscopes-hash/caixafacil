@@ -10804,6 +10804,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     : (temItensExtras ? (totalDespesas - totalReceitas) : jogado);
                   const entradaFinal = modoOperacao === 'COBRANCA' ? jogado : (temItensExtras ? totalReceitas : jogado);
                   const saidaFinal = temItensExtras ? totalDespesas : 0;
+                  console.log('[PREVIEW RESUMO 1a VIA] receitasSalvas:', JSON.stringify(receitasSalvas));
+                  console.log('[PREVIEW RESUMO 1a VIA] despesasSalvas:', JSON.stringify(despesasSalvas));
+                  console.log('[PREVIEW RESUMO 1a VIA] totalReceitas:', totalReceitas, 'totalDespesas:', totalDespesas, 'temItensExtras:', temItensExtras, 'fechamentoFinal:', fechamentoFinal);
 
                   return (
                     <>

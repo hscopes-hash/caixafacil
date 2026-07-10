@@ -88,6 +88,8 @@ export async function POST(request: NextRequest) {
       fotoGcsPath: fotoGcsPath || 'NULL',
       temDespesa: !!despesa,
       temReceita: !!receita,
+      receita: receita ? receita.substring(0, 300) : null,
+      valorReceita: valorReceita,
     });
 
     // Verificar se há leituras ou despesa
