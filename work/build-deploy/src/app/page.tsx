@@ -10772,6 +10772,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 <DialogTitle className="text-center text-xl">{modoOperacao === 'COBRANCA' ? '✅ Cobrança Salva!' : modoOperacao === 'LEITURA' ? '✅ Leitura Processada!' : '✅ Ajustes Salvos!'}</DialogTitle>
               </DialogHeader>
 
+              {/* DEBUG OVERLAY TEMPORÁRIO — mostra receitasSalvas/despesasSalvas na tela */}
+              <div className="bg-yellow-100 border-2 border-yellow-600 text-black text-xs p-2 rounded mb-2 font-mono break-all">
+                <p className="font-bold">DEBUG RESUMO:</p>
+                <p>receitasSalvas: {JSON.stringify(receitasSalvas)}</p>
+                <p>despesasSalvas: {JSON.stringify(despesasSalvas)}</p>
+                <p>valorReceitaSalva: {valorReceitaSalva}</p>
+                <p>valorDespesaSalva: {valorDespesaSalva}</p>
+              </div>
+
               {/* Preview no formato RELATÓRIO (igual à 2a via) — cards com fotos e molduras coloridas */}
               <div className="bg-white text-black p-3 rounded-lg" id="relatorio-resumo">
                 <div className="text-center mb-3">
