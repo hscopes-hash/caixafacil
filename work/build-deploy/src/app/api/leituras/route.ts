@@ -79,20 +79,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { leituras, clienteId, usuarioId: rawUsuarioId, despesa, valorDespesa, receita, valorReceita, caixa, valorCaixa, fotoGcsPath } = body;
-
-    // ⚠️ Super admin tem ID fixo 'super-admin' que não existe na tabela usuarios.
-    // Buscar o ID real do registro admin para satisfazer a foreign key.
-    let usuarioId = rawUsuarioId;
-    if (rawUsuarioId === 'super-admin') {
-      const adminRecord = await db.usuario.findFirst({
-        where: { email: process.env.SUPER_ADMIN_EMAIL || 'hscopes@gmail.com', ativo: true, nivelAcesso: 'ADMINISTRADOR' },
-        select: { id: true },
-      });
-      if (adminRecord) {
-        usuarioId = adminRecord.id;
-      }
-    }
+    const { leituras, clienteId, usuarioId, despesa, valorDespesa, receita, valorReceita, caixa, valorCaixa, fotoGcsPath } = body;
 
     console.log('[LEITURAS POST] Recebido:', {
       qtdLeituras: leituras?.length || 0,
