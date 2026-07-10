@@ -5746,7 +5746,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         porMaquina.get(l.maquinaId)!.push(l);
       }
       if (l.despesa) { try { const p = JSON.parse(l.despesa); if (Array.isArray(p)) p.forEach((d: any) => { if (d.valor > 0) despesaItens.push(d); }); } catch {} }
-      if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor > 0) receitaItens.push(r); }); } catch {} }
+      if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor !== 0) receitaItens.push(r); }); } catch {} }
     });
 
     const despesasFinal = Array.from(new Map(despesaItens.map(d => [d.descricao, d])).values());
@@ -5810,7 +5810,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       texto += `_____________\n`;
     }
 
-    const temItensExtras = totalReceitas > 0 || totalDespesas > 0;
+    const temItensExtras = totalReceitas !== 0 || totalDespesas > 0;
     const entradaFinal = modo2via === 'COBRANCA' ? jogado : (temItensExtras ? totalReceitas : jogado);
     const saidaFinal = temItensExtras ? totalDespesas : 0;
     const fechamentoFinal = temItensExtras ? saidaFinal - entradaFinal : entradaFinal;
@@ -6321,7 +6321,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const salvarDigitacaoLS = useCallback(() => {
     if (!clienteSelecionado) return;
     // NAO salvar se nao ha nada digitado (evita sobrescrever dados reais com vazio)
-    const temAlgo = maquinas.some(m => m.novaEntrada || m.novaSaida) || receitasItens.some(d => (parseFloat(d.valor?.replace(',', '.') || '0')) > 0) || despesasItens.some(d => (parseFloat(d.valor?.replace(',', '.') || '0')) > 0) || !!cartaoFotoProcessada || !!mercadoFotoProcessada;
+    const temAlgo = maquinas.some(m => m.novaEntrada || m.novaSaida) || receitasItens.some(d => (parseFloat(d.valor?.replace(',', '.') || '0')) !== 0) || despesasItens.some(d => (parseFloat(d.valor?.replace(',', '.') || '0')) > 0) || !!cartaoFotoProcessada || !!mercadoFotoProcessada;
     if (!temAlgo) return;
     try {
       const dados = {
@@ -6466,12 +6466,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     // Verificar se há valor de receita e despesa preenchido
     const totalRec = calcularTotalReceitas();
     const totalDesp = calcularTotalDespesas();
-    const temReceita = totalRec > 0;
+    // temReceita: inclui negativos (LEITURA pode ser negativa)
+    const temReceita = totalRec !== 0;
     const temDespesa = totalDesp > 0;
-    // Coletar itens com valor > 0 para salvar
+    // Coletar itens para salvar
+    // Receitas: incluir valores != 0 (LEITURA pode ser negativa quando máquinas dão prejuízo)
     const receitasParaSalvar = receitasItens
-      .filter(d => (parseFloat(d.valor.replace(',', '.')) || 0) > 0)
+      .filter(d => (parseFloat(d.valor.replace(',', '.')) || 0) !== 0)
       .map(d => ({ descricao: d.descricao || 'OUTROS', valor: parseFloat(d.valor.replace(',', '.')) || 0 }));
+    // Despesas: só valores > 0 (despesas são sempre positivas)
     const despesasParaSalvar = despesasItens
       .filter(d => (parseFloat(d.valor.replace(',', '.')) || 0) > 0)
       .map(d => ({ descricao: d.descricao || 'OUTROS', valor: parseFloat(d.valor.replace(',', '.')) || 0 }));
@@ -6582,7 +6585,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           despesa: despesasParaSalvar.length > 0 ? JSON.stringify(despesasParaSalvar) : null,
           valorDespesa: totalDesp > 0 ? totalDesp : null,
           receita: receitasParaSalvar.length > 0 ? JSON.stringify(receitasParaSalvar) : null,
-          valorReceita: totalRec > 0 ? totalRec : null,
+          valorReceita: totalRec !== 0 ? totalRec : null,
           fotoGcsPath: fotoGcsPath,
         }),
       });
@@ -6607,13 +6610,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       setResumoCartaoFoto(cartaoFotoProcessada);
       setResumoMercadoFoto(mercadoFotoProcessada);
       // Guarda o valor da despesa para o resumo
-      console.log('[salvarLeituras] valorDespesaSalva:', totalDesp, 'valorReceitaSalva:', totalRec);
       setValorDespesaSalva(totalDesp);
       // Guarda o valor da receita para o resumo
       setValorReceitaSalva(totalRec);
       // Guarda as descrições detalhadas das receitas e despesas
-      console.log('[salvarLeituras] receitasParaSalvar:', JSON.stringify(receitasParaSalvar));
-      console.log('[salvarLeituras] despesasParaSalvar:', JSON.stringify(despesasParaSalvar));
       setReceitasSalvas(receitasParaSalvar);
       setDespesasSalvas(despesasParaSalvar);
       // Guardar valor dos débitos ANTES de zerar para exibir no resumo/extrato
@@ -6713,7 +6713,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     const receitaTotal = valorReceitaSalva;
     const despesaTotal = valorDespesaSalva;
 
-    const temReceitas = receitaTotal > 0;
+    const temReceitas = receitaTotal !== 0;
     const temDespesas = despesaTotal > 0;
     const temAmbos = temReceitas && temDespesas;
 
@@ -6776,7 +6776,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     mensagem += `_____________\n`;
 
     // Receitas detalhadas (so > 0)
-    const recItems = receitasSalvas.filter(d => d.valor > 0);
+    const recItems = receitasSalvas.filter(d => d.valor !== 0);
     if (recItems.length > 0) {
       recItems.forEach(d => {
         mensagem += `  ${d.descricao.padEnd(15)}: ${formatNumber(d.valor)}\n`;
@@ -6890,7 +6890,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             porMaquina.get(l.maquinaId)!.push(l);
           }
           if (l.despesa) { try { const p = JSON.parse(l.despesa); if (Array.isArray(p)) p.forEach((d: any) => { if (d.valor > 0) despesaItens.push(d); }); } catch {} }
-          if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor > 0) receitaItens.push(r); }); } catch {} }
+          if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor !== 0) receitaItens.push(r); }); } catch {} }
         });
         const despesasFinal = Array.from(new Map(despesaItens.map(d => [d.descricao, d])).values());
         const receitasFinal = Array.from(new Map(receitaItens.map(r => [r.descricao, r])).values());
@@ -6908,7 +6908,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const jogado = totalEntradas - totalSaidas;
         const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
         const valorCliente = jogado * (acertoPct / 100);
-        const temItensExtras = totalReceitas > 0 || totalDespesas > 0;
+        const temItensExtras = totalReceitas !== 0 || totalDespesas > 0;
         const entradaFinal = modo2via === 'COBRANCA' ? jogado : (temItensExtras ? totalReceitas : jogado);
         const saidaFinal = temItensExtras ? totalDespesas : 0;
         const fechamentoFinal = temItensExtras ? saidaFinal - entradaFinal : entradaFinal;
@@ -7220,7 +7220,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const temLeitura = l.entradaNova > 0 || l.saidaNova > 0 || l.diferencaEntrada !== 0 || l.diferencaSaida !== 0;
         if (temLeitura) { if (!porMaquina.has(l.maquinaId)) porMaquina.set(l.maquinaId, []); porMaquina.get(l.maquinaId)!.push(l); }
         if (l.despesa) { try { const p = JSON.parse(l.despesa); if (Array.isArray(p)) p.forEach((d: any) => { if (d.valor > 0) despesaItens.push(d); }); } catch {} }
-        if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor > 0) receitaItens.push(r); }); } catch {} }
+        if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor !== 0) receitaItens.push(r); }); } catch {} }
       });
       const despesasFinal = Array.from(new Map(despesaItens.map(d => [d.descricao, d])).values());
       const receitasFinal = Array.from(new Map(receitaItens.map(r => [r.descricao, r])).values());
@@ -7236,7 +7236,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const jogado = totalEntradas - totalSaidas;
       const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
       const valorCliente = jogado * (acertoPct / 100);
-      const temItensExtras = totalReceitas > 0 || totalDespesas > 0;
+      const temItensExtras = totalReceitas !== 0 || totalDespesas > 0;
       const fechamentoFinal = temItensExtras ? (totalDespesas - totalReceitas) : jogado;
 
       // Pré-carregar imagens
@@ -7547,7 +7547,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       // Adaptar maquinasSalvas para o mesmo formato que gerarRelatorioPdf2aVia espera
       const maquinasArr = maquinasSalvas.map(m => [m.id, m] as [string, any]);
-      const receitasFinal = receitasSalvas.filter(d => d.valor > 0);
+      const receitasFinal = receitasSalvas.filter(d => d.valor !== 0);
       const despesasFinal = despesasSalvas.filter(d => d.valor > 0);
 
       let totalEntradas = 0, totalSaidas = 0;
@@ -7560,7 +7560,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const jogado = totalEntradas - totalSaidas;
       const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
       const valorCliente = jogado * (acertoPct / 100);
-      const temItensExtras = totalReceitas > 0 || totalDespesas > 0;
+      const temItensExtras = totalReceitas !== 0 || totalDespesas > 0;
       const fechamentoFinal = modoOperacao === 'COBRANCA'
         ? (jogado - valorCliente - (debitosVencidosSalvos || 0))
         : (temItensExtras ? (totalDespesas - totalReceitas) : jogado);
@@ -10164,11 +10164,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 </div>
                 )}
 
-                {/* Receitas detalhadas (so > 0) */}
-                {receitasItens.filter(d => (parseFloat(d.valor.replace(',', '.')) || 0) > 0).length > 0 && (
+                {/* Receitas detalhadas (inclui negativas — LEITURA pode ser negativa) */}
+                {receitasItens.filter(d => (parseFloat(d.valor.replace(',', '.')) || 0) !== 0).length > 0 && (
                   <div>
                     <p className="border-b border-black my-2">_____________</p>
-                    {receitasItens.filter(d => (parseFloat(d.valor.replace(',', '.')) || 0) > 0).map((d) => (
+                    {receitasItens.filter(d => (parseFloat(d.valor.replace(',', '.')) || 0) !== 0).map((d) => (
                       <p key={d.id}>  {(d.descricao || 'OUTROS').padEnd(13)}: {formatNumber(parseFloat(d.valor.replace(',', '.')) || 0)}</p>
                     ))}
                     <p className="font-bold text-green-700">Total ENTRADAS: {formatNumber(calcularTotalReceitas())}</p>
@@ -10442,7 +10442,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                           porMaquina.get(l.maquinaId)!.push(l);
                         }
                         if (l.despesa) { try { const p = JSON.parse(l.despesa); if (Array.isArray(p)) p.forEach((d: any) => { if (d.valor > 0) despesaItens.push(d); }); } catch {} }
-                        if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor > 0) receitaItens.push(r); }); } catch {} }
+                        if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor !== 0) receitaItens.push(r); }); } catch {} }
                       });
 
                       // Deduplicar despesas/receitas
@@ -10462,7 +10462,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       const jogado = totalEntradas - totalSaidas;
                       const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
                       const valorCliente = jogado * (acertoPct / 100);
-                      const temItensExtras = totalReceitas > 0 || totalDespesas > 0;
+                      const temItensExtras = totalReceitas !== 0 || totalDespesas > 0;
                       const entradaFinal = modo2via === 'COBRANCA' ? jogado : (temItensExtras ? totalReceitas : jogado);
                       const saidaFinal = temItensExtras ? totalDespesas : 0;
                       const fechamentoFinal = temItensExtras ? saidaFinal - entradaFinal : entradaFinal;
@@ -10555,7 +10555,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                             porMaquina.get(l.maquinaId)!.push(l);
                           }
                           if (l.despesa) { try { const p = JSON.parse(l.despesa); if (Array.isArray(p)) p.forEach((d: any) => { if (d.valor > 0) despesaItens.push(d); }); } catch {} }
-                          if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor > 0) receitaItens.push(r); }); } catch {} }
+                          if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor !== 0) receitaItens.push(r); }); } catch {} }
                         });
                         const despesasFinal = Array.from(new Map(despesaItens.map(d => [d.descricao, d])).values());
                         const receitasFinal = Array.from(new Map(receitaItens.map(r => [r.descricao, r])).values());
@@ -10571,7 +10571,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         const jogado = totalEntradas - totalSaidas;
                         const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
                         const valorCliente = jogado * (acertoPct / 100);
-                        const temItensExtras = totalReceitas > 0 || totalDespesas > 0;
+                        const temItensExtras = totalReceitas !== 0 || totalDespesas > 0;
                         const fechamentoFinal = temItensExtras ? (totalDespesas - totalReceitas) : jogado;
 
                         return (
@@ -10795,15 +10795,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   const jogado = totalEntradas - totalSaidas;
                   const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
                   const valorCliente = jogado * (acertoPct / 100);
-                  const temItensExtras = totalReceitas > 0 || totalDespesas > 0;
+                  const temItensExtras = totalReceitas !== 0 || totalDespesas > 0;
                   const fechamentoFinal = modoOperacao === 'COBRANCA'
                     ? (jogado - valorCliente - (debitosVencidosSalvos || 0))
                     : (temItensExtras ? (totalDespesas - totalReceitas) : jogado);
                   const entradaFinal = modoOperacao === 'COBRANCA' ? jogado : (temItensExtras ? totalReceitas : jogado);
                   const saidaFinal = temItensExtras ? totalDespesas : 0;
-                  console.log('[PREVIEW RESUMO] receitasSalvas:', JSON.stringify(receitasSalvas));
-                  console.log('[PREVIEW RESUMO] despesasSalvas:', JSON.stringify(despesasSalvas));
-                  console.log('[PREVIEW RESUMO] totalReceitas:', totalReceitas, 'totalDespesas:', totalDespesas, 'jogado:', jogado, 'temItensExtras:', temItensExtras, 'fechamentoFinal:', fechamentoFinal);
 
                   return (
                     <>
@@ -10862,12 +10859,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       )}
 
                       {/* Receitas/Despesas extras — lado a lado com moldura */}
-                      {modoOperacao !== 'COBRANCA' && (receitasSalvas.filter(d => d.valor > 0).length > 0 || despesasSalvas.filter(d => d.valor > 0).length > 0) && (
+                      {modoOperacao !== 'COBRANCA' && (receitasSalvas.filter(d => d.valor !== 0).length > 0 || despesasSalvas.filter(d => d.valor > 0).length > 0) && (
                         <div className="grid grid-cols-2 gap-2 mb-3">
-                          {receitasSalvas.filter(d => d.valor > 0).length > 0 && (
+                          {receitasSalvas.filter(d => d.valor !== 0).length > 0 && (
                             <div className="border-2 border-blue-700 bg-blue-50 rounded p-2 text-sm">
                               <p className="font-bold text-blue-700 mb-1">ENTRADA</p>
-                              {receitasSalvas.filter(d => d.valor > 0).map((r, i) => <p key={i}>  {r.descricao}: {formatNumber(r.valor)}</p>)}
+                              {receitasSalvas.filter(d => d.valor !== 0).map((r, i) => <p key={i}>  {r.descricao}: {formatNumber(r.valor)}</p>)}
                               <p className="font-bold text-blue-700 mt-1">Total: {formatNumber(totalReceitas)}</p>
                             </div>
                           )}
