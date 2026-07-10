@@ -5765,7 +5765,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     texto += `Data: ${segundaViaSelecionada?.data}\n`;
     const operadoresSet = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => normalizarOperador(l.usuario)));
     const opList = Array.from(operadoresSet);
-    if (opList.length > 0) texto += `Operador(es): ${opList.join(', ')}\n`;
+    if (opList.length > 0) texto += `Operador: ${opList.join(', ')}\n`;
     const qtdFotos2via = segundaViaDados.filter((l: any) => l.fotoGcsPath).length;
     if (qtdFotos2via > 0) texto += `Fotos: ${qtdFotos2via} leitura${qtdFotos2via === 1 ? '' : 's'} com registro\n`;
     texto += `_____________\n`;
@@ -6974,7 +6974,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           ctxPag.font = FONT_VALUE;
           ctxPag.fillText(`Data: ${dataRelatorio}`, A4_W / 2, yp);
           yp += 30;
-          if (operadoresStr) { ctxPag.fillText(`Operador(es): ${operadoresStr}`, A4_W / 2, yp); yp += 30; }
+          if (operadoresStr) { ctxPag.fillText(`Operador: ${operadoresStr}`, A4_W / 2, yp); yp += 30; }
           // Indicador de página
           if (totalPaginas > 1) {
             ctxPag.font = '14px Arial';
@@ -7310,7 +7310,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       ctx.fillText(clienteSelecionado?.nome?.toUpperCase() || '', A4_W / 2, y); y += 30;
       ctx.font = FONT_VALUE;
       ctx.fillText(`Data: ${segundaViaSelecionada?.data || ''}`, A4_W / 2, y); y += 30;
-      if (operadores.size > 0) { ctx.fillText(`Operador(es): ${Array.from(operadores).join(', ')}`, A4_W / 2, y); y += 30; }
+      if (operadores.size > 0) { ctx.fillText(`Operador: ${Array.from(operadores).join(', ')}`, A4_W / 2, y); y += 30; }
       y += 10;
       ctx.strokeStyle = '#000000'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(padding, y); ctx.lineTo(A4_W - padding, y); ctx.stroke(); y += 30;
@@ -10429,7 +10429,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       const operadores = new Set(segundaViaDados.filter(l => l.usuario?.nome).map(l => normalizarOperador(l.usuario)));
                       const qtdFotos = segundaViaDados.filter(l => l.fotoGcsPath).length;
                       const opTexto = Array.from(operadores).join(', ');
-                      return opTexto ? <p>Operador(es): {opTexto}</p> : null;
+                      return opTexto ? <p>Operador: {opTexto}</p> : null;
                     })()}
                     {(() => {
                       const qtdFotos = segundaViaDados.filter(l => l.fotoGcsPath).length;
@@ -10547,7 +10547,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         <p className="text-sm">Data: {segundaViaSelecionada?.data}</p>
                         {(() => {
                           const operadores = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => normalizarOperador(l.usuario)));
-                          return operadores.size > 0 ? <p className="text-sm">Operador(es): {Array.from(operadores).join(', ')}</p> : null;
+                          return operadores.size > 0 ? <p className="text-sm">Operador: {Array.from(operadores).join(', ')}</p> : null;
                         })()}
                       </div>
 
