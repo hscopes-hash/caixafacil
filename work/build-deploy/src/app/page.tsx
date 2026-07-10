@@ -6321,7 +6321,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const salvarDigitacaoLS = useCallback(() => {
     if (!clienteSelecionado) return;
     // NAO salvar se nao ha nada digitado (evita sobrescrever dados reais com vazio)
-    const temAlgo = maquinas.some(m => m.novaEntrada || m.novaSaida) || receitasItens.some(d => (parseFloat(d.valor?.replace(',', '.') || '0')) > 0) || despesasItens.some(d => (parseFloat(d.valor?.replace(',', '.') || '0')) > 0);
+    const temAlgo = maquinas.some(m => m.novaEntrada || m.novaSaida) || receitasItens.some(d => (parseFloat(d.valor?.replace(',', '.') || '0')) > 0) || despesasItens.some(d => (parseFloat(d.valor?.replace(',', '.') || '0')) > 0) || !!cartaoFotoProcessada || !!mercadoFotoProcessada;
     if (!temAlgo) return;
     try {
       const dados = {
@@ -6602,6 +6602,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       // Guarda as máquinas salvas para o resumo
       setMaquinasSalvas([...maquinasPreenchidas]);
       // Guarda fotos de cartão/mercado para o resumo (snapshot no momento do save)
+      console.log('[salvarLeituras] Snapshot — cartaoFotoProcessada:', cartaoFotoProcessada ? 'SIM (' + cartaoFotoProcessada.length + ' chars)' : 'NÃO');
+      console.log('[salvarLeituras] Snapshot — mercadoFotoProcessada:', mercadoFotoProcessada ? 'SIM (' + mercadoFotoProcessada.length + ' chars)' : 'NÃO');
       setResumoCartaoFoto(cartaoFotoProcessada);
       setResumoMercadoFoto(mercadoFotoProcessada);
       // Guarda o valor da despesa para o resumo
