@@ -8856,6 +8856,20 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           </Collapsible>
           )}
 
+          {/* DEBUG OVERLAY — mostra LEITURA/jogado antes de salvar */}
+          {modoOperacao === 'LEITURA' && (
+            <div className="bg-yellow-100 border-2 border-yellow-600 text-black text-xs p-2 rounded mb-2 font-mono break-all">
+              <p className="font-bold">DEBUG TELA:</p>
+              <p>jogado (soma saldos máquinas): {totais.jogado}</p>
+              <p>totalReceitas (soma itens caixa): {totais.totalReceitas}</p>
+              <p>LEITURA item: {receitasItens.find(r => r.id === 'leitura')?.valor || '(vazio)'}</p>
+              <p>receitasItens: {JSON.stringify(receitasItens.map(r => ({ id: r.id, valor: r.valor })))}</p>
+              <p className="font-bold mt-1">
+                {totais.jogado < 0 ? '⚠️ JOGADO NEGATIVO — será salvo no banco' : '✓ jogado positivo ou zero'}
+              </p>
+            </div>
+          )}
+
           {/* Resultado da Leitura - ocultar se houver receita, despesa, e no modo AJUSTE */}
           {modoOperacao !== 'AJUSTE' && totais.totalReceitas === 0 && totais.totalDespesas === 0 && (
           <Card className="border-0 shadow-lg bg-card">
