@@ -57,8 +57,10 @@ export function getVertexModel(model?: string | null): string {
  * Aprimoramentos para OCR de displays de máquinas:
  * - Sempre processa (mesmo imagens pequenas) — garante JPEG consistente
  * - Upscale para 2048px (preserva dígitos pequenos)
+ * - Normalise (CLAHE-like): estica histograma para contraste máximo
+ *   (essencial quando foco não está perfeito — realça bordas suaves)
  * - Modulate: saturação +30% (realça cores de displays LED/LCD)
- * - Sharpen leve (realça bordas de dígitos)
+ * - Sharpen forte (sigma 1.5, m1 1.0, m2 0.8) — realça bordas de dígitos
  * - Normaliza para RGB (descarta alpha/cinza que pode confundir)
  */
 export async function compressImage(base64DataUrl: string): Promise<string> {
@@ -75,10 +77,13 @@ export async function compressImage(base64DataUrl: string): Promise<string> {
       .removeAlpha()
       // Upscale para até 2048px no lado maior (preserva dígitos pequenos)
       .resize(2048, 2048, { fit: 'inside' })
+      // Normaliza contraste (estica histograma) — essencial para fotos
+      // com foco imperfeito: realça bordas suaves de dígitos LCD/LED
+      .normalise()
       // Aumenta saturação em 30% — realça displays LED coloridos (vermelho/verde/azul)
       .modulate({ saturation: 1.3 })
-      // Sharpen leve para realçar bordas de dígitos (sem exagerar para não criar ruído)
-      .sharpen({ sigma: 1.0, m1: 0.5, m2: 0.3 })
+      // Sharpen FORTE para realçar bordas de dígitos (especialmente em upscale)
+      .sharpen({ sigma: 1.5, m1: 1.0, m2: 0.8 })
       .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
       .toBuffer();
 
@@ -86,7 +91,7 @@ export async function compressImage(base64DataUrl: string): Promise<string> {
     const reduction = inputSize > 0
       ? ((1 - outputSize / inputSize) * 100).toFixed(0)
       : '0';
-    console.log(`[COMPRESS] ${inputSize} -> ${outputSize} bytes (${reduction}% redução, upscale + saturação + sharpen)`);
+    console.log(`[COMPRESS] ${inputSize} -> ${outputSize} bytes (${reduction}% redução, upscale + normalise + saturação + sharpen forte)`);
 
     return `data:image/jpeg;base64,${compressed.toString('base64')}`;
   } catch (err) {

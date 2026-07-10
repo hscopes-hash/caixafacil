@@ -4157,8 +4157,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const img = new Image();
         img.onload = () => {
           try {
-            // Limitar tamanho máximo para 800px (otimizado para OCR)
-            const maxDimensao = 800;
+            // 1280px + JPEG 0.85 — suficiente para OCR de displays com dígitos pequenos
+            // (revertido de 800px/0.6 que causava erros em fotos tela cheia)
+            const maxDimensao = 1280;
             let largura = img.width;
             let altura = img.height;
             
@@ -4180,7 +4181,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             
             if (ctx) {
               ctx.drawImage(img, 0, 0, largura, altura);
-              const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.6);
+              const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.85);
               setFotoCapturada(imagemRedimensionada);
             } else {
               // Se não conseguir redimensionar, usa original
@@ -4548,9 +4549,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const url = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => {
-        // Reduzido de 1280 para 800px — economiza upload e processamento IA
-        // 800px é suficiente para OCR de displays de 7 segmentos
-        const maxDim = 800;
+        // 1280px + JPEG 0.85 — suficiente para OCR de displays com dígitos pequenos
+        // (revertido de 800px/0.6 que causava erros em fotos tela cheia)
+        const maxDim = 1280;
         let w = img.width, h = img.height;
         if (w > maxDim || h > maxDim) {
           if (w > h) { h = Math.round((h / w) * maxDim); w = maxDim; }
@@ -4561,8 +4562,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, w, h);
-          // Reduzido de 0.75 para 0.6 — economiza ~30% do tamanho base64
-          const base64 = canvas.toDataURL('image/jpeg', 0.6);
+          const base64 = canvas.toDataURL('image/jpeg', 0.85);
           setFotosLote(prev => [...prev, {
             id: `lote_${++loteIdCounter.current}_${Date.now()}`,
             imagem: base64,
