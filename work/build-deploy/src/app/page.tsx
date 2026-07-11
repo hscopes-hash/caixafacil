@@ -10935,40 +10935,31 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 })()}
               </div>
 
-              {/* Botões de Ação — iguais aos da 2a via */}
-              <div className="grid grid-cols-2 gap-2 mt-4">
-                <Button
-                  variant="outline"
-                  onClick={imprimirResumo}
-                  className="flex flex-col items-center justify-center min-h-[4rem] py-2 px-2"
-                >
-                  <Printer className="w-6 h-6 mb-1" />
-                  <span className="text-xs">Imprimir</span>
+              {/* Botões de Ação — mesma disposição da 2a via */}
+              <DialogFooter className="flex gap-2 mt-4">
+                <Button variant="outline" onClick={imprimirResumo}>
+                  <Printer className="w-4 h-4 mr-2" />
+                  Imprimir
                 </Button>
                 <Button
                   onClick={enviarWhatsAppRelatorioResumo}
-                  className="bg-gradient-to-r from-green-500 to-emerald-600 flex flex-col items-center justify-center min-h-[4rem] py-2 px-2"
+                  className="bg-gradient-to-r from-green-500 to-emerald-600"
                 >
-                  <FileText className="w-6 h-6 mb-1" />
-                  <span className="text-xs">WhatsApp (Relatório PDF)</span>
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  WhatsApp (Relatório PDF)
                 </Button>
                 <Button
                   onClick={enviarTelegramRelatorioResumo}
-                  className="bg-gradient-to-r from-sky-500 to-blue-600 flex flex-col items-center justify-center min-h-[4rem] py-2 px-2 text-white"
+                  className="bg-sky-500 hover:bg-sky-600 text-white"
                 >
-                  <FileText className="w-6 h-6 mb-1" />
-                  <span className="text-xs">Telegram (Relatório PDF)</span>
+                  <Send className="w-4 h-4 mr-2" />
+                  Telegram (Fotos + Extrato)
                 </Button>
-                <Button
-                  variant="secondary"
-                  data-close-resumo="true"
-                  onClick={fecharResumo}
-                  className="flex flex-col items-center justify-center min-h-[4rem] py-2 px-2"
-                >
-                  <X className="w-6 h-6 mb-1" />
-                  <span className="text-xs">Sair</span>
+                <Button variant="outline" data-close-resumo="true" onClick={fecharResumo}>
+                  <X className="w-4 h-4 mr-2" />
+                  Sair
                 </Button>
-              </div>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
           {/* Dialog — Cartão via Brick Mercado Pago */}
