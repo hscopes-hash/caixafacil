@@ -7110,14 +7110,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           ctxPag.fillStyle = '#e6f0ff'; ctxPag.fillRect(padding, cardY, cardW, cardH);
           ctxPag.fillStyle = '#0066cc'; ctxPag.font = FONT_LABEL; ctxPag.textAlign = 'center';
           ctxPag.fillText('ENTRADA', padding + cardW / 2, cardY + 35);
-          ctxPag.font = FONT_TOTAL; ctxPag.fillText(formatNumber(totalReceitas), padding + cardW / 2, cardY + 75);
+          ctxPag.font = FONT_TOTAL; ctxPag.fillText(formatNumber(modo2via === 'COBRANCA' ? totalEntradas : totalReceitas), padding + cardW / 2, cardY + 75);
           // Card 2
           const c2X = padding + cardW + 10;
           ctxPag.strokeStyle = '#cc3300'; ctxPag.strokeRect(c2X, cardY, cardW, cardH);
           ctxPag.fillStyle = '#ffe6e6'; ctxPag.fillRect(c2X, cardY, cardW, cardH);
           ctxPag.fillStyle = '#cc3300'; ctxPag.font = FONT_LABEL;
           ctxPag.fillText('SAÍDA', c2X + cardW / 2, cardY + 35);
-          ctxPag.font = FONT_TOTAL; ctxPag.fillText(formatNumber(totalDespesas), c2X + cardW / 2, cardY + 75);
+          ctxPag.font = FONT_TOTAL; ctxPag.fillText(formatNumber(modo2via === 'COBRANCA' ? totalSaidas : totalDespesas), c2X + cardW / 2, cardY + 75);
           // Card 3
           const c3X = padding + (cardW + 10) * 2;
           let tituloFech: string, corFech: string, bgFech: string;
@@ -7247,7 +7247,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
       const valorCliente = jogado * (acertoPct / 100);
       const temItensExtras = totalReceitas !== 0 || totalDespesas > 0;
-      const fechamentoFinal = temItensExtras ? (totalDespesas - totalReceitas) : jogado;
+      // COBRANCA: ENTRADAS = total entradas máquinas, SAIDAS = total saídas máquinas, FECHAMENTO = jogado
+      const fechamentoFinal = modo2via === 'COBRANCA' ? jogado : (temItensExtras ? (totalDespesas - totalReceitas) : jogado);
 
       // Pré-carregar imagens
       const imagensPorMaquinaId = new Map<string, HTMLImageElement>();
@@ -7456,12 +7457,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       ctx.strokeStyle = '#0066cc'; ctx.lineWidth = 3; ctx.strokeRect(padding, cardY, cardW, cardH);
       ctx.fillStyle = '#e6f0ff'; ctx.fillRect(padding, cardY, cardW, cardH);
       ctx.fillStyle = '#0066cc'; ctx.font = FONT_LABEL; ctx.fillText('ENTRADA', padding + cardW / 2, cardY + 35);
-      ctx.font = FONT_TOTAL; ctx.fillText(formatNumber(totalReceitas), padding + cardW / 2, cardY + 75);
+      ctx.font = FONT_TOTAL; ctx.fillText(formatNumber(modo2via === 'COBRANCA' ? totalEntradas : totalReceitas), padding + cardW / 2, cardY + 75);
       const c2X = padding + cardW + 10;
       ctx.strokeStyle = '#cc3300'; ctx.strokeRect(c2X, cardY, cardW, cardH);
       ctx.fillStyle = '#ffe6e6'; ctx.fillRect(c2X, cardY, cardW, cardH);
       ctx.fillStyle = '#cc3300'; ctx.font = FONT_LABEL; ctx.fillText('SAÍDA', c2X + cardW / 2, cardY + 35);
-      ctx.font = FONT_TOTAL; ctx.fillText(formatNumber(totalDespesas), c2X + cardW / 2, cardY + 75);
+      ctx.font = FONT_TOTAL; ctx.fillText(formatNumber(modo2via === 'COBRANCA' ? totalSaidas : totalDespesas), c2X + cardW / 2, cardY + 75);
       const c3X = padding + (cardW + 10) * 2;
       let tituloFech: string, corFech: string, bgFech: string;
       if (fechamentoFinal > 0) { tituloFech = 'SOBROU'; corFech = '#008800'; bgFech = '#e6ffe6'; }
@@ -7571,8 +7572,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
       const valorCliente = jogado * (acertoPct / 100);
       const temItensExtras = totalReceitas !== 0 || totalDespesas > 0;
+      // COBRANCA: ENTRADAS = total entradas máquinas, SAIDAS = total saídas máquinas, FECHAMENTO = jogado
       const fechamentoFinal = modoOperacao === 'COBRANCA'
-        ? (jogado - valorCliente - (debitosVencidosSalvos || 0))
+        ? jogado
         : (temItensExtras ? (totalDespesas - totalReceitas) : jogado);
 
       // Pré-carregar imagens das fotos processadas
@@ -7761,7 +7763,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       ctx.fillStyle = '#1d4ed8'; ctx.font = FONT_LABEL; ctx.textAlign = 'center';
       ctx.fillText('ENTRADA', padding + cardW / 2, y + 35);
       ctx.font = FONT_TOTAL; ctx.fillStyle = '#1e3a8a';
-      ctx.fillText(formatNumber(modoOperacao === 'COBRANCA' ? jogado : totalReceitas), padding + cardW / 2, y + 75);
+      ctx.fillText(formatNumber(modoOperacao === 'COBRANCA' ? totalEntradas : totalReceitas), padding + cardW / 2, y + 75);
       // SAÍDA
       const sx = padding + cardW + 10;
       ctx.strokeStyle = '#b91c1c';
@@ -7770,7 +7772,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       ctx.fillStyle = '#b91c1c'; ctx.font = FONT_LABEL;
       ctx.fillText('SAÍDA', sx + cardW / 2, y + 35);
       ctx.font = FONT_TOTAL; ctx.fillStyle = '#7f1d1d';
-      ctx.fillText(formatNumber(modoOperacao === 'COBRANCA' ? (valorCliente + (debitosVencidosSalvos || 0)) : totalDespesas), sx + cardW / 2, y + 75);
+      ctx.fillText(formatNumber(modoOperacao === 'COBRANCA' ? totalSaidas : totalDespesas), sx + cardW / 2, y + 75);
       // FECHAMENTO
       const fx = sx + cardW + 10;
       if (fechamentoFinal > 0) {
@@ -10582,7 +10584,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
                         const valorCliente = jogado * (acertoPct / 100);
                         const temItensExtras = totalReceitas !== 0 || totalDespesas > 0;
-                        const fechamentoFinal = temItensExtras ? (totalDespesas - totalReceitas) : jogado;
+                        // COBRANCA: ENTRADAS = total entradas máquinas, SAIDAS = total saídas máquinas, FECHAMENTO = jogado
+                        const fechamentoFinal = modo2via === 'COBRANCA' ? jogado : (temItensExtras ? (totalDespesas - totalReceitas) : jogado);
 
                         return (
                           <>
@@ -10683,12 +10686,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                               {/* Card 1: Total Entrada (azul) */}
                               <div className="border-2 border-blue-700 bg-blue-50 rounded p-2 text-center">
                                 <p className="font-bold text-blue-700 text-xs">ENTRADA</p>
-                                <p className="font-bold text-base text-blue-900">{formatNumber(totalReceitas)}</p>
+                                <p className="font-bold text-base text-blue-900">{formatNumber(modo2via === 'COBRANCA' ? totalEntradas : totalReceitas)}</p>
                               </div>
                               {/* Card 2: Total Saída (vermelho) */}
                               <div className="border-2 border-red-700 bg-red-50 rounded p-2 text-center">
                                 <p className="font-bold text-red-700 text-xs">SAÍDA</p>
-                                <p className="font-bold text-base text-red-900">{formatNumber(totalDespesas)}</p>
+                                <p className="font-bold text-base text-red-900">{formatNumber(modo2via === 'COBRANCA' ? totalSaidas : totalDespesas)}</p>
                               </div>
                               {/* Card 3: Fechamento — título dinâmico (SOBROU/FECHOU/FALTOU) e cor conforme valor */}
                               {(() => {
@@ -10806,8 +10809,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
                   const valorCliente = jogado * (acertoPct / 100);
                   const temItensExtras = totalReceitas !== 0 || totalDespesas > 0;
+                  // COBRANCA: ENTRADAS = total entradas máquinas, SAIDAS = total saídas máquinas, FECHAMENTO = jogado
                   const fechamentoFinal = modoOperacao === 'COBRANCA'
-                    ? (jogado - valorCliente - (debitosVencidosSalvos || 0))
+                    ? jogado
                     : (temItensExtras ? (totalDespesas - totalReceitas) : jogado);
                   const entradaFinal = modoOperacao === 'COBRANCA' ? jogado : (temItensExtras ? totalReceitas : jogado);
                   const saidaFinal = temItensExtras ? totalDespesas : 0;
@@ -10893,12 +10897,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         {/* Card 1: Total Entrada (azul) */}
                         <div className="border-2 border-blue-700 bg-blue-50 rounded p-2 text-center">
                           <p className="font-bold text-blue-700 text-xs">ENTRADA</p>
-                          <p className="font-bold text-base text-blue-900">{formatNumber(modoOperacao === 'COBRANCA' ? jogado : totalReceitas)}</p>
+                          <p className="font-bold text-base text-blue-900">{formatNumber(modoOperacao === 'COBRANCA' ? totalEntradas : totalReceitas)}</p>
                         </div>
                         {/* Card 2: Total Saída (vermelho) */}
                         <div className="border-2 border-red-700 bg-red-50 rounded p-2 text-center">
                           <p className="font-bold text-red-700 text-xs">SAÍDA</p>
-                          <p className="font-bold text-base text-red-900">{formatNumber(modoOperacao === 'COBRANCA' ? (valorCliente + (debitosVencidosSalvos || 0)) : totalDespesas)}</p>
+                          <p className="font-bold text-base text-red-900">{formatNumber(modoOperacao === 'COBRANCA' ? totalSaidas : totalDespesas)}</p>
                         </div>
                         {/* Card 3: Fechamento — título dinâmico (SOBROU/FECHOU/FALTOU) e cor conforme valor */}
                         {(() => {
