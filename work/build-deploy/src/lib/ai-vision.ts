@@ -52,11 +52,116 @@ export function getVertexModel(model?: string | null): string {
 // ============================================
 
 /**
+ * Detecta o ângulo de inclinação (skew) da imagem usando projection profile.
+ * Converte para tons de cinza, testa ângulos de -10 a +10 graus, e encontra
+ * o ângulo com maior variância nas projeções horizontais (texto alinhado
+ * produz maior variância).
+ *
+ * Retorna o ângulo em graus (0 se não detectar).
+ */
+async function detectarSkew(buffer: Buffer): Promise<number> {
+  try {
+    // Redimensionar para análise rápida (max 400px)
+    const meta = await sharp(buffer).metadata();
+    const origW = meta.width || 400;
+    const origH = meta.height || 400;
+    const scale = Math.min(1, 400 / Math.max(origW, origH));
+    const w = Math.round(origW * scale);
+    const h = Math.round(origH * scale);
+
+    // Obter pixels em tons de cinza (1 byte por pixel)
+    const { data: rawPixels } = await sharp(buffer)
+      .resize(w, h, { fit: 'fill' })
+      .greyscale()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    // Detectar ângulo testando rotações de -10 a +10 graus (passo 1°)
+    let melhorAngulo = 0;
+    let melhorVariancia = 0;
+
+    for (let angulo = -10; angulo <= 10; angulo++) {
+      const rad = angulo * Math.PI / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+
+      // Para cada linha y, somar os pixels e calcular variância entre linhas
+      const somaLinhas = new Float64Array(h);
+      for (let y = 0; y < h; y++) {
+        let soma = 0;
+        for (let x = 0; x < w; x++) {
+          // Rotacionar ponto de volta para a imagem original
+          const rx = Math.round((x - w / 2) * cos + (y - h / 2) * sin + w / 2);
+          const ry = Math.round(-(x - w / 2) * sin + (y - h / 2) * cos + h / 2);
+          if (rx >= 0 && rx < w && ry >= 0 && ry < h) {
+            soma += rawPixels[ry * w + rx];
+          }
+        }
+        somaLinhas[y] = soma;
+      }
+
+      // Calcular variância das somas das linhas (maior = mais alinhado)
+      let media = 0;
+      for (let y = 0; y < h; y++) media += somaLinhas[y];
+      media /= h;
+      let variancia = 0;
+      for (let y = 0; y < h; y++) {
+        variancia += (somaLinhas[y] - media) ** 2;
+      }
+      variancia /= h;
+
+      if (variancia > melhorVariancia) {
+        melhorVariancia = variancia;
+        melhorAngulo = angulo;
+      }
+    }
+
+    // Refinar com passo de 0.5 grau perto do melhor ângulo
+    for (let angulo = melhorAngulo - 1; angulo <= melhorAngulo + 1; angulo += 0.5) {
+      if (angulo === melhorAngulo) continue; // já testado
+      const rad = angulo * Math.PI / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const somaLinhas = new Float64Array(h);
+      for (let y = 0; y < h; y++) {
+        let soma = 0;
+        for (let x = 0; x < w; x++) {
+          const rx = Math.round((x - w / 2) * cos + (y - h / 2) * sin + w / 2);
+          const ry = Math.round(-(x - w / 2) * sin + (y - h / 2) * cos + h / 2);
+          if (rx >= 0 && rx < w && ry >= 0 && ry < h) {
+            soma += rawPixels[ry * w + rx];
+          }
+        }
+        somaLinhas[y] = soma;
+      }
+      let media = 0;
+      for (let y = 0; y < h; y++) media += somaLinhas[y];
+      media /= h;
+      let variancia = 0;
+      for (let y = 0; y < h; y++) {
+        variancia += (somaLinhas[y] - media) ** 2;
+      }
+      variancia /= h;
+      if (variancia > melhorVariancia) {
+        melhorVariancia = variancia;
+        melhorAngulo = angulo;
+      }
+    }
+
+    return melhorAngulo;
+  } catch (err) {
+    console.warn('[DESkew-backend] Erro ao detectar skew:', err);
+    return 0;
+  }
+}
+
+/**
  * Comprime e melhora a imagem para OCR (2048px, JPEG 92%).
  *
  * Aprimoramentos para OCR de displays de máquinas:
  * - Sempre processa (mesmo imagens pequenas) — garante JPEG consistente
  * - Upscale para 2048px (preserva dígitos pequenos)
+ * - Deskew automático (corrige inclinação de -10 a +10 graus)
  * - Normalise (CLAHE-like): estica histograma para contraste máximo
  *   (essencial quando foco não está perfeito — realça bordas suaves)
  * - Modulate: saturação +30% (realça cores de displays LED/LCD)
@@ -71,8 +176,24 @@ export async function compressImage(base64DataUrl: string): Promise<string> {
     const buffer = Buffer.from(matches[2], 'base64');
     const inputSize = buffer.length;
 
-    // Sempre processa pelo sharp — garante upscale + melhorias de OCR
-    const compressed = await sharp(buffer)
+    // 1. Detectar e corrigir inclinação (deskew) — ANTES das outras melhorias
+    let bufferProcessado = buffer;
+    try {
+      const anguloSkew = await detectarSkew(buffer);
+      if (Math.abs(anguloSkew) >= 1) {
+        console.log(`[COMPRESS] Deskew: corrigindo ${anguloSkew}° de inclinação`);
+        bufferProcessado = await sharp(buffer)
+          .rotate(anguloSkew, { background: '#ffffff' })
+          .toBuffer();
+      } else {
+        console.log(`[COMPRESS] Deskew: ângulo ${anguloSkew}° — muito pequeno, não precisa corrigir`);
+      }
+    } catch (err) {
+      console.warn('[COMPRESS] Deskew falhou, usando imagem original:', err);
+    }
+
+    // 2. Aplicar melhorias de OCR (upscale + contraste + saturação + sharpen)
+    const compressed = await sharp(bufferProcessado)
       // Remove canal alpha (se houver) e converte para RGB consistente
       .removeAlpha()
       // Upscale para até 2048px no lado maior (preserva dígitos pequenos)
@@ -91,7 +212,7 @@ export async function compressImage(base64DataUrl: string): Promise<string> {
     const reduction = inputSize > 0
       ? ((1 - outputSize / inputSize) * 100).toFixed(0)
       : '0';
-    console.log(`[COMPRESS] ${inputSize} -> ${outputSize} bytes (${reduction}% redução, upscale + normalise + saturação + sharpen forte)`);
+    console.log(`[COMPRESS] ${inputSize} -> ${outputSize} bytes (${reduction}% redução, deskew + upscale + normalise + saturação + sharpen)`);
 
     return `data:image/jpeg;base64,${compressed.toString('base64')}`;
   } catch (err) {
