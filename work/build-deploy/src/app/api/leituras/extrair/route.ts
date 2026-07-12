@@ -31,14 +31,15 @@ export async function POST(request: NextRequest) {
     const nomeS = nomeSaida || 'S';
     const prompt = `Esta é uma foto do display de uma máquina de entretenimento (como caça-níqueis, terminais de jogo, vending machines).
 
-Sua tarefa é localizar na imagem os textos "${nomeE}" e "${nomeS}" (que podem estar em LEDs, LCDs, displays de 7 segmentos, ou impressos em painel) e ler o valor numérico que aparece ao lado ou abaixo de cada um deles.
+Sua tarefa é localizar na imagem os textos "${nomeE}" e "${nomeS}" (que aparecem em telas LCD/LED ou impressos em painel) e ler o valor numérico que aparece ao lado ou abaixo de cada um deles.
 
 INSTRUÇÕES DETALHADAS:
-1. Os rótulos "${nomeE}" e "${nomeS}" podem aparecer em qualquer cor (vermelho, verde, azul, branco, laranja) e fonte (digital, LED, LCD, impresso).
-2. Os números ao lado também podem estar em qualquer cor.
+1. Os rótulos "${nomeE}" e "${nomeS}" podem aparecer em qualquer cor (vermelho, verde, azul, branco, laranja) renderizados em tela LCD/LED.
+2. Os números ao lado também podem estar em qualquer cor, renderizados como texto digital na tela.
 3. Os números podem ter 1 a 7 dígitos, com ou sem separadores de milhar (ponto ou vírgula).
 4. Se houver múltiplos displays, priorize aqueles imediatamente adjacentes aos rótulos "${nomeE}" e "${nomeS}".
-5. Se a foto estiver escura, tente identificar os dígitos mesmo assim (displays LED costumam ser visíveis no escuro).
+5. Se a foto estiver escura, tente identificar os dígitos mesmo assim (telas LCD/LED costumam ser visíveis no escuro).
+6. Dígitos podem ser pequenos — leia cada caractere cuidadosamente, prestando atenção a zeros à esquerda.
 
 REGRAS DE SAÍDA:
 - Retorne APENAS os dígitos numéricos visíveis, sem pontos e sem vírgulas.

@@ -156,17 +156,17 @@ async function detectarSkew(buffer: Buffer): Promise<number> {
 }
 
 /**
- * Comprime e melhora a imagem para OCR (2048px, JPEG 92%).
+ * Comprime e melhora a imagem para OCR (2560px, JPEG 95%).
  *
- * Aprimoramentos para OCR de displays de máquinas:
- * - Sempre processa (mesmo imagens pequenas) — garante JPEG consistente
- * - Upscale para 2048px (preserva dígitos pequenos)
+ * Otimizado para telas LCD/LED completas (não display de 7 segmentos):
  * - Deskew automático (corrige inclinação de -10 a +10 graus)
- * - Normalise (CLAHE-like): estica histograma para contraste máximo
- *   (essencial quando foco não está perfeito — realça bordas suaves)
- * - Modulate: saturação +30% (realça cores de displays LED/LCD)
- * - Sharpen forte (sigma 1.5, m1 1.0, m2 0.8) — realça bordas de dígitos
- * - Normaliza para RGB (descarta alpha/cinza que pode confundir)
+ * - Upscale para 2560px (mais resolução para texto pequeno renderizado)
+ * - Kernel lanczos3 (preserva bordas de texto melhor que bilinear)
+ * - Normalise (estica histograma para contraste máximo)
+ * - Modulate: saturação +30% (realça telas coloridas)
+ * - Median filter (remove ruído de sensor preservando bordas)
+ * - Sharpen muito forte (realça bordas de anti-aliasing de texto LCD/LED)
+ * - JPEG 95 (reduz artefatos de compressão em bordas de caracteres)
  */
 export async function compressImage(base64DataUrl: string): Promise<string> {
   try {
@@ -196,23 +196,30 @@ export async function compressImage(base64DataUrl: string): Promise<string> {
     const compressed = await sharp(bufferProcessado)
       // Remove canal alpha (se houver) e converte para RGB consistente
       .removeAlpha()
-      // Upscale para até 2048px no lado maior (preserva dígitos pequenos)
-      .resize(2048, 2048, { fit: 'inside' })
+      // Upscale para até 2560px no lado maior (mais resolução para texto pequeno)
+      // Kernel lanczos3 preserva bordas de texto melhor que bilinear/default
+      .resize(2560, 2560, { fit: 'inside', kernel: 'lanczos3' })
       // Normaliza contraste (estica histograma) — essencial para fotos
-      // com foco imperfeito: realça bordas suaves de dígitos LCD/LED
+      // com foco imperfeito: realça bordas suaves de texto LCD/LED
       .normalise()
-      // Aumenta saturação em 30% — realça displays LED coloridos (vermelho/verde/azul)
+      // Aumenta saturação em 30% — realça telas coloridas
       .modulate({ saturation: 1.3 })
-      // Sharpen FORTE para realçar bordas de dígitos (especialmente em upscale)
-      .sharpen({ sigma: 1.5, m1: 1.0, m2: 0.8 })
-      .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
+      // Median filter 3x3 — remove ruído de sensor (ISO alto em celulares)
+      // preservando bordas de texto melhor que gaussian blur
+      .median(3)
+      // Sharpen MUITO FORTE — realça bordas de anti-aliasing de texto LCD/LED
+      // (texto renderizado tem bordas suaves que precisam de sharpen agressivo)
+      .sharpen({ sigma: 2.0, m1: 1.5, m2: 1.0 })
+      // JPEG 95 — reduz artefatos de compressão em bordas de caracteres
+      // chromaSubsampling 4:4:4 preserva crominância (importante para telas coloridas)
+      .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
       .toBuffer();
 
     const outputSize = compressed.length;
     const reduction = inputSize > 0
       ? ((1 - outputSize / inputSize) * 100).toFixed(0)
       : '0';
-    console.log(`[COMPRESS] ${inputSize} -> ${outputSize} bytes (${reduction}% redução, deskew + upscale + normalise + saturação + sharpen)`);
+    console.log(`[COMPRESS] ${inputSize} -> ${outputSize} bytes (${reduction}% redução, deskew + upscale 2560 lanczos3 + normalise + saturação + median + sharpen forte + JPEG 95)`);
 
     return `data:image/jpeg;base64,${compressed.toString('base64')}`;
   } catch (err) {
