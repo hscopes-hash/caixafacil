@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { callAI, loadAIConfig, extractJSON } from '@/lib/ai-vision';
+import { callAI, loadAIConfig, extractJSON, avaliarNitidez } from '@/lib/ai-vision';
 import { enforcePlan } from '@/lib/plan-enforcement';
 
 // Identificar máquina pelo código na etiqueta da foto
@@ -23,6 +23,22 @@ export async function POST(request: NextRequest) {
 
     const planCheck = await enforcePlan(empresaId, { feature: 'recIA' }, request);
     if (planCheck.error) return NextResponse.json({ error: planCheck.error }, { status: 403 });
+
+    // === VERIFICAÇÃO DE NITIDEZ — recusa fotos borradas/tremidas antes de gastar IA ===
+    try {
+      const base64Data = imagem.split(',')[1];
+      const imgBuffer = Buffer.from(base64Data, 'base64');
+      const nitidez = await avaliarNitidez(imgBuffer);
+      if (nitidez.ilegivel) {
+        console.warn(`[IDENTIFICAR-LOTE] Foto recusada: ${nitidez.motivo}`);
+        return NextResponse.json({
+          error: nitidez.motivo,
+          ilegivel: true,
+        }, { status: 422 });
+      }
+    } catch (err) {
+      console.warn('[IDENTIFICAR-LOTE] Verificação de nitidez falhou, continuando:', err);
+    }
 
     const { llmModel } = await loadAIConfig(bodyModel?.trim());
     const model = llmModel;

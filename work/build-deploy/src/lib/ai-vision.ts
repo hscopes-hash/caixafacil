@@ -52,6 +52,134 @@ export function getVertexModel(model?: string | null): string {
 // ============================================
 
 /**
+ * Avalia a nitidez da imagem usando Variância do Laplaciano.
+ * 
+ * Método padrão da literatura para detecção de blur/foco:
+ * - Aplica kernel Laplaciano (segunda derivada) que destaca bordas
+ * - Calcula a variância dos valores resultantes
+ * - Imagens nítidas têm alta variância (muitas bordas acentuadas)
+ * - Imagens borradas/tremidas têm baixa variância (bordas suavizadas)
+ * 
+ * Análise em 2 níveis:
+ * 1. Global — variância média de toda a imagem
+ * 2. Por região (grid 3x3) — detecta foco desigual
+ * 
+ * Retorna { global, regioesBorradas, totalRegioes, ilegivel, motivo }
+ */
+export async function avaliarNitidez(buffer: Buffer): Promise<{
+  global: number;
+  regioesBorradas: number;
+  totalRegioes: number;
+  ilegivel: boolean;
+  motivo: string;
+}> {
+  try {
+    // Redimensionar para análise (max 400px — literatura usa 200-500px)
+    const meta = await sharp(buffer).metadata();
+    const origW = meta.width || 400;
+    const origH = meta.height || 400;
+    const scale = Math.min(1, 400 / Math.max(origW, origH));
+    const w = Math.round(origW * scale);
+    const h = Math.round(origH * scale);
+
+    // Obter pixels em tons de cinza (1 byte por pixel)
+    const { data: gray } = await sharp(buffer)
+      .resize(w, h, { fit: 'fill' })
+      .greyscale()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    // === ANÁLISE GLOBAL ===
+    let sum = 0, sumSq = 0;
+    const count = (w - 2) * (h - 2);
+    const laplacian = new Float64Array(w * h);
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const idx = y * w + x;
+        const val = 4 * gray[idx]
+          - gray[idx - 1]
+          - gray[idx + 1]
+          - gray[idx - w]
+          - gray[idx + w];
+        laplacian[idx] = val;
+        sum += val;
+      }
+    }
+    const mean = sum / count;
+    let variance = 0;
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        variance += (laplacian[y * w + x] - mean) ** 2;
+      }
+    }
+    variance /= count;
+
+    // === ANÁLISE POR REGIÃO (grid 3x3) ===
+    // Detecta foco desigual — parte nítida, parte borrada
+    const zoneW = Math.floor(w / 3);
+    const zoneH = Math.floor(h / 3);
+    const THRESHOLD_REGIAO = 80; // abaixo disso = borrada
+    let regioesBorradas = 0;
+    const totalRegioes = 9;
+
+    for (let zy = 0; zy < 3; zy++) {
+      for (let zx = 0; zx < 3; zx++) {
+        let zSum = 0, zSq = 0, zCnt = 0;
+        const x0 = zx * zoneW + 1;
+        const x1 = Math.min((zx + 1) * zoneW, w - 1);
+        const y0 = zy * zoneH + 1;
+        const y1 = Math.min((zy + 1) * zoneH, h - 1);
+
+        for (let y = y0; y < y1; y++) {
+          for (let x = x0; x < x1; x++) {
+            const idx = y * w + x;
+            zSum += laplacian[idx];
+            zSq += laplacian[idx] * laplacian[idx];
+            zCnt++;
+          }
+        }
+        if (zCnt > 0) {
+          const zMean = zSum / zCnt;
+          const zVar = zSq / zCnt - zMean * zMean;
+          if (zVar < THRESHOLD_REGIAO) regioesBorradas++;
+        }
+      }
+    }
+
+    // === DECISÃO ===
+    // Thresholds calibrados:
+    // - Global < 50: muito borrada (tremida/foco perdido) — recusa
+    // - Regiões borradas >= 5 (de 9): foco desigual severo — recusa
+    // - Global < 100 AND regiões borradas >= 3: levemente borrada mas
+    //   com áreas suficientes afetadas — recusa
+    const THRESHOLD_GLOBAL_BORRADA = 50;
+    const THRESHOLD_REGIOES_CRITICO = 5;
+    const THRESHOLD_REGIOES_MODERADO = 3;
+
+    let ilegivel = false;
+    let motivo = '';
+
+    if (variance < THRESHOLD_GLOBAL_BORRADA) {
+      ilegivel = true;
+      motivo = `Foto ilegível — imagem muito borrada/tremida (nitidez global: ${variance.toFixed(0)})`;
+    } else if (regioesBorradas >= THRESHOLD_REGIOES_CRITICO) {
+      ilegivel = true;
+      motivo = `Foto ilegível — foco desigual severo (${regioesBorradas}/${totalRegioes} regiões borradas)`;
+    } else if (variance < 100 && regioesBorradas >= THRESHOLD_REGIOES_MODERADO) {
+      ilegivel = true;
+      motivo = `Foto ilegível — imagem parcialmente borrada (nitidez global: ${variance.toFixed(0)}, ${regioesBorradas}/${totalRegioes} regiões borradas)`;
+    }
+
+    console.log(`[NITIDEZ] Global: ${variance.toFixed(0)}, regiões borradas: ${regioesBorradas}/${totalRegioes}${ilegivel ? ' → ILEGÍVEL' : ' → OK'}`);
+
+    return { global: variance, regioesBorradas, totalRegioes, ilegivel, motivo };
+  } catch (err) {
+    console.warn('[NITIDEZ] Erro ao avaliar nitidez:', err);
+    return { global: 0, regioesBorradas: 0, totalRegioes: 0, ilegivel: false, motivo: '' };
+  }
+}
+
+/**
  * Detecta o ângulo de inclinação (skew) da imagem usando projection profile.
  * Converte para tons de cinza, testa ângulos de -10 a +10 graus, e encontra
  * o ângulo com maior variância nas projeções horizontais (texto alinhado
