@@ -793,6 +793,29 @@ export async function callAIGLM(
 
   console.log(`[GLM-4.6v] Imagem processada (${agressivo ? 'agressivo' : 'rápido'}): ${(compressedImage.length / 1024).toFixed(0)} KB`);
 
+  // Criar config dinamicamente a partir de variáveis de ambiente
+  // (SDK z-ai-web-dev-sdk lê de arquivo .z-ai-config, mas na Vercel não temos acesso)
+  const fs = await import('fs');
+  const path = await import('path');
+  const os = await import('os');
+  
+  const config = {
+    baseUrl: process.env.Z_AI_BASE_URL || 'https://internal-api.z.ai/v1',
+    apiKey: process.env.Z_AI_API_KEY || 'Z.ai',
+    token: process.env.Z_AI_TOKEN || '',
+    chatId: process.env.Z_AI_CHAT_ID || `chat-${Date.now()}`,
+    userId: process.env.Z_AI_USER_ID || 'caixafacil',
+  };
+  
+  // Escrever config temporário no home dir (SDK procura lá)
+  const configPath = path.join(os.homedir(), '.z-ai-config');
+  try {
+    fs.writeFileSync(configPath, JSON.stringify(config));
+    console.log(`[GLM-4.6v] Config escrito em ${configPath}`);
+  } catch (err) {
+    console.warn('[GLM-4.6v] Erro ao escrever config:', err);
+  }
+
   // Import dinâmico para evitar carregar SDK se não usado
   const ZAI = (await import('z-ai-web-dev-sdk')).default;
   const zai = await ZAI.create();
