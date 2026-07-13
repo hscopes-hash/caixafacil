@@ -59,6 +59,20 @@ ${codigosMaquinas.map((c: string) => {
 Para cada rótulo encontrado, leia os dígitos numéricos que aparecem ao lado/abaixo dele.
 Retorne APENAS dígitos, sem pontos e sem vírgulas. Se o display mostrar 1.234,56 retorne 123456 (ignore os separadores . e ,). Retorne o valor COMPLETO incluindo todos os dígitos visíveis (mantenha zeros à esquerda). Se ilegível, retorne null.
 
+ATENÇÃO — DÍGITOS FACILMENTE CONFUNDÍVEIS:
+- 0 (zero) vs 8: o zero é uma elipse vazia; o 8 tem duas curvas empilhadas com constrição no meio
+- 0 (zero) vs O (letra): ignore letras, apenas dígitos
+- 3 vs 8: o 3 tem duas curvas abertas à esquerda; o 8 é fechado
+- 5 vs 6: o 5 tem topo reto e curva inferior; o 6 tem curva superior fechada
+- 1 vs 7: o 1 é traço vertical; o 7 tem traço horizontal no topo
+- 4 vs 1: o 4 tem dois traços cruzados; o 1 é único vertical
+
+DICAS PARA DISPLAYS LCD/LED:
+- Cada dígito ocupa uma posição retangular fixa — conte as posições
+- Cor do dígito (verde/vermelho/azul/branco) não afeta o valor
+- Se um segmento parece apagado, considere o dígito mais provável pela forma geral
+- Zeros à esquerda SÃO importantes — não os remova
+
 Responda APENAS com JSON:
 {"etiquetaLegivel": true_ou_false, "codigoMaquina": "CODIGO_OU_VAZIO", "codigoLido": "CODIGO_OU_VAZIO", "confianca": 0_A_100, "entrada": "digitos_ou_null", "saida": "digitos_ou_null", "observacoes": "texto"}`;
 
