@@ -4429,7 +4429,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       const data = await res.json();
 
-      setDebugOCR(`Status: ${res.status} | Agressivo: true | Foto enviada: ${(fotoCorrigida.length / 1024).toFixed(0)} KB | Resposta: ${JSON.stringify(data).substring(0, 400)}`);
+      setDebugOCR(`Status: ${res.status} | Agressivo: true | Foto enviada: ${(fotoCorrigida.length / 1024).toFixed(0)} KB | Inverteu cores: ${data.debugInverteuCores ? 'SIM (brilho ' + data.debugBrilhoMedio + ')' : 'NÃO (brilho ' + data.debugBrilhoMedio + ')'} | Resposta: ${JSON.stringify(data).substring(0, 300)}`);
 
 
       if (!res.ok) {

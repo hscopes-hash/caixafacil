@@ -507,7 +507,7 @@ export async function compressImage(base64DataUrl: string): Promise<string> {
  * Inverter cores (negativo) transforma em fundo branco com letra preta,
  * que é o padrão que o Gemini lê melhor (texto em papel).
  */
-async function temFundoEscuro(buffer: Buffer): Promise<boolean> {
+async function temFundoEscuro(buffer: Buffer): Promise<{ escuro: boolean; brilho: number }> {
   try {
     // Redimensionar para 100px (análise rápida)
     const meta = await sharp(buffer).metadata();
@@ -530,12 +530,15 @@ async function temFundoEscuro(buffer: Buffer): Promise<boolean> {
     const media = sum / total;
     const escuro = media < 128;
     console.log(`[FUNDO] Brilho médio: ${media.toFixed(0)} (0=preto, 255=branco) → ${escuro ? 'escuro (inverter)' : 'claro (manter)'}`);
-    return escuro;
+    return { escuro, brilho: media };
   } catch (err) {
     console.warn('[FUNDO] Erro ao detectar:', err);
-    return false; // se falhar, não inverte
+    return { escuro: false, brilho: 0 };
   }
 }
+
+/** Variável global temporária — armazena info da última compressão agressiva */
+export let _ultimaCompressaoAgressivaInfo = { inverteuCores: false, brilhoMedio: 0 };
 
 /**
  * Comprime imagem para OCR com pipeline AGRESSIVO — para foto individual.
@@ -577,17 +580,24 @@ export async function compressImageAgressiva(base64DataUrl: string): Promise<str
 
     // 2. Inverter cores se fundo escuro (display LCD/LED preto)
     // Gemini lê melhor texto preto sobre branco (padrão de papel)
+    let inverteuCores = false;
+    let brilhoMedio = 0;
     try {
-      const escuro = await temFundoEscuro(bufferProcessado);
+      const { escuro, brilho } = await temFundoEscuro(bufferProcessado);
+      brilhoMedio = brilho;
       if (escuro) {
         console.log('[COMPRESS-AGRESSIVO] Invertendo cores (fundo escuro → claro)');
         bufferProcessado = await sharp(bufferProcessado)
           .negate()
           .toBuffer();
+        inverteuCores = true;
       }
     } catch (err) {
       console.warn('[COMPRESS-AGRESSIVO] Inversão de cores falhou:', err);
     }
+
+    // Atualizar info global para o endpoint poder retornar
+    _ultimaCompressaoAgressivaInfo = { inverteuCores, brilhoMedio: Math.round(brilhoMedio) };
 
     // 3. Pipeline agressivo — máxima qualidade para diferenciar dígitos
     const compressed = await sharp(bufferProcessado)
@@ -608,7 +618,7 @@ export async function compressImageAgressiva(base64DataUrl: string): Promise<str
     const reduction = inputSize > 0
       ? ((1 - outputSize / inputSize) * 100).toFixed(0)
       : '0';
-    console.log(`[COMPRESS-AGRESSIVO] ${inputSize} -> ${outputSize} bytes (${reduction}% redução, deskew + 2560px + median + sharpen forte + JPEG 95)`);
+    console.log(`[COMPRESS-AGRESSIVO] ${inputSize} -> ${outputSize} bytes (${reduction}% redução, deskew + ${inverteuCores ? 'inversão + ' : ''}2560px + median + sharpen forte + JPEG 95)`);
 
     return `data:image/jpeg;base64,${compressed.toString('base64')}`;
   } catch (err) {

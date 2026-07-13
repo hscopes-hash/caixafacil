@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { callAI, callAIGLM, loadAIConfig, extractJSON, avaliarNitidez } from '@/lib/ai-vision';
+import { callAI, callAIGLM, loadAIConfig, extractJSON, avaliarNitidez, _ultimaCompressaoAgressivaInfo } from '@/lib/ai-vision';
 import { enforcePlan } from '@/lib/plan-enforcement';
 
 /**
@@ -189,6 +189,8 @@ Responda APENAS com JSON:
       confiancaOCR: typeof resultado.confianca === 'number' ? resultado.confianca : 0,
       observacoes: resultado.observacoes || '',
       model,
+      debugInverteuCores: _ultimaCompressaoAgressivaInfo.inverteuCores,
+      debugBrilhoMedio: _ultimaCompressaoAgressivaInfo.brilhoMedio,
     });
   } catch (error) {
     console.error('[PROCESSAR-LOTE-FOTO] Erro:', error);
