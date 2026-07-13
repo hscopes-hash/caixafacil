@@ -180,105 +180,129 @@ export async function avaliarNitidez(buffer: Buffer): Promise<{
 }
 
 /**
- * Detecta o ângulo de inclinação (skew) da imagem usando projection profile.
- * Converte para tons de cinza, testa ângulos de -10 a +10 graus, e encontra
- * o ângulo com maior variância nas projeções horizontais (texto alinhado
- * produz maior variância).
+ * Detecta o ângulo de inclinação (skew) da imagem usando projection profile
+ * com gradiente horizontal (Sobel).
+ *
+ * Melhorias vs versão anterior:
+ * - Usa gradiente horizontal (Sobel) em vez de pixels brutos — mais robusto
+ *   para detectar bordas de texto/dígitos (display LCD/LED)
+ * - Resolução maior (600px em vez de 400px) — mais precisão
+ * - Refinamento em 3 níveis: 1° → 0.5° → 0.25° (era só 2 níveis)
+ * - Threshold de 1° para 0.5° (corrige inclinações leves)
+ * - Usa coeficiente de variação (CV = std/mean) em vez de variância absoluta
+ *   — mais robusto a diferenças de brilho (backlight desigual)
  *
  * Retorna o ângulo em graus (0 se não detectar).
  */
 async function detectarSkew(buffer: Buffer): Promise<number> {
   try {
-    // Redimensionar para análise rápida (max 400px)
+    // Redimensionar para análise (max 600px — mais resolução = mais precisão)
     const meta = await sharp(buffer).metadata();
-    const origW = meta.width || 400;
-    const origH = meta.height || 400;
-    const scale = Math.min(1, 400 / Math.max(origW, origH));
+    const origW = meta.width || 600;
+    const origH = meta.height || 600;
+    const scale = Math.min(1, 600 / Math.max(origW, origH));
     const w = Math.round(origW * scale);
     const h = Math.round(origH * scale);
 
     // Obter pixels em tons de cinza (1 byte por pixel)
-    const { data: rawPixels } = await sharp(buffer)
+    const { data: gray } = await sharp(buffer)
       .resize(w, h, { fit: 'fill' })
       .greyscale()
       .raw()
       .toBuffer({ resolveWithObject: true });
 
-    // Detectar ângulo testando rotações de -10 a +10 graus (passo 1°)
-    let melhorAngulo = 0;
-    let melhorVariancia = 0;
+    // === Pré-computar gradiente horizontal (Sobel X) ===
+    // Bordas verticais (gradiente X forte) são ideais para projection profile
+    // — linhas de texto têm muitas bordas verticais que ficam alinhadas quando
+    // a imagem está reta. Se inclinada, as bordas ficam espalhadas entre linhas.
+    const gradX = new Float64Array(w * h);
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const idx = y * w + x;
+        // Sobel X: [-1 0 1; -2 0 2; -1 0 1]
+        const val = -gray[idx - w - 1] - 2 * gray[idx - 1] - gray[idx + w - 1]
+                  + gray[idx - w + 1] + 2 * gray[idx + 1] + gray[idx + w + 1];
+        gradX[idx] = Math.abs(val);
+      }
+    }
 
-    for (let angulo = -10; angulo <= 10; angulo++) {
+    // Função helper: medir qualidade do alinhamento em um ângulo
+    // Usa coeficiente de variação (CV = std/mean) — robusto a brilho desigual
+    const medirAlinhamento = (angulo: number): number => {
       const rad = angulo * Math.PI / 180;
       const cos = Math.cos(rad);
       const sin = Math.sin(rad);
+      const cx = w / 2;
+      const cy = h / 2;
 
-      // Para cada linha y, somar os pixels e calcular variância entre linhas
+      // Para cada linha y, somar os gradientes dos pixels dessa linha
       const somaLinhas = new Float64Array(h);
       for (let y = 0; y < h; y++) {
         let soma = 0;
         for (let x = 0; x < w; x++) {
           // Rotacionar ponto de volta para a imagem original
-          const rx = Math.round((x - w / 2) * cos + (y - h / 2) * sin + w / 2);
-          const ry = Math.round(-(x - w / 2) * sin + (y - h / 2) * cos + h / 2);
+          const rx = Math.round((x - cx) * cos + (y - cy) * sin + cx);
+          const ry = Math.round(-(x - cx) * sin + (y - cy) * cos + cy);
           if (rx >= 0 && rx < w && ry >= 0 && ry < h) {
-            soma += rawPixels[ry * w + rx];
+            soma += gradX[ry * w + rx];
           }
         }
         somaLinhas[y] = soma;
       }
 
-      // Calcular variância das somas das linhas (maior = mais alinhado)
-      let media = 0;
-      for (let y = 0; y < h; y++) media += somaLinhas[y];
-      media /= h;
-      let variancia = 0;
+      // Calcular coeficiente de variação (std/mean) — maior = mais alinhado
+      let sum = 0;
+      for (let y = 0; y < h; y++) sum += somaLinhas[y];
+      const mean = sum / h;
+      if (mean < 1e-6) return 0; // evita divisão por zero
+      let sqSum = 0;
       for (let y = 0; y < h; y++) {
-        variancia += (somaLinhas[y] - media) ** 2;
+        sqSum += (somaLinhas[y] - mean) ** 2;
       }
-      variancia /= h;
+      const std = Math.sqrt(sqSum / h);
+      return std / mean; // CV
+    };
 
-      if (variancia > melhorVariancia) {
-        melhorVariancia = variancia;
+    // === Nível 1: teste de -10 a +10 graus (passo 1°) ===
+    let melhorAngulo = 0;
+    let melhorCV = medirAlinhamento(0);
+
+    for (let angulo = -10; angulo <= 10; angulo++) {
+      if (angulo === 0) continue; // já testado
+      const cv = medirAlinhamento(angulo);
+      if (cv > melhorCV) {
+        melhorCV = cv;
         melhorAngulo = angulo;
       }
     }
 
-    // Refinar com passo de 0.5 grau perto do melhor ângulo
+    // === Nível 2: refinar com passo de 0.5° perto do melhor ângulo ===
     for (let angulo = melhorAngulo - 1; angulo <= melhorAngulo + 1; angulo += 0.5) {
-      if (angulo === melhorAngulo) continue; // já testado
-      const rad = angulo * Math.PI / 180;
-      const cos = Math.cos(rad);
-      const sin = Math.sin(rad);
-      const somaLinhas = new Float64Array(h);
-      for (let y = 0; y < h; y++) {
-        let soma = 0;
-        for (let x = 0; x < w; x++) {
-          const rx = Math.round((x - w / 2) * cos + (y - h / 2) * sin + w / 2);
-          const ry = Math.round(-(x - w / 2) * sin + (y - h / 2) * cos + h / 2);
-          if (rx >= 0 && rx < w && ry >= 0 && ry < h) {
-            soma += rawPixels[ry * w + rx];
-          }
-        }
-        somaLinhas[y] = soma;
-      }
-      let media = 0;
-      for (let y = 0; y < h; y++) media += somaLinhas[y];
-      media /= h;
-      let variancia = 0;
-      for (let y = 0; y < h; y++) {
-        variancia += (somaLinhas[y] - media) ** 2;
-      }
-      variancia /= h;
-      if (variancia > melhorVariancia) {
-        melhorVariancia = variancia;
+      if (angulo === melhorAngulo) continue;
+      const cv = medirAlinhamento(angulo);
+      if (cv > melhorCV) {
+        melhorCV = cv;
         melhorAngulo = angulo;
       }
     }
 
+    // === Nível 3: refinar com passo de 0.25° (alta precisão) ===
+    for (let angulo = melhorAngulo - 0.5; angulo <= melhorAngulo + 0.5; angulo += 0.25) {
+      if (angulo === melhorAngulo) continue;
+      const cv = medirAlinhamento(angulo);
+      if (cv > melhorCV) {
+        melhorCV = cv;
+        melhorAngulo = angulo;
+      }
+    }
+
+    // Arredondar para 2 casas decimais
+    melhorAngulo = Math.round(melhorAngulo * 100) / 100;
+
+    console.log(`[Deskew-backend] Ângulo detectado: ${melhorAngulo}° (CV=${melhorCV.toFixed(4)})`);
     return melhorAngulo;
   } catch (err) {
-    console.warn('[DESkew-backend] Erro ao detectar skew:', err);
+    console.warn('[Deskew-backend] Erro ao detectar skew:', err);
     return 0;
   }
 }
@@ -311,13 +335,13 @@ export async function compressImage(base64DataUrl: string): Promise<string> {
     let bufferProcessado = buffer;
     try {
       const anguloSkew = await detectarSkew(buffer);
-      if (Math.abs(anguloSkew) >= 1) {
+      if (Math.abs(anguloSkew) >= 0.5) {
         console.log(`[COMPRESS] Deskew: corrigindo ${anguloSkew}° de inclinação`);
         bufferProcessado = await sharp(buffer)
           .rotate(anguloSkew, { background: '#ffffff' })
           .toBuffer();
       } else {
-        console.log(`[COMPRESS] Deskew: ângulo ${anguloSkew}° — muito pequeno, não precisa corrigir`);
+        console.log(`[COMPRESS] Deskew: ângulo ${anguloSkew}° — muito pequeno (< 0.5°), não precisa corrigir`);
       }
     } catch (err) {
       console.warn('[COMPRESS] Deskew falhou, usando imagem original:', err);
