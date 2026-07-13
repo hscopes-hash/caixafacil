@@ -501,7 +501,11 @@ export async function compressImage(base64DataUrl: string): Promise<string> {
 
 /**
  * Detecta se a imagem tem fundo escuro (display LCD/LED com fundo preto).
- * Calcula o brilho médio — se < 128, considera fundo escuro.
+ * Calcula o brilho médio da REGIÃO CENTRAL — se < 128, considera fundo escuro.
+ * 
+ * IMPORTANTE: Mede apenas a região central (50% da área), não a foto inteira.
+ * Fotos de displays têm muita área clara ao redor (parede, etiqueta branca)
+ * que infla o brilho médio e esconde o fato de que o display é escuro.
  * 
  * Displays com fundo preto e letra branca podem confundir o Gemini.
  * Inverter cores (negativo) transforma em fundo branco com letra preta,
@@ -509,27 +513,39 @@ export async function compressImage(base64DataUrl: string): Promise<string> {
  */
 async function temFundoEscuro(buffer: Buffer): Promise<{ escuro: boolean; brilho: number }> {
   try {
-    // Redimensionar para 100px (análise rápida)
     const meta = await sharp(buffer).metadata();
-    const scale = Math.min(1, 100 / Math.max(meta.width || 100, meta.height || 100));
-    const w = Math.round((meta.width || 100) * scale);
-    const h = Math.round((meta.height || 100) * scale);
+    const origW = meta.width || 100;
+    const origH = meta.height || 100;
+
+    // Crop da região central (50% da largura e 50% da altura)
+    const cropLeft = Math.floor(origW * 0.25);
+    const cropTop = Math.floor(origH * 0.25);
+    const cropW = Math.floor(origW * 0.5);
+    const cropH = Math.floor(origH * 0.5);
+
+    // Redimensionar região central para 100px (análise rápida)
+    const scale = Math.min(1, 100 / Math.max(cropW, cropH));
+    const w = Math.round(cropW * scale);
+    const h = Math.round(cropH * scale);
 
     const { data: gray } = await sharp(buffer)
+      .extract({ left: cropLeft, top: cropTop, width: cropW, height: cropH })
       .resize(w, h, { fit: 'fill' })
       .greyscale()
       .raw()
       .toBuffer({ resolveWithObject: true });
 
-    // Calcular brilho médio
+    // Calcular brilho médio da região central
     let sum = 0;
     const total = w * h;
     for (let i = 0; i < total; i++) {
       sum += gray[i];
     }
     const media = sum / total;
-    const escuro = media < 128;
-    console.log(`[FUNDO] Brilho médio: ${media.toFixed(0)} (0=preto, 255=branco) → ${escuro ? 'escuro (inverter)' : 'claro (manter)'}`);
+    // Threshold 160 (mais permissivo) — displays coloridos têm brilho médio
+    // maior que displays pretos puros, mas ainda precisam inversão
+    const escuro = media < 160;
+    console.log(`[FUNDO] Brilho central: ${media.toFixed(0)} (0=preto, 255=branco) → ${escuro ? 'escuro (inverter)' : 'claro (manter)'}`);
     return { escuro, brilho: media };
   } catch (err) {
     console.warn('[FUNDO] Erro ao detectar:', err);
