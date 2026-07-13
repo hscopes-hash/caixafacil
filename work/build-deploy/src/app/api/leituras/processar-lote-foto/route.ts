@@ -56,10 +56,23 @@ ${codigosMaquinas.map((c: string) => {
   return `  - Código "${c}": rótulo entrada="${info?.nomeEntrada || 'E'}", rótulo saída="${info?.nomeSaida || 'S'}"`;
 }).join('\n')}
 
+⚠️ QUAL VALOR LER — MUITO IMPORTANTE:
+O display pode mostrar DOIS valores para cada campo:
+1. Valor do CONTADOR (inteiro, sem formatação) — ESTE é o valor que queremos
+2. Valor MONETÁRIO formatado (com pontos e vírgulas) — NÃO queremos este
+
+Exemplo: se o display mostra "10259000" e "182.598,88" ao lado de ENTRADAS:
+  ✅ Retorne: "10259000" (valor do contador, inteiro)
+  ❌ NÃO retorne: "18259888" (valor monetário)
+
+COMO DISTINGUIR:
+- Valor do CONTADOR: número INTEIRO, SEM pontos, SEM vírgulas, geralmente maior
+- Valor MONETÁRIO: tem ponto (.) para milhar e vírgula (,) para decimal
+
 PROCEDIMENTO PARA LEITURA (faça em silêncio, não inclua no JSON):
-1. Localize o rótulo de ENTRADA e o valor ao lado
-2. Conte quantos dígitos o valor tem
-3. Para CADA dígito, da esquerda para a direita, identifique:
+1. Localize o rótulo de ENTRADA e identifique os valores ao lado
+2. Se houver DOIS valores, escolha o INTEIRO (sem . ou ,)
+3. Para CADA dígito do valor inteiro, da esquerda para a direita:
    - Tem linha horizontal no MEIO (cintura)? → é 8
    - É uma elipse/círculo vazia SEM linha no meio? → é 0 (zero)
    - Tem curva superior fechada? → é 6 (não 5)
@@ -82,8 +95,8 @@ DICAS PARA DISPLAYS LCD/LED:
 - Zeros à esquerda SÃO importantes — não os remova
 
 REGRAS DE SAÍDA:
-- Retorne APENAS os dígitos numéricos visíveis, sem pontos e sem vírgulas
-- Se o display mostrar 1.234,56 retorne 123456 (ignore separadores . e ,)
+- Retorne APENAS os dígitos numéricos do CONTADOR (inteiro, sem . ou ,)
+- Se o display mostrar 1.234,56 (monetário) E 123456 (contador), retorne 123456
 - Mantenha zeros à esquerda
 - Se ilegível, retorne null
 
