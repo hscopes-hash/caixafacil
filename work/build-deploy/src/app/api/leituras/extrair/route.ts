@@ -66,6 +66,17 @@ ATENÇÃO — DÍGITOS FACILMENTE CONFUNDÍVEIS:
 - 1 vs 7: o 1 é traço vertical; o 7 tem traço horizontal no topo
 - 4 vs 1: o 4 tem dois traços cruzados; o 1 é único vertical
 
+PROCEDIMENTO PARA LEITURA (faça em silêncio):
+1. Localize o rótulo "${nomeE}" e o valor ao lado
+2. Conte quantos dígitos o valor tem
+3. Para CADA dígito, da esquerda para a direita, identifique:
+   - Tem linha horizontal no MEIO (cintura)? → é 8
+   - É uma elipse/círculo vazia SEM linha no meio? → é 0 (zero)
+   - Tem curva superior fechada? → é 6 (não 5)
+   - Tem topo reto e curva inferior aberta? → é 5 (não 6)
+4. Monte o número completo
+5. Repita para "${nomeS}"
+
 DICAS PARA DISPLAYS LCD/LED:
 - Cada dígito ocupa uma posição retangular fixa — conte as posições
 - Cor do dígito (verde/vermelho/azul/branco) não afeta o valor

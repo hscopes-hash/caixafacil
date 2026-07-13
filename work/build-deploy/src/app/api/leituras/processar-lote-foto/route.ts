@@ -56,22 +56,36 @@ ${codigosMaquinas.map((c: string) => {
   return `  - Código "${c}": rótulo entrada="${info?.nomeEntrada || 'E'}", rótulo saída="${info?.nomeSaida || 'S'}"`;
 }).join('\n')}
 
-Para cada rótulo encontrado, leia os dígitos numéricos que aparecem ao lado/abaixo dele.
-Retorne APENAS dígitos, sem pontos e sem vírgulas. Se o display mostrar 1.234,56 retorne 123456 (ignore os separadores . e ,). Retorne o valor COMPLETO incluindo todos os dígitos visíveis (mantenha zeros à esquerda). Se ilegível, retorne null.
+PROCEDIMENTO PARA LEITURA (faça em silêncio, não inclua no JSON):
+1. Localize o rótulo de ENTRADA e o valor ao lado
+2. Conte quantos dígitos o valor tem
+3. Para CADA dígito, da esquerda para a direita, identifique:
+   - Tem linha horizontal no MEIO (cintura)? → é 8
+   - É uma elipse/círculo vazia SEM linha no meio? → é 0 (zero)
+   - Tem curva superior fechada? → é 6 (não 5)
+   - Tem topo reto e curva inferior aberta? → é 5 (não 6)
+4. Monte o número completo
+5. Repita para SAÍDA
 
-ATENÇÃO — DÍGITOS FACILMENTE CONFUNDÍVEIS:
-- 0 (zero) vs 8: o zero é uma elipse vazia; o 8 tem duas curvas empilhadas com constrição no meio
+DÍGITOS FACILMENTE CONFUNDÍVEIS:
+- 0 (zero) vs 8: ZERO é elipse VAZIA sem linha no meio; 8 tem DUAS curvas com CINTURA no meio
 - 0 (zero) vs O (letra): ignore letras, apenas dígitos
-- 3 vs 8: o 3 tem duas curvas abertas à esquerda; o 8 é fechado
-- 5 vs 6: o 5 tem topo reto e curva inferior; o 6 tem curva superior fechada
-- 1 vs 7: o 1 é traço vertical; o 7 tem traço horizontal no topo
-- 4 vs 1: o 4 tem dois traços cruzados; o 1 é único vertical
+- 3 vs 8: 3 tem curvas ABERTAS à esquerda; 8 é FECHADO
+- 5 vs 6: 5 tem topo RETO; 6 tem curva SUPERIOR FECHADA
+- 1 vs 7: 1 é traço VERTICAL; 7 tem traço HORIZONTAL no topo
+- 4 vs 1: 4 tem traços CRUZADOS; 1 é ÚNICO vertical
 
 DICAS PARA DISPLAYS LCD/LED:
 - Cada dígito ocupa uma posição retangular fixa — conte as posições
 - Cor do dígito (verde/vermelho/azul/branco) não afeta o valor
 - Se um segmento parece apagado, considere o dígito mais provável pela forma geral
 - Zeros à esquerda SÃO importantes — não os remova
+
+REGRAS DE SAÍDA:
+- Retorne APENAS os dígitos numéricos visíveis, sem pontos e sem vírgulas
+- Se o display mostrar 1.234,56 retorne 123456 (ignore separadores . e ,)
+- Mantenha zeros à esquerda
+- Se ilegível, retorne null
 
 Responda APENAS com JSON:
 {"etiquetaLegivel": true_ou_false, "codigoMaquina": "CODIGO_OU_VAZIO", "codigoLido": "CODIGO_OU_VAZIO", "confianca": 0_A_100, "entrada": "digitos_ou_null", "saida": "digitos_ou_null", "observacoes": "texto"}`;
