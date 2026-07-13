@@ -500,6 +500,44 @@ export async function compressImage(base64DataUrl: string): Promise<string> {
 }
 
 /**
+ * Detecta se a imagem tem fundo escuro (display LCD/LED com fundo preto).
+ * Calcula o brilho médio — se < 128, considera fundo escuro.
+ * 
+ * Displays com fundo preto e letra branca podem confundir o Gemini.
+ * Inverter cores (negativo) transforma em fundo branco com letra preta,
+ * que é o padrão que o Gemini lê melhor (texto em papel).
+ */
+async function temFundoEscuro(buffer: Buffer): Promise<boolean> {
+  try {
+    // Redimensionar para 100px (análise rápida)
+    const meta = await sharp(buffer).metadata();
+    const scale = Math.min(1, 100 / Math.max(meta.width || 100, meta.height || 100));
+    const w = Math.round((meta.width || 100) * scale);
+    const h = Math.round((meta.height || 100) * scale);
+
+    const { data: gray } = await sharp(buffer)
+      .resize(w, h, { fit: 'fill' })
+      .greyscale()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    // Calcular brilho médio
+    let sum = 0;
+    const total = w * h;
+    for (let i = 0; i < total; i++) {
+      sum += gray[i];
+    }
+    const media = sum / total;
+    const escuro = media < 128;
+    console.log(`[FUNDO] Brilho médio: ${media.toFixed(0)} (0=preto, 255=branco) → ${escuro ? 'escuro (inverter)' : 'claro (manter)'}`);
+    return escuro;
+  } catch (err) {
+    console.warn('[FUNDO] Erro ao detectar:', err);
+    return false; // se falhar, não inverte
+  }
+}
+
+/**
  * Comprime imagem para OCR com pipeline AGRESSIVO — para foto individual.
  *
  * Mais lento mas mais preciso — usado quando o usuário processa uma foto
@@ -537,7 +575,21 @@ export async function compressImageAgressiva(base64DataUrl: string): Promise<str
       console.warn('[COMPRESS-AGRESSIVO] Deskew falhou:', err);
     }
 
-    // 2. Pipeline agressivo — máxima qualidade para diferenciar dígitos
+    // 2. Inverter cores se fundo escuro (display LCD/LED preto)
+    // Gemini lê melhor texto preto sobre branco (padrão de papel)
+    try {
+      const escuro = await temFundoEscuro(bufferProcessado);
+      if (escuro) {
+        console.log('[COMPRESS-AGRESSIVO] Invertendo cores (fundo escuro → claro)');
+        bufferProcessado = await sharp(bufferProcessado)
+          .negate()
+          .toBuffer();
+      }
+    } catch (err) {
+      console.warn('[COMPRESS-AGRESSIVO] Inversão de cores falhou:', err);
+    }
+
+    // 3. Pipeline agressivo — máxima qualidade para diferenciar dígitos
     const compressed = await sharp(bufferProcessado)
       .removeAlpha()
       // Upscale 2560px — mais resolução que 2048px
