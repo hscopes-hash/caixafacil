@@ -8,7 +8,7 @@ import { enforcePlan } from '@/lib/plan-enforcement';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { imagem, codigosMaquinas, modelosMap, empresaId } = body;
+    const { imagem, codigosMaquinas, modelosMap, empresaId, agressivo } = body;
 
     if (!imagem) return NextResponse.json({ error: 'Imagem e obrigatoria' }, { status: 400 });
     if (!empresaId) return NextResponse.json({ error: 'empresaId e obrigatorio' }, { status: 400 });
@@ -94,6 +94,7 @@ Responda APENAS com JSON:
       temperature: 0.05,
       maxTokens: 4096,
       jsonMode: true,
+      agressivo: agressivo === true, // pipeline agressivo para foto individual
     });
     const content = result.content;
 

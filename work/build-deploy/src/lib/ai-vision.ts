@@ -499,6 +499,72 @@ export async function compressImage(base64DataUrl: string): Promise<string> {
   }
 }
 
+/**
+ * Comprime imagem para OCR com pipeline AGRESSIVO — para foto individual.
+ *
+ * Mais lento mas mais preciso — usado quando o usuário processa uma foto
+ * de cada vez (não em lote). Resolução maior e sharpen mais forte para
+ * diferenciar dígitos ambíguos (0 vs 8, 3 vs 8, 5 vs 6).
+ *
+ * - Deskew automático (threshold 0.5°)
+ * - Sem crop ROI (usa imagem completa para não perder contexto)
+ * - Upscale 2560px (vs 2048px do rápido)
+ * - Kernel lanczos3
+ * - Normalise + saturação +30%
+ * - Median filter 3x3 (remove ruído)
+ * - Sharpen FORTE (sigma 1.5 vs 1.0)
+ * - JPEG 95 (vs 85)
+ */
+export async function compressImageAgressiva(base64DataUrl: string): Promise<string> {
+  try {
+    const matches = base64DataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
+    if (!matches) return base64DataUrl;
+
+    const buffer = Buffer.from(matches[2], 'base64');
+    const inputSize = buffer.length;
+
+    // 1. Deskew
+    let bufferProcessado = buffer;
+    try {
+      const anguloSkew = await detectarSkew(buffer);
+      if (Math.abs(anguloSkew) >= 0.5) {
+        console.log(`[COMPRESS-AGRESSIVO] Deskew: ${anguloSkew}°`);
+        bufferProcessado = await sharp(buffer)
+          .rotate(anguloSkew, { background: '#ffffff' })
+          .toBuffer();
+      }
+    } catch (err) {
+      console.warn('[COMPRESS-AGRESSIVO] Deskew falhou:', err);
+    }
+
+    // 2. Pipeline agressivo — máxima qualidade para diferenciar dígitos
+    const compressed = await sharp(bufferProcessado)
+      .removeAlpha()
+      // Upscale 2560px — mais resolução que 2048px
+      .resize(2560, 2560, { fit: 'inside', kernel: 'lanczos3' })
+      .normalise()
+      .modulate({ saturation: 1.3 })
+      // Median filter — remove ruído de sensor
+      .median(3)
+      // Sharpen FORTE — realça bordas de dígitos ambíguos
+      .sharpen({ sigma: 1.5, m1: 1.0, m2: 0.8 })
+      // JPEG 95 — mínima compressão
+      .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
+      .toBuffer();
+
+    const outputSize = compressed.length;
+    const reduction = inputSize > 0
+      ? ((1 - outputSize / inputSize) * 100).toFixed(0)
+      : '0';
+    console.log(`[COMPRESS-AGRESSIVO] ${inputSize} -> ${outputSize} bytes (${reduction}% redução, deskew + 2560px + median + sharpen forte + JPEG 95)`);
+
+    return `data:image/jpeg;base64,${compressed.toString('base64')}`;
+  } catch (err) {
+    console.warn('[COMPRESS-AGRESSIVO] Falha, usando original:', err);
+    return base64DataUrl;
+  }
+}
+
 // ============================================
 // VERTEX AI — TOKEN DO METADATA SERVER / SA JSON
 // ============================================
@@ -700,6 +766,7 @@ export interface CallAIOptions {
   maxTokens?: number;
   timeout?: number;
   jsonMode?: boolean;
+  agressivo?: boolean; // true = pipeline agressivo (2560px/JPEG95/sharpen forte)
 }
 
 // ============================================
@@ -717,10 +784,15 @@ export async function callAI(
     maxTokens = 4096,
     timeout = AI_TIMEOUT,
     jsonMode = true,
+    agressivo = false,
   } = options;
 
   const resolvedModel = getVertexModel(model);
-  const compressedImage = await compressImage(imagem);
+  // Pipeline agressivo (2560px/JPEG95/sharpen forte) para foto individual
+  // Pipeline rápido (2048px/JPEG85/sharpen leve) para lote
+  const compressedImage = agressivo
+    ? await compressImageAgressiva(imagem)
+    : await compressImage(imagem);
   const base64Data = compressedImage.split(',')[1];
   const mimeType = compressedImage.split(';')[0].split(':')[1];
 

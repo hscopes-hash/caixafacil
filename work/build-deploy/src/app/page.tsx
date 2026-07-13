@@ -4419,6 +4419,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           codigosMaquinas,
           modelosMap,
           empresaId: empresa?.id,
+          agressivo: true, // pipeline agressivo (2560px/JPEG95/sharpen forte) para foto individual
         }),
       });
 
