@@ -4413,7 +4413,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         };
       });
 
-      setDebugOCR('Enviando foto para IA (GLM-4.6v + agressivo=true)... | Foto original: ' + (fotoCorrigida.length / 1024).toFixed(0) + ' KB');
+      setDebugOCR('Enviando foto para IA (agressivo=true)... | Foto original: ' + (fotoCorrigida.length / 1024).toFixed(0) + ' KB');
 
       const res = await fetch('/api/leituras/processar-lote-foto', {
         method: 'POST',
@@ -4424,13 +4424,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           modelosMap,
           empresaId: empresa?.id,
           agressivo: true, // pipeline agressivo (2560px/JPEG95/sharpen forte) para foto individual
-          usarGLM: true, // TESTE: usar GLM-4.6v em vez de Gemini
         }),
       });
 
       const data = await res.json();
 
-      setDebugOCR(`Status: ${res.status} | Modelo: GLM-4.6v | Agressivo: true | Foto enviada: ${(fotoCorrigida.length / 1024).toFixed(0)} KB | Resposta: ${JSON.stringify(data).substring(0, 400)}`);
+      setDebugOCR(`Status: ${res.status} | Agressivo: true | Foto enviada: ${(fotoCorrigida.length / 1024).toFixed(0)} KB | Resposta: ${JSON.stringify(data).substring(0, 400)}`);
 
 
       if (!res.ok) {
