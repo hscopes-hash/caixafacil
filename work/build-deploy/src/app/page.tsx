@@ -3077,6 +3077,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const fotoComTarjaRef = useRef<string | null>(null);
   // Estado para extração de leitura
   const [extraindoLeitura, setExtraindoLeitura] = useState(false);
+  const [debugOCR, setDebugOCR] = useState<string | null>(null);
   const [leituraExtraida, setLeituraExtraida] = useState<{ entrada: number | null; saida: number | null; confianca?: number } | null>(null);
   // Estado para visualização em tela cheia
   const [fotoTelaCheia, setFotoTelaCheia] = useState(false);
@@ -4395,6 +4396,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     }
 
     setExtraindoLeitura(true);
+    setDebugOCR(null);
     try {
       // ⚠️ Corrigir inclinação da foto antes do OCR (melhora precisão)
       const fotoCorrigida = await corrigirInclinacao(fotoCapturada);
@@ -4411,6 +4413,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         };
       });
 
+      setDebugOCR(`Enviando foto para IA (agressivo=true)... | Foto original: ${(fotoCorrigida.length / 1024).toFixed(0)} KB`);
+
       const res = await fetch('/api/leituras/processar-lote-foto', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -4424,6 +4428,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       });
 
       const data = await res.json();
+
+      setDebugOCR(`Status: ${res.status} | Agressivo: true | Foto enviada: ${(fotoCorrigida.length / 1024).toFixed(0)} KB | Resposta: ${JSON.stringify(data).substring(0, 400)}`);
 
 
       if (!res.ok) {
@@ -9755,6 +9761,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         </>
                       )}
                     </Button>
+
+                    {/* PAINEL DE DEBUG — mostra status do pipeline agressivo e resposta da IA */}
+                    {debugOCR && (
+                      <div className="bg-yellow-100 border-2 border-yellow-600 text-black text-xs p-2 rounded font-mono break-all">
+                        <p className="font-bold">DEBUG OCR:</p>
+                        <p>{debugOCR}</p>
+                      </div>
+                    )}
 
                     {/* Valores Extraídos */}
                     {leituraExtraida && (

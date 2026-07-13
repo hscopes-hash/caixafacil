@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     const { llmModel } = await loadAIConfig();
     const model = llmModel;
-    console.log(`[PROCESSAR-LOTE-FOTO] Modelo: ${model}`);
+    console.log(`[PROCESSAR-LOTE-FOTO] Modelo: ${model} | Agressivo: ${agressivo === true}`);
 
     const mapaModelos = modelosMap || {};
     const listaCodigos = codigosMaquinas.map((c: string) => `"${c}"`).join(', ');
