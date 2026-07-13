@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { callAI, loadAIConfig, extractJSON, avaliarNitidez } from '@/lib/ai-vision';
+import { callAI, callAIGLM, loadAIConfig, extractJSON, avaliarNitidez } from '@/lib/ai-vision';
 import { enforcePlan } from '@/lib/plan-enforcement';
 
 /**
@@ -8,7 +8,7 @@ import { enforcePlan } from '@/lib/plan-enforcement';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { imagem, codigosMaquinas, modelosMap, empresaId, agressivo } = body;
+    const { imagem, codigosMaquinas, modelosMap, empresaId, agressivo, usarGLM } = body;
 
     if (!imagem) return NextResponse.json({ error: 'Imagem e obrigatoria' }, { status: 400 });
     if (!empresaId) return NextResponse.json({ error: 'empresaId e obrigatorio' }, { status: 400 });
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     const { llmModel } = await loadAIConfig();
     const model = llmModel;
-    console.log(`[PROCESSAR-LOTE-FOTO] Modelo: ${model} | Agressivo: ${agressivo === true}`);
+    console.log(`[PROCESSAR-LOTE-FOTO] Modelo: ${model} | Agressivo: ${agressivo === true} | UsarGLM: ${usarGLM === true}`);
 
     const mapaModelos = modelosMap || {};
     const listaCodigos = codigosMaquinas.map((c: string) => `"${c}"`).join(', ');
@@ -103,12 +103,20 @@ REGRAS DE SAÍDA:
 Responda APENAS com JSON:
 {"etiquetaLegivel": true_ou_false, "codigoMaquina": "CODIGO_OU_VAZIO", "codigoLido": "CODIGO_OU_VAZIO", "confianca": 0_A_100, "entrada": "digitos_ou_null", "saida": "digitos_ou_null", "observacoes": "texto"}`;
 
-    const result = await callAI(prompt, imagem, model, {
-      temperature: 0.05,
-      maxTokens: 4096,
-      jsonMode: true,
-      agressivo: agressivo === true, // pipeline agressivo para foto individual
-    });
+    // Chamar IA — GLM-4.6v (alternativa) ou Gemini (padrão)
+    const result = usarGLM === true
+      ? await callAIGLM(prompt, imagem, {
+          temperature: 0.05,
+          maxTokens: 4096,
+          jsonMode: true,
+          agressivo: agressivo === true,
+        })
+      : await callAI(prompt, imagem, model, {
+          temperature: 0.05,
+          maxTokens: 4096,
+          jsonMode: true,
+          agressivo: agressivo === true, // pipeline agressivo para foto individual
+        });
     const content = result.content;
 
     // Parse da resposta

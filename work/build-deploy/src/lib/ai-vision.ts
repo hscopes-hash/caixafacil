@@ -773,6 +773,53 @@ export interface CallAIOptions {
 // CHAMADA ÚNICA À IA (Vertex AI) — VISION/OCR
 // ============================================
 
+/**
+ * Chama GLM-4.6v via z-ai-web-dev-sdk — alternativa ao Gemini.
+ * Usa o mesmo pipeline de compressão (agressivo ou rápido).
+ * 
+ * Retorna { content: string } (mesmo formato do callAI).
+ */
+export async function callAIGLM(
+  prompt: string,
+  imagem: string,
+  options: CallAIOptions = {}
+): Promise<{ content: string }> {
+  const { agressivo = false } = options;
+
+  // Pipeline de compressão (mesmo do callAI)
+  const compressedImage = agressivo
+    ? await compressImageAgressiva(imagem)
+    : await compressImage(imagem);
+
+  console.log(`[GLM-4.6v] Imagem processada (${agressivo ? 'agressivo' : 'rápido'}): ${(compressedImage.length / 1024).toFixed(0)} KB`);
+
+  // Import dinâmico para evitar carregar SDK se não usado
+  const ZAI = (await import('z-ai-web-dev-sdk')).default;
+  const zai = await ZAI.create();
+
+  const response = await zai.chat.completions.createVision({
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: compressedImage } },
+        ],
+      },
+    ],
+    thinking: { type: 'disabled' },
+  });
+
+  const content = response.choices?.[0]?.message?.content || '';
+  console.log(`[GLM-4.6v] Resposta recebida (${content.length} chars)`);
+
+  if (!content) {
+    throw new Error('GLM-4.6v retornou resposta vazia');
+  }
+
+  return { content };
+}
+
 export async function callAI(
   prompt: string,
   imagem: string,
