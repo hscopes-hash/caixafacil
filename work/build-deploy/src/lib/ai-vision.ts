@@ -52,6 +52,108 @@ export function getVertexModel(model?: string | null): string {
 // ============================================
 
 /**
+ * Detecta a região de interesse (ROI) — área do display LCD/LED na foto.
+ * Displays têm alto contraste (dígito aceso vs fundo apagado) e ocupam
+ * uma região retangular grande na foto.
+ *
+ * Algoritmo:
+ * 1. Redimensiona para 200px (análise rápida)
+ * 2. Converte para tons de cinza
+ * 3. Calcula variância por linha (linhas com display têm alta variância)
+ * 4. Encontra faixa vertical com maior variância concentrada
+ * 5. Faz crop vertical (top/bottom) para focar no display
+ *
+ * Retorna { top, height } em proporção (0-1) ou null se não detectar.
+ */
+async function detectarROIDisplay(buffer: Buffer): Promise<{ top: number; height: number } | null> {
+  try {
+    const meta = await sharp(buffer).metadata();
+    const origW = meta.width || 200;
+    const origH = meta.height || 200;
+    const scale = Math.min(1, 200 / Math.max(origW, origH));
+    const w = Math.round(origW * scale);
+    const h = Math.round(origH * scale);
+
+    const { data: gray } = await sharp(buffer)
+      .resize(w, h, { fit: 'fill' })
+      .greyscale()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    // Calcular variância de cada linha horizontal
+    const varianciaLinhas = new Float64Array(h);
+    for (let y = 0; y < h; y++) {
+      let sum = 0;
+      const row = new Float64Array(w);
+      for (let x = 0; x < w; x++) {
+        row[x] = gray[y * w + x];
+        sum += row[x];
+      }
+      const mean = sum / w;
+      let varSum = 0;
+      for (let x = 0; x < w; x++) {
+        varSum += (row[x] - mean) ** 2;
+      }
+      varianciaLinhas[y] = varSum / w;
+    }
+
+    // Encontrar variância média
+    let mediaVar = 0;
+    for (let y = 0; y < h; y++) mediaVar += varianciaLinhas[y];
+    mediaVar /= h;
+
+    // Threshold: linhas com variância > 1.5x média são consideradas "display"
+    const threshold = mediaVar * 1.5;
+
+    // Encontrar maior faixa contínua de linhas "display"
+    let melhorInicio = 0;
+    let melhorTamanho = 0;
+    let inicioAtual = -1;
+    let tamanhoAtual = 0;
+
+    for (let y = 0; y < h; y++) {
+      if (varianciaLinhas[y] > threshold) {
+        if (inicioAtual === -1) inicioAtual = y;
+        tamanhoAtual++;
+      } else {
+        if (tamanhoAtual > melhorTamanho) {
+          melhorTamanho = tamanhoAtual;
+          melhorInicio = inicioAtual;
+        }
+        inicioAtual = -1;
+        tamanhoAtual = 0;
+      }
+    }
+    // Verificar última faixa
+    if (tamanhoAtual > melhorTamanho) {
+      melhorTamanho = tamanhoAtual;
+      melhorInicio = inicioAtual;
+    }
+
+    // Só fazer crop se a faixa for significativa (≥30% da altura)
+    if (melhorTamanho < h * 0.3) {
+      console.log(`[ROI] Faixa de display muito pequena: ${melhorTamanho}/${h} — não farei crop`);
+      return null;
+    }
+
+    // Adicionar margem de 15% em cima e embaixo para não cortar dígitos
+    const margem = Math.round(melhorTamanho * 0.15);
+    let top = Math.max(0, melhorInicio - margem);
+    let bottom = Math.min(h, melhorInicio + melhorTamanho + margem);
+
+    // Converter para proporção (0-1)
+    const topProp = top / h;
+    const heightProp = (bottom - top) / h;
+
+    console.log(`[ROI] Display detectado: top=${(topProp * 100).toFixed(0)}% height=${(heightProp * 100).toFixed(0)}%`);
+    return { top: topProp, height: heightProp };
+  } catch (err) {
+    console.warn('[ROI] Erro ao detectar display:', err);
+    return null;
+  }
+}
+
+/**
  * Avalia a nitidez da imagem usando Variância do Laplaciano.
  * 
  * Método padrão da literatura para detecção de blur/foco:
@@ -347,11 +449,30 @@ export async function compressImage(base64DataUrl: string): Promise<string> {
       console.warn('[COMPRESS] Deskew falhou, usando imagem original:', err);
     }
 
-    // 2. Pipeline enxuto — fotos nítidas não precisam de median/sharpen forte
+    // 2. Detectar ROI (região do display) e fazer crop vertical
+    // Aumenta resolução efetiva dos dígitos — crítico para diferenciar 0 de 8
+    try {
+      const roi = await detectarROIDisplay(bufferProcessado);
+      if (roi) {
+        const meta = await sharp(bufferProcessado).metadata();
+        const cropTop = Math.floor(meta.height * roi.top);
+        const cropHeight = Math.floor(meta.height * roi.height);
+        if (cropHeight > 0 && cropTop >= 0 && cropTop + cropHeight <= meta.height) {
+          console.log(`[COMPRESS] Crop ROI: top=${cropTop} height=${cropHeight} (de ${meta.height})`);
+          bufferProcessado = await sharp(bufferProcessado)
+            .extract({ left: 0, top: cropTop, width: meta.width, height: cropHeight })
+            .toBuffer();
+        }
+      }
+    } catch (err) {
+      console.warn('[COMPRESS] Crop ROI falhou, usando imagem completa:', err);
+    }
+
+    // 3. Pipeline enxuto — fotos nítidas não precisam de median/sharpen forte
     const compressed = await sharp(bufferProcessado)
       // Remove canal alpha (se houver) e converte para RGB consistente
       .removeAlpha()
-      // Upscale para 2048px (suficiente para displays LCD/LED)
+      // Upscale para 2048px (após crop, dígitos ficam com resolução maior)
       // Kernel lanczos3 preserva bordas de texto
       .resize(2048, 2048, { fit: 'inside', kernel: 'lanczos3' })
       // Normaliza contraste (estica histograma) — realça texto LCD/LED
