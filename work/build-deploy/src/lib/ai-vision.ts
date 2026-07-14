@@ -307,13 +307,13 @@ export async function compressImage(base64DataUrl: string): Promise<string> {
     let bufferProcessado = buffer;
     try {
       const anguloSkew = await detectarSkew(buffer);
-      if (Math.abs(anguloSkew) >= 1) {
+      if (Math.abs(anguloSkew) >= 0.5) {
         console.log(`[COMPRESS] Deskew: corrigindo ${anguloSkew}° de inclinação`);
         bufferProcessado = await sharp(buffer)
           .rotate(anguloSkew, { background: '#ffffff' })
           .toBuffer();
       } else {
-        console.log(`[COMPRESS] Deskew: ângulo ${anguloSkew}° — muito pequeno, não precisa corrigir`);
+        console.log(`[COMPRESS] Deskew: ângulo ${anguloSkew}° — muito pequeno (< 0.5°), não precisa corrigir`);
       }
     } catch (err) {
       console.warn('[COMPRESS] Deskew falhou, usando imagem original:', err);
