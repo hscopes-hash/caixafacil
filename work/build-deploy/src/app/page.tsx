@@ -3082,6 +3082,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [fotoTratadaPreview, setFotoTratadaPreview] = useState<string | null>(null);
   const [fotoTratadaDebug, setFotoTratadaDebug] = useState<string | null>(null);
   const [zoomFotoTratada, setZoomFotoTratada] = useState(1);
+  const [panFotoTratada, setPanFotoTratada] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const panStartRef = useRef<{ x: number; y: number } | null>(null);
   const [leituraExtraida, setLeituraExtraida] = useState<{ entrada: number | null; saida: number | null; confianca?: number } | null>(null);
   // Estado para visualização em tela cheia
   const [fotoTelaCheia, setFotoTelaCheia] = useState(false);
@@ -9806,7 +9808,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       )}
                     </Button>
 
-                    {/* Preview da foto tratada com zoom */}
+                    {/* Preview da foto tratada com zoom/pan (pinça e arrastar) */}
                     {fotoTratadaPreview && (
                       <div className="bg-white rounded-lg p-2 border-2 border-blue-500">
                         <div className="flex items-center justify-between mb-1">
@@ -9814,7 +9816,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                           <div className="flex gap-1">
                             <button
                               type="button"
-                              onClick={() => setZoomFotoTratada(z => Math.max(1, z - 0.5))}
+                              onClick={() => {
+                                const z = Math.max(1, zoomFotoTratada - 0.5);
+                                setZoomFotoTratada(z);
+                                if (z === 1) setPanFotoTratada({ x: 0, y: 0 });
+                              }}
                               className="w-7 h-7 rounded bg-gray-200 text-black font-bold flex items-center justify-center text-sm"
                             >
                               −
@@ -9822,29 +9828,66 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                             <span className="text-xs text-black w-12 text-center font-mono">{(zoomFotoTratada * 100).toFixed(0)}%</span>
                             <button
                               type="button"
-                              onClick={() => setZoomFotoTratada(z => Math.min(5, z + 0.5))}
+                              onClick={() => setZoomFotoTratada(Math.min(8, zoomFotoTratada + 0.5))}
                               className="w-7 h-7 rounded bg-gray-200 text-black font-bold flex items-center justify-center text-sm"
                             >
                               +
                             </button>
+                            {zoomFotoTratada > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => { setZoomFotoTratada(1); setPanFotoTratada({ x: 0, y: 0 }); }}
+                                className="h-7 px-2 rounded bg-gray-200 text-black text-xs"
+                              >
+                                Reset
+                              </button>
+                            )}
                           </div>
                         </div>
-                        <div className="overflow-auto rounded bg-gray-900" style={{ maxHeight: '400px' }}>
+                        <div
+                          className="relative overflow-hidden rounded bg-gray-900 touch-none select-none"
+                          style={{ height: '350px' }}
+                          onPointerDown={(e) => {
+                            if (zoomFotoTratada <= 1) return;
+                            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                            panStartRef.current = { x: e.clientX - panFotoTratada.x, y: e.clientY - panFotoTratada.y };
+                          }}
+                          onPointerMove={(e) => {
+                            if (zoomFotoTratada <= 1 || !panStartRef.current) return;
+                            setPanFotoTratada({
+                              x: e.clientX - panStartRef.current.x,
+                              y: e.clientY - panStartRef.current.y,
+                            });
+                          }}
+                          onPointerUp={(e) => {
+                            panStartRef.current = null;
+                          }}
+                          onPointerCancel={() => { panStartRef.current = null; }}
+                        >
                           <img
                             src={fotoTratadaPreview}
                             alt="Foto tratada"
-                            className="w-full"
-                            style={{ transform: `scale(${zoomFotoTratada})`, transformOrigin: 'top left', display: 'block' }}
+                            className="w-full h-full object-contain"
+                            style={{
+                              transform: `scale(${zoomFotoTratada}) translate(${panFotoTratada.x / zoomFotoTratada}px, ${panFotoTratada.y / zoomFotoTratada}px)`,
+                              transformOrigin: 'center',
+                              transition: panStartRef.current ? 'none' : 'transform 0.15s ease-out',
+                              cursor: zoomFotoTratada > 1 ? (panStartRef.current ? 'grabbing' : 'grab') : 'default',
+                            }}
+                            draggable={false}
                           />
                         </div>
                         {fotoTratadaDebug && (
                           <p className="text-xs text-black mt-1 font-mono">{fotoTratadaDebug}</p>
                         )}
+                        <p className="text-xs text-gray-600 mt-1">
+                          {zoomFotoTratada > 1 ? 'Arraste para mover • Pinça ou +/− para zoom' : 'Use + ou pinça para zoom'}
+                        </p>
                         <Button
                           variant="outline"
                           size="sm"
                           className="w-full mt-2"
-                          onClick={() => { setFotoTratadaPreview(null); setFotoTratadaDebug(null); setZoomFotoTratada(1); }}
+                          onClick={() => { setFotoTratadaPreview(null); setFotoTratadaDebug(null); setZoomFotoTratada(1); setPanFotoTratada({ x: 0, y: 0 }); }}
                         >
                           Fechar preview
                         </Button>
