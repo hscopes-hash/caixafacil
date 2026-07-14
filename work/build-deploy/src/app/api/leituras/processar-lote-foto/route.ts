@@ -103,24 +103,138 @@ REGRAS DE SAÍDA:
 Responda APENAS com JSON:
 {"etiquetaLegivel": true_ou_false, "codigoMaquina": "CODIGO_OU_VAZIO", "codigoLido": "CODIGO_OU_VAZIO", "confianca": 0_A_100, "entrada": "digitos_ou_null", "saida": "digitos_ou_null", "observacoes": "texto"}`;
 
-    // Chamar IA — GLM-4.6v (alternativa) ou Gemini (padrão)
-    const result = usarGLM === true
-      ? await callAIGLM(prompt, imagem, {
-          temperature: 0.05,
-          maxTokens: 4096,
-          jsonMode: true,
-          agressivo: agressivo === true,
-        })
-      : await callAI(prompt, imagem, model, {
-          temperature: 0.05,
-          maxTokens: 4096,
-          jsonMode: true,
-          agressivo: agressivo === true, // pipeline agressivo para foto individual
-        });
+    // Chamar IA — dupla chamada para foto individual agressiva (validação cruzada)
+    // Chama 2x: com inversão de cores e sem inversão. Se divergirem, usa maior confiança.
+    let result;
+    let resultadoAlternativo = null;
+
+    if (agressivo === true && usarGLM !== true) {
+      // === DUPLA CHAMADA (apenas foto individual agressiva) ===
+      console.log('[PROCESSAR-LOTE-FOTO] Dupla chamada (validação cruzada)');
+
+      // Chamada 1: com pipeline agressivo (que pode inverter cores)
+      const result1 = await callAI(prompt, imagem, model, {
+        temperature: 0.05,
+        maxTokens: 4096,
+        jsonMode: true,
+        agressivo: true,
+      });
+
+      // Para a chamada 2, precisamos desativar a inversão temporariamente.
+      // Como callAI não permite controlar isso diretamente, usamos callAIGLM
+      // que não inverte, OU fazemos uma segunda chamada com agressivo=false.
+      // Melhor abordagem: segunda chamada com pipeline rápido (sem inversão)
+      const result2 = await callAI(prompt, imagem, model, {
+        temperature: 0.05,
+        maxTokens: 4096,
+        jsonMode: true,
+        agressivo: false, // pipeline rápido = sem inversão de cores
+      });
+
+      // Parse das duas respostas
+      const parsed1 = extractJSON(result1.content).parsed;
+      const parsed2 = extractJSON(result2.content).parsed;
+
+      if (parsed1 && parsed2) {
+        const ent1 = String(parsed1.entrada ?? '');
+        const ent2 = String(parsed2.entrada ?? '');
+        const sai1 = String(parsed1.saida ?? '');
+        const sai2 = String(parsed2.saida ?? '');
+
+        console.log(`[DUPLA] Chamada 1 (agressivo): entrada=${ent1}, saida=${sai1}`);
+        console.log(`[DUPLA] Chamada 2 (rápido): entrada=${ent2}, saida=${sai2}`);
+
+        // Se entradas divergem, usar a de maior confiança
+        if (ent1 !== ent2) {
+          const conf1 = parsed1.confianca || 0;
+          const conf2 = parsed2.confianca || 0;
+          console.log(`[DUPLA] Divergência na entrada! conf1=${conf1}, conf2=${conf2}`);
+
+          // Se confianças próximas (diferença < 10), tentar encontrar dígito ambíguo
+          // e aplicar regra: se um tem 8 e outro tem 0 na mesma posição, preferir 0
+          // (zeros são mais comuns em contadores que 8s)
+          if (Math.abs(conf1 - conf2) < 10 && ent1.length === ent2.length) {
+            let entradaFinal = '';
+            for (let i = 0; i < ent1.length; i++) {
+              if (ent1[i] !== ent2[i]) {
+                // Dígito divergente — se um é 0 e outro é 8, preferir 0
+                if ((ent1[i] === '0' && ent2[i] === '8') || (ent1[i] === '8' && ent2[i] === '0')) {
+                  entradaFinal += '0';
+                  console.log(`[DUPLA] Dígito ${i}: 0 vs 8 → escolhido 0 (zero mais comum)`);
+                } else {
+                  // Outra divergência — usar maior confiança
+                  entradaFinal += conf1 >= conf2 ? ent1[i] : ent2[i];
+                }
+              } else {
+                entradaFinal += ent1[i];
+              }
+            }
+            parsed1.entrada = entradaFinal;
+            console.log(`[DUPLA] Entrada final (reconciliada): ${entradaFinal}`);
+          } else {
+            // Confianças diferentes — usar a maior
+            if (conf2 > conf1) {
+              parsed1.entrada = parsed2.entrada;
+              parsed1.saida = parsed2.saida;
+            }
+            // parsed1 já tem o resultado de maior confiança se conf1 >= conf2
+          }
+        }
+
+        // Mesma lógica para saída
+        if (sai1 !== sai2 && !resultadoAlternativo) {
+          const conf1 = parsed1.confianca || 0;
+          const conf2 = parsed2.confianca || 0;
+          if (Math.abs(conf1 - conf2) < 10 && sai1.length === sai2.length) {
+            let saidaFinal = '';
+            for (let i = 0; i < sai1.length; i++) {
+              if (sai1[i] !== sai2[i]) {
+                if ((sai1[i] === '0' && sai2[i] === '8') || (sai1[i] === '8' && sai2[i] === '0')) {
+                  saidaFinal += '0';
+                } else {
+                  saidaFinal += conf1 >= conf2 ? sai1[i] : sai2[i];
+                }
+              } else {
+                saidaFinal += sai1[i];
+              }
+            }
+            parsed1.saida = saidaFinal;
+          }
+        }
+
+        result = result1;
+      } else {
+        result = result1;
+      }
+    } else if (usarGLM === true) {
+      result = await callAIGLM(prompt, imagem, {
+        temperature: 0.05,
+        maxTokens: 4096,
+        jsonMode: true,
+        agressivo: agressivo === true,
+      });
+    } else {
+      result = await callAI(prompt, imagem, model, {
+        temperature: 0.05,
+        maxTokens: 4096,
+        jsonMode: true,
+        agressivo: agressivo === true,
+      });
+    }
     const content = result.content;
 
-    // Parse da resposta
-    let resultado = extractJSON(content).parsed;
+    // Parse da resposta — usa parsed1 reconciliado se dupla chamada foi feita
+    let resultado;
+    if (agressivo === true && usarGLM !== true) {
+      // Dupla chamada — usar parsed1 reconciliado
+      resultado = extractJSON(result1.content).parsed;
+      // Reaplicar reconciliação se perdeu
+      if (resultado && parsed1) {
+        resultado = parsed1;
+      }
+    } else {
+      resultado = extractJSON(content).parsed;
+    }
 
     if (!resultado) {
       const codigoMatch = content.match(/"codigoMaquina"\s*:\s*"([^"]+)"/i);
@@ -191,6 +305,7 @@ Responda APENAS com JSON:
       model,
       debugInverteuCores: _ultimaCompressaoAgressivaInfo.inverteuCores,
       debugBrilhoMedio: _ultimaCompressaoAgressivaInfo.brilhoMedio,
+      debugDuplaChamada: agressivo === true && usarGLM !== true,
     });
   } catch (error) {
     console.error('[PROCESSAR-LOTE-FOTO] Erro:', error);
