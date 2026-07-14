@@ -5324,15 +5324,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             }
           }
 
-          // Só rotacionar se o ângulo for significativo (> 1 grau)
-          // (antes era 2°, mas fotos levemente inclinadas também precisam correção)
-          if (Math.abs(melhorAngulo) < 0.5) {
-            console.log(`[Deskew] Ângulo ${melhorAngulo}° — muito pequeno, não precisa corrigir`);
+          // Só rotacionar se o ângulo for significativo (> 1.5 grau)
+          // Threshold 1.5° (antes 0.5°) — evita falsos positivos em displays
+          // LCD/LED que têm padrões horizontais/verticais que confundem o algoritmo
+          if (Math.abs(melhorAngulo) < 1.5) {
+            console.log(`[Deskew] Ângulo ${melhorAngulo}° — muito pequeno (< 1.5°), não corrige`);
             resolve(imagemBase64);
             return;
           }
 
-          console.log(`[Deskew] Corrigindo inclinação de ${melhorAngulo}°`);
+          console.log(`[Deskew] Corrigindo inclinação de ${melhorAngulo}° (variância=${melhorVariancia.toFixed(0)})`);
 
           // Rotacionar a imagem original no canvas
           const ow = img.width, oh = img.height;
