@@ -3081,6 +3081,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [tratandoFoto, setTratandoFoto] = useState(false);
   const [fotoTratadaPreview, setFotoTratadaPreview] = useState<string | null>(null);
   const [fotoTratadaDebug, setFotoTratadaDebug] = useState<string | null>(null);
+  const [zoomFotoTratada, setZoomFotoTratada] = useState(1);
   const [leituraExtraida, setLeituraExtraida] = useState<{ entrada: number | null; saida: number | null; confianca?: number } | null>(null);
   // Estado para visualização em tela cheia
   const [fotoTelaCheia, setFotoTelaCheia] = useState(false);
@@ -4401,6 +4402,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setTratandoFoto(true);
     setFotoTratadaPreview(null);
     setFotoTratadaDebug(null);
+    setZoomFotoTratada(1);
 
     try {
       // Corrigir inclinação no frontend primeiro
@@ -9804,11 +9806,37 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       )}
                     </Button>
 
-                    {/* Preview da foto tratada */}
+                    {/* Preview da foto tratada com zoom */}
                     {fotoTratadaPreview && (
                       <div className="bg-white rounded-lg p-2 border-2 border-blue-500">
-                        <p className="text-xs text-black font-bold mb-1">FOTO TRATADA (o que a IA vê):</p>
-                        <img src={fotoTratadaPreview} alt="Foto tratada" className="w-full rounded" />
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-xs text-black font-bold">FOTO TRATADA (o que a IA vê):</p>
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setZoomFotoTratada(z => Math.max(1, z - 0.5))}
+                              className="w-7 h-7 rounded bg-gray-200 text-black font-bold flex items-center justify-center text-sm"
+                            >
+                              −
+                            </button>
+                            <span className="text-xs text-black w-12 text-center font-mono">{(zoomFotoTratada * 100).toFixed(0)}%</span>
+                            <button
+                              type="button"
+                              onClick={() => setZoomFotoTratada(z => Math.min(5, z + 0.5))}
+                              className="w-7 h-7 rounded bg-gray-200 text-black font-bold flex items-center justify-center text-sm"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                        <div className="overflow-auto rounded bg-gray-900" style={{ maxHeight: '400px' }}>
+                          <img
+                            src={fotoTratadaPreview}
+                            alt="Foto tratada"
+                            className="w-full"
+                            style={{ transform: `scale(${zoomFotoTratada})`, transformOrigin: 'top left', display: 'block' }}
+                          />
+                        </div>
                         {fotoTratadaDebug && (
                           <p className="text-xs text-black mt-1 font-mono">{fotoTratadaDebug}</p>
                         )}
@@ -9816,7 +9844,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                           variant="outline"
                           size="sm"
                           className="w-full mt-2"
-                          onClick={() => { setFotoTratadaPreview(null); setFotoTratadaDebug(null); }}
+                          onClick={() => { setFotoTratadaPreview(null); setFotoTratadaDebug(null); setZoomFotoTratada(1); }}
                         >
                           Fechar preview
                         </Button>
