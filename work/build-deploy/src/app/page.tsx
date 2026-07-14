@@ -4599,6 +4599,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     // Re-adquirir Wake Lock para impedir tela de apagar durante o processamento
     try { (window as any).__caixafacil_requestWakeLock?.(); } catch {}
 
+    try {
     // Preparar lista de códigos de máquinas e mapa de nomes E/S
     const codigosMaquinas = maquinas.map(m => m.codigo);
     const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string }> = {};
@@ -4788,6 +4789,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       toast.warning(`${concluidas} processada(s), ${naoEncontradas} nao encontrada(s), ${erros} com erro.`);
     } else if (erros > 0) {
       toast.error(`${erros} foto(s) com erro. Tente novamente.`);
+    }
+    } catch (error) {
+      console.error('[Lote] Erro fatal no processamento:', error);
+      toast.error('Erro no processamento do lote. Tente novamente.');
+      setProcessandoLote(false);
     }
   };
 
@@ -5099,6 +5105,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     // Re-adquirir Wake Lock (mantém tela acesa durante processamento em segundo plano)
     try { (window as any).__caixafacil_requestWakeLock?.(); } catch {}
     console.log(`[Lote] Foto ${fotoId} finalizada`);
+
+    // ⚠️ LIBERAR MEMÓRIA — remover string base64 da foto processada
+    // Após processar, a imagem original não é mais necessária (só o resultado)
+    // Isso evita estouro de memória ao processar 4+ fotos (crash do browser)
+    setFotosLote(prev => prev.map(f =>
+      f.id === fotoId && (f.status === 'concluido' || f.status === 'erro')
+        ? { ...f, imagem: '' } // limpar string base64 grande (~200-500KB cada)
+        : f
+    ));
   };
 
   // Efeito: processar automaticamente fotos pendentes em segundo plano
