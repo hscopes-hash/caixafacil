@@ -4723,11 +4723,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 maquinaAtualizada.fotoProcessada = fotoCorrigida + ''; // fallback: foto alinhada sem tarja
               }
 
-              novasMaquinas[indexMaquina] = maquinaAtualizada;
-              maquinasSnapshot = novasMaquinas;
-
-              // setMaquinas com NOVO array spread — força re-render
-              setMaquinas([...novasMaquinas]);
+              // ⚠️ Usar setMaquinas(prev => ...) para garantir estado mais recente
+              setMaquinas(prev => prev.map(m =>
+                m.id === maquinaAtualizada.id
+                  ? { ...m, ...maquinaAtualizada }
+                  : m
+              ));
 
               // ⚠️ Marcar máquina como processada no Map (useRef + tick) — fallback
               const maquinaIdProcessada = maquinaAtualizada.id;
@@ -5078,9 +5079,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               maquinaAtualizada.fotoProcessada = fotoCorrigidaBg + ''; // fallback: foto alinhada sem tarja
             }
 
-            novasMaquinas[indexMaquina] = maquinaAtualizada;
-            maquinasSnapshot = novasMaquinas;
-            setMaquinas([...novasMaquinas]);
+            // ⚠️ Usar setMaquinas(prev => ...) para garantir estado mais recente
+            // Antes usava maquinasSnapshot que podia estar desatualizado
+            setMaquinas(prev => prev.map(m =>
+              m.id === maquinaAtualizada.id
+                ? { ...m, ...maquinaAtualizada }
+                : m
+            ));
             // ⚠️ Também marcar no Map (useRef + tick) — fallback caso fotoProcessada falhe
             marcarMaquinaProcessada(maquinaAtualizada.id, maquinaAtualizada.codigo);
           }
