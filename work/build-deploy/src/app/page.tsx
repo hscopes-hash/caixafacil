@@ -3084,6 +3084,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [zoomFotoTratada, setZoomFotoTratada] = useState(1);
   const [panFotoTratada, setPanFotoTratada] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const panStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [testandoTratamentos, setTestandoTratamentos] = useState(false);
+  const [versoesTratamento, setVersoesTratamento] = useState<Array<{ id: string; nome: string; imagem: string }>>([]);
+  const [versaoSelecionada, setVersaoSelecionada] = useState(0);
   const [leituraExtraida, setLeituraExtraida] = useState<{ entrada: number | null; saida: number | null; confianca?: number } | null>(null);
   // Estado para visualização em tela cheia
   const [fotoTelaCheia, setFotoTelaCheia] = useState(false);
@@ -4431,6 +4434,42 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       toast.error(error instanceof Error ? error.message : 'Erro ao tratar foto');
     } finally {
       setTratandoFoto(false);
+    }
+  };
+
+  // Testar múltiplas técnicas de tratamento (Acrobat, CLAHE, Threshold)
+  const testarTratamentos = async () => {
+    if (!fotoCapturada) {
+      toast.error('Nenhuma foto para testar');
+      return;
+    }
+
+    setTestandoTratamentos(true);
+    setVersoesTratamento([]);
+    setVersaoSelecionada(0);
+
+    try {
+      const fotoCorrigida = await corrigirInclinacao(fotoCapturada);
+      const token = useAuthStore.getState().token;
+
+      const res = await fetch('/api/leituras/testar-tratamento', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ imagem: fotoCorrigida }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao testar tratamentos');
+
+      setVersoesTratamento(data.versoes);
+      setFotoTratadaPreview(data.versoes[0].imagem);
+      setFotoTratadaDebug(data.versoes[0].nome);
+      toast.success(`${data.versoes.length} versões geradas! Compare abaixo.`);
+    } catch (error) {
+      console.error('Erro ao testar tratamentos:', error);
+      toast.error(error instanceof Error ? error.message : 'Erro ao testar tratamentos');
+    } finally {
+      setTestandoTratamentos(false);
     }
   };
 
@@ -9807,6 +9846,54 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         </>
                       )}
                     </Button>
+
+                    {/* Botão Testar Tratamentos (compara 4 técnicas) */}
+                    <Button
+                      className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700"
+                      onClick={testarTratamentos}
+                      disabled={testandoTratamentos || !fotoCapturada}
+                    >
+                      {testandoTratamentos ? (
+                        <>
+                          <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Gerando 4 versões...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                          </svg>
+                          TESTAR TRATAMENTOS (4 versões)
+                        </>
+                      )}
+                    </Button>
+
+                    {/* Seletor de versões quando testar-tratamento foi usado */}
+                    {versoesTratamento.length > 0 && (
+                      <div className="bg-white rounded-lg p-2 border-2 border-amber-500">
+                        <p className="text-xs text-black font-bold mb-1">SELECIONE A VERSÃO:</p>
+                        <div className="grid grid-cols-2 gap-1">
+                          {versoesTratamento.map((v, i) => (
+                            <button
+                              key={v.id}
+                              type="button"
+                              onClick={() => {
+                                setVersaoSelecionada(i);
+                                setFotoTratadaPreview(v.imagem);
+                                setFotoTratadaDebug(v.nome);
+                                setZoomFotoTratada(1);
+                                setPanFotoTratada({ x: 0, y: 0 });
+                              }}
+                              className={`text-xs p-2 rounded font-mono text-left ${versaoSelecionada === i ? 'bg-amber-500 text-white' : 'bg-gray-200 text-black'}`}
+                            >
+                              <span className="font-bold">{v.id.toUpperCase()}</span>
+                              <br />
+                              <span className="text-[10px]">{v.nome}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Preview da foto tratada com zoom/pan (pinça e arrastar) */}
                     {fotoTratadaPreview && (
