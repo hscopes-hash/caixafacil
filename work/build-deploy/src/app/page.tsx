@@ -3078,6 +3078,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   // Estado para extração de leitura
   const [extraindoLeitura, setExtraindoLeitura] = useState(false);
   const [debugOCR, setDebugOCR] = useState<string | null>(null);
+  const [tratandoFoto, setTratandoFoto] = useState(false);
+  const [fotoTratadaPreview, setFotoTratadaPreview] = useState<string | null>(null);
+  const [fotoTratadaDebug, setFotoTratadaDebug] = useState<string | null>(null);
   const [leituraExtraida, setLeituraExtraida] = useState<{ entrada: number | null; saida: number | null; confianca?: number } | null>(null);
   // Estado para visualização em tela cheia
   const [fotoTelaCheia, setFotoTelaCheia] = useState(false);
@@ -4385,6 +4388,45 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       toast.dismiss();
       console.error('Erro Telegram:', error);
       toast.error('Erro ao enviar. Verifique a conexão.');
+    }
+  };
+
+  // Tratar foto para preview visual (deskew + nitidez + inversão)
+  const tratarFotoPreview = async () => {
+    if (!fotoCapturada) {
+      toast.error('Nenhuma foto para tratar');
+      return;
+    }
+
+    setTratandoFoto(true);
+    setFotoTratadaPreview(null);
+    setFotoTratadaDebug(null);
+
+    try {
+      // Corrigir inclinação no frontend primeiro
+      const fotoCorrigida = await corrigirInclinacao(fotoCapturada);
+
+      const token = useAuthStore.getState().token;
+      const res = await fetch('/api/leituras/tratar-foto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ imagem: fotoCorrigida }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Erro ao tratar foto');
+      }
+
+      setFotoTratadaPreview(data.imagemProcessada);
+      setFotoTratadaDebug(`Inverteu: ${data.debug.inverteuCores ? 'SIM' : 'NÃO'} | Brilho: ${data.debug.brilhoMedio} | Original: ${(data.debug.tamanhoOriginal / 1024).toFixed(0)} KB | Processada: ${(data.debug.tamanhoProcessado / 1024).toFixed(0)} KB`);
+      toast.success('Foto tratada! Veja o resultado abaixo.');
+    } catch (error) {
+      console.error('Erro ao tratar foto:', error);
+      toast.error(error instanceof Error ? error.message : 'Erro ao tratar foto');
+    } finally {
+      setTratandoFoto(false);
     }
   };
 
@@ -9741,6 +9783,46 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   </>
                 ) : (
                   <div className="space-y-3">
+                    {/* Botão Tratar Foto (debug visual) */}
+                    <Button
+                      className="w-full bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700"
+                      onClick={tratarFotoPreview}
+                      disabled={tratandoFoto || !fotoCapturada}
+                    >
+                      {tratandoFoto ? (
+                        <>
+                          <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Tratando...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          TRATAR FOTO (Preview)
+                        </>
+                      )}
+                    </Button>
+
+                    {/* Preview da foto tratada */}
+                    {fotoTratadaPreview && (
+                      <div className="bg-white rounded-lg p-2 border-2 border-blue-500">
+                        <p className="text-xs text-black font-bold mb-1">FOTO TRATADA (o que a IA vê):</p>
+                        <img src={fotoTratadaPreview} alt="Foto tratada" className="w-full rounded" />
+                        {fotoTratadaDebug && (
+                          <p className="text-xs text-black mt-1 font-mono">{fotoTratadaDebug}</p>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full mt-2"
+                          onClick={() => { setFotoTratadaPreview(null); setFotoTratadaDebug(null); }}
+                        >
+                          Fechar preview
+                        </Button>
+                      </div>
+                    )}
+
                     {/* Botão Extraír Leitura */}
                     <Button
                       className="w-full bg-gradient-to-r from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700"
