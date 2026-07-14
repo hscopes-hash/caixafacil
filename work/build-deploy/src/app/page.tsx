@@ -4722,6 +4722,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const tempoInicio = Date.now();
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 90000);
+
+        // ⚠️ corrigirInclinacao pode falhar — capturar erro
+        let fotoCorrigida: string;
+        try {
+          fotoCorrigida = await corrigirInclinacao(foto.imagem);
+        } catch (deskewErr) {
+          console.warn(`[Lote] corrigirInclinacao falhou para foto ${i}, usando original:`, deskewErr);
+          fotoCorrigida = foto.imagem;
+        }
+
         let res: Response;
         try {
           res = await fetch('/api/leituras/processar-lote-foto', {
@@ -4729,7 +4739,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${useAuthStore.getState().token}` },
             signal: controller.signal,
             body: JSON.stringify({
-              imagem: await corrigirInclinacao(foto.imagem),
+              imagem: fotoCorrigida,
               codigosMaquinas,
               modelosMap,
               empresaId: empresa?.id,
@@ -5074,6 +5084,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60000);
       globalController.signal.addEventListener(() => controller.abort(), { once: true });
+
+      // ⚠️ corrigirInclinacao pode falhar em imagens inválidas — capturar erro
+      let fotoCorrigida: string;
+      try {
+        fotoCorrigida = await corrigirInclinacao(imagemBase64);
+      } catch (deskewErr) {
+        console.warn(`[Lote] corrigirInclinacao falhou para ${fotoId}, usando original:`, deskewErr);
+        fotoCorrigida = imagemBase64; // fallback: usar imagem original
+      }
+
       let res: Response;
       try {
         res = await fetch('/api/leituras/processar-lote-foto', {
@@ -5081,7 +5101,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${useAuthStore.getState().token}` },
           signal: controller.signal,
           body: JSON.stringify({
-            imagem: await corrigirInclinacao(imagemBase64),
+            imagem: fotoCorrigida,
             codigosMaquinas,
             modelosMap,
             empresaId: currentEmpresa?.id,
