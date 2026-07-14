@@ -103,108 +103,191 @@ REGRAS DE SAÍDA:
 Responda APENAS com JSON:
 {"etiquetaLegivel": true_ou_false, "codigoMaquina": "CODIGO_OU_VAZIO", "codigoLido": "CODIGO_OU_VAZIO", "confianca": 0_A_100, "entrada": "digitos_ou_null", "saida": "digitos_ou_null", "observacoes": "texto"}`;
 
-    // Chamar IA — dupla chamada para foto individual agressiva (validação cruzada)
-    // Chama 2x: com inversão de cores e sem inversão. Se divergirem, usa maior confiança.
+    // Chamar IA — abordagem em 2 etapas para foto individual agressiva
+    // Etapa 1: IA detecta região (bounding box) dos valores
+    // Etapa 2: Crop + upscale da região → IA extrai dígitos
     let result;
     let resultadoAlternativo = null;
 
     if (agressivo === true && usarGLM !== true) {
-      // === DUPLA CHAMADA (apenas foto individual agressiva) ===
-      console.log('[PROCESSAR-LOTE-FOTO] Dupla chamada (validação cruzada)');
+      // === ABORDAGEM 2 ETAPAS (apenas foto individual agressiva) ===
+      console.log('[PROCESSAR-LOTE-FOTO] Abordagem 2 etapas (detectar região → crop → extrair)');
 
-      // Chamada 1: com pipeline agressivo (que pode inverter cores)
-      const result1 = await callAI(prompt, imagem, model, {
+      // === ETAPA 1: Detectar região dos valores ===
+      const promptRegiao = `Analise esta foto de uma máquina de entretenimento e identifique onde estão os valores numéricos do display.
+
+Procure pelos rótulos de ENTRADA e SAÍDA:
+${codigosMaquinas.map((c: string) => {
+  const info = mapaModelos[c];
+  return `  - Código "${c}": rótulo entrada="${info?.nomeEntrada || 'E'}", rótulo saída="${info?.nomeSaida || 'S'}"`;
+}).join('\n')}
+
+Para cada rótulo encontrado, retorne as COORDENADAS da região retangular onde está o VALOR NUMÉRICO (não o rótulo, mas o número ao lado).
+
+As coordenadas são em porcentagem (0-100) da largura e altura da imagem:
+- x1, y1: canto superior esquerdo do retângulo
+- x2, y2: canto inferior direito do retângulo
+
+Exemplo: se o valor está no canto superior direito, pode ser x1=60, y1=10, x2=95, y2=25
+
+Responda APENAS com JSON:
+{"entradaRegiao": {"x1": 0, "y1": 0, "x2": 100, "y2": 100}, "saidaRegiao": {"x1": 0, "y1": 0, "x2": 100, "y2": 100}}
+
+Se não encontrar um dos rótulos, retorne null para a região correspondente.`;
+
+      const resultRegiao = await callAI(promptRegiao, imagem, model, {
         temperature: 0.05,
-        maxTokens: 4096,
+        maxTokens: 1024,
         jsonMode: true,
-        agressivo: true,
+        agressivo: false, // pipeline rápido para detectar região
       });
 
-      // Para a chamada 2, precisamos desativar a inversão temporariamente.
-      // Como callAI não permite controlar isso diretamente, usamos callAIGLM
-      // que não inverte, OU fazemos uma segunda chamada com agressivo=false.
-      // Melhor abordagem: segunda chamada com pipeline rápido (sem inversão)
-      const result2 = await callAI(prompt, imagem, model, {
-        temperature: 0.05,
-        maxTokens: 4096,
-        jsonMode: true,
-        agressivo: false, // pipeline rápido = sem inversão de cores
-      });
+      const regiaoData = extractJSON(resultRegiao.content).parsed;
+      console.log(`[2-ETAPAS] Região detectada:`, JSON.stringify(regiaoData));
 
-      // Parse das duas respostas
-      const parsed1 = extractJSON(result1.content).parsed;
-      const parsed2 = extractJSON(result2.content).parsed;
+      let resultadoFinal = null;
 
-      if (parsed1 && parsed2) {
-        const ent1 = String(parsed1.entrada ?? '');
-        const ent2 = String(parsed2.entrada ?? '');
-        const sai1 = String(parsed1.saida ?? '');
-        const sai2 = String(parsed2.saida ?? '');
+      if (regiaoData && (regiaoData.entradaRegiao || regiaoData.saidaRegiao)) {
+        // === ETAPA 2: Crop + upscale + extrair dígitos ===
+        const sharp = (await import('sharp')).default;
+        const matches = imagem.match(/^data:(image\/\w+);base64,(.+)$/);
+        if (matches) {
+          const imgBuffer = Buffer.from(matches[2], 'base64');
+          const meta = await sharp(imgBuffer).metadata();
 
-        console.log(`[DUPLA] Chamada 1 (agressivo): entrada=${ent1}, saida=${sai1}`);
-        console.log(`[DUPLA] Chamada 2 (rápido): entrada=${ent2}, saida=${sai2}`);
+          // Função helper: fazer crop + upscale + processar
+          const processarRegiao = async (regiao: any, rotulo: string): Promise<string | null> => {
+            if (!regiao || regiao.x1 === undefined) return null;
+            const left = Math.max(0, Math.floor(meta.width! * regiao.x1 / 100));
+            const top = Math.max(0, Math.floor(meta.height! * regiao.y1 / 100));
+            const width = Math.min(meta.width! - left, Math.floor(meta.width! * (regiao.x2 - regiao.x1) / 100));
+            const height = Math.min(meta.height! - top, Math.floor(meta.height! * (regiao.y2 - regiao.y1) / 100));
 
-        // Se entradas divergem, usar a de maior confiança
-        if (ent1 !== ent2) {
-          const conf1 = parsed1.confianca || 0;
-          const conf2 = parsed2.confianca || 0;
-          console.log(`[DUPLA] Divergência na entrada! conf1=${conf1}, conf2=${conf2}`);
-
-          // Se confianças próximas (diferença < 10), tentar encontrar dígito ambíguo
-          // e aplicar regra: se um tem 8 e outro tem 0 na mesma posição, preferir 0
-          // (zeros são mais comuns em contadores que 8s)
-          if (Math.abs(conf1 - conf2) < 10 && ent1.length === ent2.length) {
-            let entradaFinal = '';
-            for (let i = 0; i < ent1.length; i++) {
-              if (ent1[i] !== ent2[i]) {
-                // Dígito divergente — se um é 0 e outro é 8, preferir 0
-                if ((ent1[i] === '0' && ent2[i] === '8') || (ent1[i] === '8' && ent2[i] === '0')) {
-                  entradaFinal += '0';
-                  console.log(`[DUPLA] Dígito ${i}: 0 vs 8 → escolhido 0 (zero mais comum)`);
-                } else {
-                  // Outra divergência — usar maior confiança
-                  entradaFinal += conf1 >= conf2 ? ent1[i] : ent2[i];
-                }
-              } else {
-                entradaFinal += ent1[i];
-              }
+            if (width < 10 || height < 10) {
+              console.log(`[2-ETAPAS] Região ${rotulo} muito pequena: ${width}x${height}`);
+              return null;
             }
-            parsed1.entrada = entradaFinal;
-            console.log(`[DUPLA] Entrada final (reconciliada): ${entradaFinal}`);
-          } else {
-            // Confianças diferentes — usar a maior
-            if (conf2 > conf1) {
-              parsed1.entrada = parsed2.entrada;
-              parsed1.saida = parsed2.saida;
+
+            console.log(`[2-ETAPAS] Crop ${rotulo}: left=${left} top=${top} ${width}x${height} (de ${meta.width}x${meta.height})`);
+
+            // Crop + upscale 2000px + processamento agressivo
+            const cropBuffer = await sharp(imgBuffer)
+              .extract({ left, top, width, height })
+              .removeAlpha()
+              .resize(2000, 2000, { fit: 'inside', kernel: 'lanczos3' })
+              .normalise()
+              .modulate({ saturation: 1.3 })
+              .sharpen({ sigma: 1.5, m1: 1.0, m2: 0.8 })
+              .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
+              .toBuffer();
+
+            return `data:image/jpeg;base64,${cropBuffer.toString('base64')}`;
+          };
+
+          // Processar região de ENTRADA
+          const entradaCrop = await processarRegiao(regiaoData.entradaRegiao, 'ENTRADA');
+          // Processar região de SAÍDA
+          const saidaCrop = await processarRegiao(regiaoData.saidaRegiao, 'SAÍDA');
+
+          // Extrair dígitos de cada região
+          let entradaValor: string | null = null;
+          let saidaValor: string | null = null;
+          let confiancaEntrada = 0;
+          let confiancaSaida = 0;
+
+          if (entradaCrop) {
+            const promptExtrair = `Leia os dígitos numéricos desta imagem. É um recorte ampliado de um display LCD/LED mostrando o valor do CONTADOR (inteiro, sem pontos ou vírgulas).
+
+ATENÇÃO — DÍGITOS FACILMENTE CONFUNDÍVEIS:
+- 0 (zero) vs 8: ZERO é elipse VAZIA sem linha no meio; 8 tem DUAS curvas com CINTURA no meio
+- 3 vs 8: 3 tem curvas ABERTAS à esquerda; 8 é FECHADO
+- 5 vs 6: 5 tem topo RETO; 6 tem curva SUPERIOR FECHADA
+- 1 vs 7: 1 é traço VERTICAL; 7 tem traço HORIZONTAL no topo
+
+PROCEDIMENTO:
+1. Conte quantos dígitos o valor tem
+2. Para CADA dígito, verifique: tem linha horizontal no MEIO (cintura)?
+   - Se SIM: é 8
+   - Se NÃO e é elipse vazia: é 0 (zero)
+3. Monte o número completo
+
+Retorne APENAS os dígitos (sem . ou ,). Se ilegível, retorne null.
+
+JSON: {"digitos": "string_ou_null", "confianca": 0_a_100}`;
+
+            const resultEntrada = await callAI(promptExtrair, entradaCrop, model, {
+              temperature: 0.05,
+              maxTokens: 512,
+              jsonMode: true,
+              agressivo: false, // já processamos manualmente
+            });
+            const entradaParsed = extractJSON(resultEntrada.content).parsed;
+            if (entradaParsed) {
+              entradaValor = entradaParsed.digitos ? String(entradaParsed.digitos).replace(/\D/g, '') : null;
+              confiancaEntrada = entradaParsed.confianca || 0;
+              console.log(`[2-ETAPAS] ENTRADA extraída: ${entradaValor} (confiança: ${confiancaEntrada})`);
             }
-            // parsed1 já tem o resultado de maior confiança se conf1 >= conf2
           }
-        }
 
-        // Mesma lógica para saída
-        if (sai1 !== sai2 && !resultadoAlternativo) {
-          const conf1 = parsed1.confianca || 0;
-          const conf2 = parsed2.confianca || 0;
-          if (Math.abs(conf1 - conf2) < 10 && sai1.length === sai2.length) {
-            let saidaFinal = '';
-            for (let i = 0; i < sai1.length; i++) {
-              if (sai1[i] !== sai2[i]) {
-                if ((sai1[i] === '0' && sai2[i] === '8') || (sai1[i] === '8' && sai2[i] === '0')) {
-                  saidaFinal += '0';
-                } else {
-                  saidaFinal += conf1 >= conf2 ? sai1[i] : sai2[i];
-                }
-              } else {
-                saidaFinal += sai1[i];
-              }
+          if (saidaCrop) {
+            const promptExtrair = `Leia os dígitos numéricos desta imagem. É um recorte ampliado de um display LCD/LED mostrando o valor do CONTADOR (inteiro, sem pontos ou vírgulas).
+
+ATENÇÃO — DÍGITOS FACILMENTE CONFUNDÍVEIS:
+- 0 (zero) vs 8: ZERO é elipse VAZIA sem linha no meio; 8 tem DUAS curvas com CINTURA no meio
+- 3 vs 8: 3 tem curvas ABERTAS à esquerda; 8 é FECHADO
+- 5 vs 6: 5 tem topo RETO; 6 tem curva SUPERIOR FECHADA
+- 1 vs 7: 1 é traço VERTICAL; 7 tem traço HORIZONTAL no topo
+
+PROCEDIMENTO:
+1. Conte quantos dígitos o valor tem
+2. Para CADA dígito, verifique: tem linha horizontal no MEIO (cintura)?
+   - Se SIM: é 8
+   - Se NÃO e é elipse vazia: é 0 (zero)
+3. Monte o número completo
+
+Retorne APENAS os dígitos (sem . ou ,). Se ilegível, retorne null.
+
+JSON: {"digitos": "string_ou_null", "confianca": 0_a_100}`;
+
+            const resultSaida = await callAI(promptExtrair, saidaCrop, model, {
+              temperature: 0.05,
+              maxTokens: 512,
+              jsonMode: true,
+              agressivo: false,
+            });
+            const saidaParsed = extractJSON(resultSaida.content).parsed;
+            if (saidaParsed) {
+              saidaValor = saidaParsed.digitos ? String(saidaParsed.digitos).replace(/\D/g, '') : null;
+              confiancaSaida = saidaParsed.confianca || 0;
+              console.log(`[2-ETAPAS] SAÍDA extraída: ${saidaValor} (confiança: ${confiancaSaida})`);
             }
-            parsed1.saida = saidaFinal;
           }
-        }
 
-        result = result1;
+          // Montar resultado final
+          resultadoFinal = {
+            etiquetaLegivel: true,
+            codigoMaquina: regiaoData.codigoMaquina || '',
+            codigoLido: regiaoData.codigoMaquina || '',
+            confianca: Math.max(confiancaEntrada, confiancaSaida),
+            entrada: entradaValor,
+            saida: saidaValor,
+            observacoes: `Extraído por abordagem 2 etapas (crop + upscale). Confiança entrada: ${confiancaEntrada}, saída: ${confiancaSaida}`,
+          };
+        }
+      }
+
+      if (resultadoFinal) {
+        // Simular content para o parser abaixo
+        result = { content: JSON.stringify(resultadoFinal) };
       } else {
-        result = result1;
+        // Fallback: se abordagem 2 etapas falhou, usar chamada simples
+        console.log('[2-ETAPAS] Falhou, usando chamada simples');
+        result = await callAI(prompt, imagem, model, {
+          temperature: 0.05,
+          maxTokens: 4096,
+          jsonMode: true,
+          agressivo: true,
+        });
       }
     } else if (usarGLM === true) {
       result = await callAIGLM(prompt, imagem, {
@@ -223,18 +306,8 @@ Responda APENAS com JSON:
     }
     const content = result.content;
 
-    // Parse da resposta — usa parsed1 reconciliado se dupla chamada foi feita
-    let resultado;
-    if (agressivo === true && usarGLM !== true) {
-      // Dupla chamada — usar parsed1 reconciliado
-      resultado = extractJSON(result1.content).parsed;
-      // Reaplicar reconciliação se perdeu
-      if (resultado && parsed1) {
-        resultado = parsed1;
-      }
-    } else {
-      resultado = extractJSON(content).parsed;
-    }
+    // Parse da resposta
+    let resultado = extractJSON(content).parsed;
 
     if (!resultado) {
       const codigoMatch = content.match(/"codigoMaquina"\s*:\s*"([^"]+)"/i);
@@ -306,6 +379,7 @@ Responda APENAS com JSON:
       debugInverteuCores: _ultimaCompressaoAgressivaInfo.inverteuCores,
       debugBrilhoMedio: _ultimaCompressaoAgressivaInfo.brilhoMedio,
       debugDuplaChamada: agressivo === true && usarGLM !== true,
+      debugAbordagem2Etapas: agressivo === true && usarGLM !== true,
     });
   } catch (error) {
     console.error('[PROCESSAR-LOTE-FOTO] Erro:', error);
