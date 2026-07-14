@@ -4630,6 +4630,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const tempoInicio = Date.now();
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 90000);
+
+        // ⚠️ Corrigir inclinação ANTES de enviar — capturar foto alinhada
+        const fotoCorrigida = await corrigirInclinacao(foto.imagem);
+
         let res: Response;
         try {
           res = await fetch('/api/leituras/processar-lote-foto', {
@@ -4637,7 +4641,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${useAuthStore.getState().token}` },
             signal: controller.signal,
             body: JSON.stringify({
-              imagem: await corrigirInclinacao(foto.imagem),
+              imagem: fotoCorrigida,
               codigosMaquinas,
               modelosMap,
               empresaId: empresa?.id,
@@ -4699,13 +4703,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 maquinaAtualizada.diferencaEntrada - maquinaAtualizada.diferencaSaida
               );
 
-              // ⚠️ Gerar foto com tarja e setar fotoProcessada — mostra thumbnail no ícone
-              // Mesmo padrão do fluxo individual (aplicarLeituraExtraida) e do processarFotoEmBackground
+              // ⚠️ Gerar foto com tarja usando a foto ALINHADA (deskewed)
+              // Mostra thumbnail no card da máquina com a foto já corrigida
               try {
                 const nowTs = new Date();
                 const dataStrTarja = `${nowTs.getDate().toString().padStart(2, '0')}/${(nowTs.getMonth() + 1).toString().padStart(2, '0')}/${nowTs.getFullYear().toString().slice(-2)} ${nowTs.getHours().toString().padStart(2, '0')}:${nowTs.getMinutes().toString().padStart(2, '0')}`;
                 const fotoComTarja = await adicionarTarjaNaFoto(
-                  foto.imagem,
+                  fotoCorrigida, // foto alinhada (deskewed) em vez de foto.imagem (original)
                   dataStrTarja,
                   usuarioNome,
                   data.entrada ?? null,
@@ -4716,7 +4720,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 maquinaAtualizada.fotoProcessada = fotoComTarja + '';
               } catch (err) {
                 console.warn(`[Lote] Falha ao aplicar tarja na máquina ${data.codigoMaquina}:`, err);
-                maquinaAtualizada.fotoProcessada = foto.imagem + '';
+                maquinaAtualizada.fotoProcessada = fotoCorrigida + ''; // fallback: foto alinhada sem tarja
               }
 
               novasMaquinas[indexMaquina] = maquinaAtualizada;
@@ -4982,6 +4986,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60000);
       globalController.signal.addEventListener(() => controller.abort(), { once: true });
+
+      // ⚠️ Corrigir inclinação ANTES de enviar — capturar foto alinhada
+      const fotoCorrigidaBg = await corrigirInclinacao(imagemBase64);
+
       let res: Response;
       try {
         res = await fetch('/api/leituras/processar-lote-foto', {
@@ -4989,7 +4997,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${useAuthStore.getState().token}` },
           signal: controller.signal,
           body: JSON.stringify({
-            imagem: await corrigirInclinacao(imagemBase64),
+            imagem: fotoCorrigidaBg,
             codigosMaquinas,
             modelosMap,
             empresaId: currentEmpresa?.id,
@@ -5057,7 +5065,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               const nowTs = new Date();
               const dataStrTarja = `${nowTs.getDate().toString().padStart(2, '0')}/${(nowTs.getMonth() + 1).toString().padStart(2, '0')}/${nowTs.getFullYear().toString().slice(-2)} ${nowTs.getHours().toString().padStart(2, '0')}:${nowTs.getMinutes().toString().padStart(2, '0')}`;
               const fotoComTarja = await adicionarTarjaNaFoto(
-                imagemBase64,
+                fotoCorrigidaBg, // foto alinhada (deskewed) em vez de imagemBase64 (original)
                 dataStrTarja,
                 usuarioNome,
                 data.entrada ?? null,
@@ -5067,7 +5075,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               maquinaAtualizada.fotoProcessada = fotoComTarja + '';
             } catch (err) {
               console.warn(`[Lote BG] Falha ao aplicar tarja na máquina ${data.codigoMaquina}:`, err);
-              maquinaAtualizada.fotoProcessada = imagemBase64 + '';
+              maquinaAtualizada.fotoProcessada = fotoCorrigidaBg + ''; // fallback: foto alinhada sem tarja
             }
 
             novasMaquinas[indexMaquina] = maquinaAtualizada;
