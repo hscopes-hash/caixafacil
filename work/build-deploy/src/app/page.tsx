@@ -5324,11 +5324,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             }
           }
 
-          // Só rotacionar se o ângulo for significativo (> 1.5 grau)
-          // Threshold 1.5° (antes 0.5°) — evita falsos positivos em displays
-          // LCD/LED que têm padrões horizontais/verticais que confundem o algoritmo
-          if (Math.abs(melhorAngulo) < 1.5) {
-            console.log(`[Deskew] Ângulo ${melhorAngulo}° — muito pequeno (< 1.5°), não corrige`);
+          // Só rotacionar se o ângulo for significativo (> 0.5 grau)
+          if (Math.abs(melhorAngulo) < 0.5) {
+            console.log(`[Deskew] Ângulo ${melhorAngulo}° — muito pequeno (< 0.5°), não corrige`);
             resolve(imagemBase64);
             return;
           }
