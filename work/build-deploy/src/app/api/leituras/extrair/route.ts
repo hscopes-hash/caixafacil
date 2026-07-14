@@ -58,31 +58,6 @@ INSTRUÇÕES DETALHADAS:
 5. Se a foto estiver escura, tente identificar os dígitos mesmo assim (telas LCD/LED costumam ser visíveis no escuro).
 6. Dígitos podem ser pequenos — leia cada caractere cuidadosamente, prestando atenção a zeros à esquerda.
 
-ATENÇÃO — DÍGITOS FACILMENTE CONFUNDÍVEIS:
-- 0 (zero) vs 8: o zero é uma elipse vazia; o 8 tem duas curvas empilhadas com constrição no meio
-- 0 (zero) vs O (letra): ignore letras, apenas dígitos
-- 3 vs 8: o 3 tem duas curvas abertas à esquerda; o 8 é fechado
-- 5 vs 6: o 5 tem topo reto e curva inferior; o 6 tem curva superior fechada
-- 1 vs 7: o 1 é traço vertical; o 7 tem traço horizontal no topo
-- 4 vs 1: o 4 tem dois traços cruzados; o 1 é único vertical
-
-PROCEDIMENTO PARA LEITURA (faça em silêncio):
-1. Localize o rótulo "${nomeE}" e o valor ao lado
-2. Conte quantos dígitos o valor tem
-3. Para CADA dígito, da esquerda para a direita, identifique:
-   - Tem linha horizontal no MEIO (cintura)? → é 8
-   - É uma elipse/círculo vazia SEM linha no meio? → é 0 (zero)
-   - Tem curva superior fechada? → é 6 (não 5)
-   - Tem topo reto e curva inferior aberta? → é 5 (não 6)
-4. Monte o número completo
-5. Repita para "${nomeS}"
-
-DICAS PARA DISPLAYS LCD/LED:
-- Cada dígito ocupa uma posição retangular fixa — conte as posições
-- Cor do dígito (verde/vermelho/azul/branco) não afeta o valor
-- Se um segmento parece apagado, considere o dígito mais provável pela forma geral
-- Zeros à esquerda SÃO importantes — não os remova
-
 REGRAS DE SAÍDA:
 - Retorne APENAS os dígitos numéricos visíveis, sem pontos e sem vírgulas.
 - Retorne o valor COMPLETO: se o display mostrar 1.234,56 retorne 123456 (ignore separadores).

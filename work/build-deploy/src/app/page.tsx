@@ -3077,16 +3077,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const fotoComTarjaRef = useRef<string | null>(null);
   // Estado para extração de leitura
   const [extraindoLeitura, setExtraindoLeitura] = useState(false);
-  const [debugOCR, setDebugOCR] = useState<string | null>(null);
-  const [tratandoFoto, setTratandoFoto] = useState(false);
-  const [fotoTratadaPreview, setFotoTratadaPreview] = useState<string | null>(null);
-  const [fotoTratadaDebug, setFotoTratadaDebug] = useState<string | null>(null);
-  const [zoomFotoTratada, setZoomFotoTratada] = useState(1);
-  const [panFotoTratada, setPanFotoTratada] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const panStartRef = useRef<{ x: number; y: number } | null>(null);
-  const [testandoTratamentos, setTestandoTratamentos] = useState(false);
-  const [versoesTratamento, setVersoesTratamento] = useState<Array<{ id: string; nome: string; imagem: string }>>([]);
-  const [versaoSelecionada, setVersaoSelecionada] = useState(0);
   const [leituraExtraida, setLeituraExtraida] = useState<{ entrada: number | null; saida: number | null; confianca?: number } | null>(null);
   // Estado para visualização em tela cheia
   const [fotoTelaCheia, setFotoTelaCheia] = useState(false);
@@ -4397,82 +4387,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     }
   };
 
-  // Tratar foto para preview visual (deskew + nitidez + inversão)
-  const tratarFotoPreview = async () => {
-    if (!fotoCapturada) {
-      toast.error('Nenhuma foto para tratar');
-      return;
-    }
-
-    setTratandoFoto(true);
-    setFotoTratadaPreview(null);
-    setFotoTratadaDebug(null);
-    setZoomFotoTratada(1);
-
-    try {
-      // Corrigir inclinação no frontend primeiro
-      const fotoCorrigida = await corrigirInclinacao(fotoCapturada);
-
-      const token = useAuthStore.getState().token;
-      const res = await fetch('/api/leituras/tratar-foto', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ imagem: fotoCorrigida }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Erro ao tratar foto');
-      }
-
-      setFotoTratadaPreview(data.imagemProcessada);
-      setFotoTratadaDebug(`Inverteu: ${data.debug.inverteuCores ? 'SIM' : 'NÃO'} | Brilho: ${data.debug.brilhoMedio} | Original: ${(data.debug.tamanhoOriginal / 1024).toFixed(0)} KB | Processada: ${(data.debug.tamanhoProcessado / 1024).toFixed(0)} KB`);
-      toast.success('Foto tratada! Veja o resultado abaixo.');
-    } catch (error) {
-      console.error('Erro ao tratar foto:', error);
-      toast.error(error instanceof Error ? error.message : 'Erro ao tratar foto');
-    } finally {
-      setTratandoFoto(false);
-    }
-  };
-
-  // Testar múltiplas técnicas de tratamento (Acrobat, CLAHE, Threshold)
-  const testarTratamentos = async () => {
-    if (!fotoCapturada) {
-      toast.error('Nenhuma foto para testar');
-      return;
-    }
-
-    setTestandoTratamentos(true);
-    setVersoesTratamento([]);
-    setVersaoSelecionada(0);
-
-    try {
-      const fotoCorrigida = await corrigirInclinacao(fotoCapturada);
-      const token = useAuthStore.getState().token;
-
-      const res = await fetch('/api/leituras/testar-tratamento', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ imagem: fotoCorrigida }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao testar tratamentos');
-
-      setVersoesTratamento(data.versoes);
-      setFotoTratadaPreview(data.versoes[0].imagem);
-      setFotoTratadaDebug(data.versoes[0].nome);
-      toast.success(`${data.versoes.length} versões geradas! Compare abaixo.`);
-    } catch (error) {
-      console.error('Erro ao testar tratamentos:', error);
-      toast.error(error instanceof Error ? error.message : 'Erro ao testar tratamentos');
-    } finally {
-      setTestandoTratamentos(false);
-    }
-  };
-
   // Extrair leitura da foto usando IA
   const extrairLeitura = async () => {
     if (!fotoCapturada || !maquinaFoto) {
@@ -4481,7 +4395,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     }
 
     setExtraindoLeitura(true);
-    setDebugOCR(null);
     try {
       // ⚠️ Corrigir inclinação da foto antes do OCR (melhora precisão)
       const fotoCorrigida = await corrigirInclinacao(fotoCapturada);
@@ -4498,8 +4411,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         };
       });
 
-      setDebugOCR('Enviando foto para IA (agressivo=true)... | Foto original: ' + (fotoCorrigida.length / 1024).toFixed(0) + ' KB');
-
       const res = await fetch('/api/leituras/processar-lote-foto', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -4508,13 +4419,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           codigosMaquinas,
           modelosMap,
           empresaId: empresa?.id,
-          agressivo: true, // pipeline agressivo (2560px/JPEG95/sharpen forte) para foto individual
         }),
       });
 
       const data = await res.json();
-
-      setDebugOCR(`Status: ${res.status} | Dupla chamada: ${data.debugDuplaChamada ? 'SIM' : 'NÃO'} | Inverteu: ${data.debugInverteuCores ? 'SIM' : 'NÃO'} (brilho ${data.debugBrilhoMedio}) | Resposta: ${JSON.stringify(data).substring(0, 250)}`);
 
 
       if (!res.ok) {
@@ -4691,13 +4599,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     // Re-adquirir Wake Lock para impedir tela de apagar durante o processamento
     try { (window as any).__caixafacil_requestWakeLock?.(); } catch {}
 
-    try {
-      // Preparar lista de códigos de máquinas e mapa de nomes E/S
-      const codigosMaquinas = maquinas.map(m => m.codigo);
-      const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string }> = {};
-      maquinas.forEach(m => {
-        modelosMap[m.codigo] = {
-          nomeEntrada: m.tipo?.nomeEntrada || 'E',
+    // Preparar lista de códigos de máquinas e mapa de nomes E/S
+    const codigosMaquinas = maquinas.map(m => m.codigo);
+    const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string }> = {};
+    maquinas.forEach(m => {
+      modelosMap[m.codigo] = {
+        nomeEntrada: m.tipo?.nomeEntrada || 'E',
         nomeSaida: m.tipo?.nomeSaida || 'S',
       };
     });
@@ -4722,16 +4629,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const tempoInicio = Date.now();
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 90000);
-
-        // ⚠️ corrigirInclinacao pode falhar — capturar erro
-        let fotoCorrigida: string;
-        try {
-          fotoCorrigida = await corrigirInclinacao(foto.imagem);
-        } catch (deskewErr) {
-          console.warn(`[Lote] corrigirInclinacao falhou para foto ${i}, usando original:`, deskewErr);
-          fotoCorrigida = foto.imagem;
-        }
-
         let res: Response;
         try {
           res = await fetch('/api/leituras/processar-lote-foto', {
@@ -4739,7 +4636,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${useAuthStore.getState().token}` },
             signal: controller.signal,
             body: JSON.stringify({
-              imagem: fotoCorrigida,
+              imagem: await corrigirInclinacao(foto.imagem),
               codigosMaquinas,
               modelosMap,
               empresaId: empresa?.id,
@@ -4891,11 +4788,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       toast.warning(`${concluidas} processada(s), ${naoEncontradas} nao encontrada(s), ${erros} com erro.`);
     } else if (erros > 0) {
       toast.error(`${erros} foto(s) com erro. Tente novamente.`);
-    }
-    } catch (error) {
-      console.error('[Lote] Erro fatal no processamento:', error);
-      toast.error('Erro no processamento do lote. Tente novamente.');
-      setProcessandoLote(false);
     }
   };
 
@@ -5084,16 +4976,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60000);
       globalController.signal.addEventListener(() => controller.abort(), { once: true });
-
-      // ⚠️ corrigirInclinacao pode falhar em imagens inválidas — capturar erro
-      let fotoCorrigida: string;
-      try {
-        fotoCorrigida = await corrigirInclinacao(imagemBase64);
-      } catch (deskewErr) {
-        console.warn(`[Lote] corrigirInclinacao falhou para ${fotoId}, usando original:`, deskewErr);
-        fotoCorrigida = imagemBase64; // fallback: usar imagem original
-      }
-
       let res: Response;
       try {
         res = await fetch('/api/leituras/processar-lote-foto', {
@@ -5101,7 +4983,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${useAuthStore.getState().token}` },
           signal: controller.signal,
           body: JSON.stringify({
-            imagem: fotoCorrigida,
+            imagem: await corrigirInclinacao(imagemBase64),
             codigosMaquinas,
             modelosMap,
             empresaId: currentEmpresa?.id,
@@ -5217,15 +5099,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     // Re-adquirir Wake Lock (mantém tela acesa durante processamento em segundo plano)
     try { (window as any).__caixafacil_requestWakeLock?.(); } catch {}
     console.log(`[Lote] Foto ${fotoId} finalizada`);
-
-    // ⚠️ LIBERAR MEMÓRIA — remover string base64 da foto processada
-    // Após processar, a imagem original não é mais necessária (só o resultado)
-    // Isso evita estouro de memória ao processar many fotos (5+)
-    setFotosLote(prev => prev.map(f =>
-      f.id === fotoId && (f.status === 'concluido' || f.status === 'erro')
-        ? { ...f, imagem: '' } // limpar string base64 grande
-        : f
-    ));
   };
 
   // Efeito: processar automaticamente fotos pendentes em segundo plano
@@ -5423,9 +5296,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             }
           }
 
-          // Só rotacionar se o ângulo for significativo (> 0.5 grau)
-          // (threshold baixado de 1° para 0.5° — corrige inclinações leves)
-          if (Math.abs(melhorAngulo) < 0.5) {
+          // Só rotacionar se o ângulo for significativo (> 1 grau)
+          // (antes era 2°, mas fotos levemente inclinadas também precisam correção)
+          if (Math.abs(melhorAngulo) < 1) {
             console.log(`[Deskew] Ângulo ${melhorAngulo}° — muito pequeno, não precisa corrigir`);
             resolve(imagemBase64);
             return;
@@ -9861,161 +9734,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   </>
                 ) : (
                   <div className="space-y-3">
-                    {/* Botão Tratar Foto (debug visual) */}
-                    <Button
-                      className="w-full bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700"
-                      onClick={tratarFotoPreview}
-                      disabled={tratandoFoto || !fotoCapturada}
-                    >
-                      {tratandoFoto ? (
-                        <>
-                          <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          Tratando...
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                          TRATAR FOTO (Preview)
-                        </>
-                      )}
-                    </Button>
-
-                    {/* Botão Testar Tratamentos (compara 4 técnicas) */}
-                    <Button
-                      className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700"
-                      onClick={testarTratamentos}
-                      disabled={testandoTratamentos || !fotoCapturada}
-                    >
-                      {testandoTratamentos ? (
-                        <>
-                          <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          Gerando 4 versões...
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                          </svg>
-                          TESTAR TRATAMENTOS (4 versões)
-                        </>
-                      )}
-                    </Button>
-
-                    {/* Seletor de versões quando testar-tratamento foi usado */}
-                    {versoesTratamento.length > 0 && (
-                      <div className="bg-white rounded-lg p-2 border-2 border-amber-500">
-                        <p className="text-xs text-black font-bold mb-1">SELECIONE A VERSÃO:</p>
-                        <div className="grid grid-cols-2 gap-1">
-                          {versoesTratamento.map((v, i) => (
-                            <button
-                              key={v.id}
-                              type="button"
-                              onClick={() => {
-                                setVersaoSelecionada(i);
-                                setFotoTratadaPreview(v.imagem);
-                                setFotoTratadaDebug(v.nome);
-                                setZoomFotoTratada(1);
-                                setPanFotoTratada({ x: 0, y: 0 });
-                              }}
-                              className={`text-xs p-2 rounded font-mono text-left ${versaoSelecionada === i ? 'bg-amber-500 text-white' : 'bg-gray-200 text-black'}`}
-                            >
-                              <span className="font-bold">{v.id.toUpperCase()}</span>
-                              <br />
-                              <span className="text-[10px]">{v.nome}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Preview da foto tratada com zoom/pan (pinça e arrastar) */}
-                    {fotoTratadaPreview && (
-                      <div className="bg-white rounded-lg p-2 border-2 border-blue-500">
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="text-xs text-black font-bold">FOTO TRATADA (o que a IA vê):</p>
-                          <div className="flex gap-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const z = Math.max(1, zoomFotoTratada - 0.5);
-                                setZoomFotoTratada(z);
-                                if (z === 1) setPanFotoTratada({ x: 0, y: 0 });
-                              }}
-                              className="w-7 h-7 rounded bg-gray-200 text-black font-bold flex items-center justify-center text-sm"
-                            >
-                              −
-                            </button>
-                            <span className="text-xs text-black w-12 text-center font-mono">{(zoomFotoTratada * 100).toFixed(0)}%</span>
-                            <button
-                              type="button"
-                              onClick={() => setZoomFotoTratada(Math.min(8, zoomFotoTratada + 0.5))}
-                              className="w-7 h-7 rounded bg-gray-200 text-black font-bold flex items-center justify-center text-sm"
-                            >
-                              +
-                            </button>
-                            {zoomFotoTratada > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => { setZoomFotoTratada(1); setPanFotoTratada({ x: 0, y: 0 }); }}
-                                className="h-7 px-2 rounded bg-gray-200 text-black text-xs"
-                              >
-                                Reset
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        <div
-                          className="relative overflow-hidden rounded bg-gray-900 touch-none select-none"
-                          style={{ height: '350px' }}
-                          onPointerDown={(e) => {
-                            if (zoomFotoTratada <= 1) return;
-                            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                            panStartRef.current = { x: e.clientX - panFotoTratada.x, y: e.clientY - panFotoTratada.y };
-                          }}
-                          onPointerMove={(e) => {
-                            if (zoomFotoTratada <= 1 || !panStartRef.current) return;
-                            setPanFotoTratada({
-                              x: e.clientX - panStartRef.current.x,
-                              y: e.clientY - panStartRef.current.y,
-                            });
-                          }}
-                          onPointerUp={(e) => {
-                            panStartRef.current = null;
-                          }}
-                          onPointerCancel={() => { panStartRef.current = null; }}
-                        >
-                          <img
-                            src={fotoTratadaPreview}
-                            alt="Foto tratada"
-                            className="w-full h-full object-contain"
-                            style={{
-                              transform: `scale(${zoomFotoTratada}) translate(${panFotoTratada.x / zoomFotoTratada}px, ${panFotoTratada.y / zoomFotoTratada}px)`,
-                              transformOrigin: 'center',
-                              transition: panStartRef.current ? 'none' : 'transform 0.15s ease-out',
-                              cursor: zoomFotoTratada > 1 ? (panStartRef.current ? 'grabbing' : 'grab') : 'default',
-                            }}
-                            draggable={false}
-                          />
-                        </div>
-                        {fotoTratadaDebug && (
-                          <p className="text-xs text-black mt-1 font-mono">{fotoTratadaDebug}</p>
-                        )}
-                        <p className="text-xs text-gray-600 mt-1">
-                          {zoomFotoTratada > 1 ? 'Arraste para mover • Pinça ou +/− para zoom' : 'Use + ou pinça para zoom'}
-                        </p>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full mt-2"
-                          onClick={() => { setFotoTratadaPreview(null); setFotoTratadaDebug(null); setZoomFotoTratada(1); setPanFotoTratada({ x: 0, y: 0 }); }}
-                        >
-                          Fechar preview
-                        </Button>
-                      </div>
-                    )}
-
                     {/* Botão Extraír Leitura */}
                     <Button
                       className="w-full bg-gradient-to-r from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700"
@@ -10036,14 +9754,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         </>
                       )}
                     </Button>
-
-                    {/* PAINEL DE DEBUG — mostra status do pipeline agressivo e resposta da IA */}
-                    {debugOCR && (
-                      <div className="bg-yellow-100 border-2 border-yellow-600 text-black text-xs p-2 rounded font-mono break-all">
-                        <p className="font-bold">DEBUG OCR:</p>
-                        <p>{debugOCR}</p>
-                      </div>
-                    )}
 
                     {/* Valores Extraídos */}
                     {leituraExtraida && (

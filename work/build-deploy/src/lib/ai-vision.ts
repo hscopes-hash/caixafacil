@@ -52,108 +52,6 @@ export function getVertexModel(model?: string | null): string {
 // ============================================
 
 /**
- * Detecta a região de interesse (ROI) — área do display LCD/LED na foto.
- * Displays têm alto contraste (dígito aceso vs fundo apagado) e ocupam
- * uma região retangular grande na foto.
- *
- * Algoritmo:
- * 1. Redimensiona para 200px (análise rápida)
- * 2. Converte para tons de cinza
- * 3. Calcula variância por linha (linhas com display têm alta variância)
- * 4. Encontra faixa vertical com maior variância concentrada
- * 5. Faz crop vertical (top/bottom) para focar no display
- *
- * Retorna { top, height } em proporção (0-1) ou null se não detectar.
- */
-async function detectarROIDisplay(buffer: Buffer): Promise<{ top: number; height: number } | null> {
-  try {
-    const meta = await sharp(buffer).metadata();
-    const origW = meta.width || 200;
-    const origH = meta.height || 200;
-    const scale = Math.min(1, 200 / Math.max(origW, origH));
-    const w = Math.round(origW * scale);
-    const h = Math.round(origH * scale);
-
-    const { data: gray } = await sharp(buffer)
-      .resize(w, h, { fit: 'fill' })
-      .greyscale()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-
-    // Calcular variância de cada linha horizontal
-    const varianciaLinhas = new Float64Array(h);
-    for (let y = 0; y < h; y++) {
-      let sum = 0;
-      const row = new Float64Array(w);
-      for (let x = 0; x < w; x++) {
-        row[x] = gray[y * w + x];
-        sum += row[x];
-      }
-      const mean = sum / w;
-      let varSum = 0;
-      for (let x = 0; x < w; x++) {
-        varSum += (row[x] - mean) ** 2;
-      }
-      varianciaLinhas[y] = varSum / w;
-    }
-
-    // Encontrar variância média
-    let mediaVar = 0;
-    for (let y = 0; y < h; y++) mediaVar += varianciaLinhas[y];
-    mediaVar /= h;
-
-    // Threshold: linhas com variância > 1.5x média são consideradas "display"
-    const threshold = mediaVar * 1.5;
-
-    // Encontrar maior faixa contínua de linhas "display"
-    let melhorInicio = 0;
-    let melhorTamanho = 0;
-    let inicioAtual = -1;
-    let tamanhoAtual = 0;
-
-    for (let y = 0; y < h; y++) {
-      if (varianciaLinhas[y] > threshold) {
-        if (inicioAtual === -1) inicioAtual = y;
-        tamanhoAtual++;
-      } else {
-        if (tamanhoAtual > melhorTamanho) {
-          melhorTamanho = tamanhoAtual;
-          melhorInicio = inicioAtual;
-        }
-        inicioAtual = -1;
-        tamanhoAtual = 0;
-      }
-    }
-    // Verificar última faixa
-    if (tamanhoAtual > melhorTamanho) {
-      melhorTamanho = tamanhoAtual;
-      melhorInicio = inicioAtual;
-    }
-
-    // Só fazer crop se a faixa for significativa (≥30% da altura)
-    if (melhorTamanho < h * 0.3) {
-      console.log(`[ROI] Faixa de display muito pequena: ${melhorTamanho}/${h} — não farei crop`);
-      return null;
-    }
-
-    // Adicionar margem de 15% em cima e embaixo para não cortar dígitos
-    const margem = Math.round(melhorTamanho * 0.15);
-    let top = Math.max(0, melhorInicio - margem);
-    let bottom = Math.min(h, melhorInicio + melhorTamanho + margem);
-
-    // Converter para proporção (0-1)
-    const topProp = top / h;
-    const heightProp = (bottom - top) / h;
-
-    console.log(`[ROI] Display detectado: top=${(topProp * 100).toFixed(0)}% height=${(heightProp * 100).toFixed(0)}%`);
-    return { top: topProp, height: heightProp };
-  } catch (err) {
-    console.warn('[ROI] Erro ao detectar display:', err);
-    return null;
-  }
-}
-
-/**
  * Avalia a nitidez da imagem usando Variância do Laplaciano.
  * 
  * Método padrão da literatura para detecção de blur/foco:
@@ -282,129 +180,105 @@ export async function avaliarNitidez(buffer: Buffer): Promise<{
 }
 
 /**
- * Detecta o ângulo de inclinação (skew) da imagem usando projection profile
- * com gradiente horizontal (Sobel).
- *
- * Melhorias vs versão anterior:
- * - Usa gradiente horizontal (Sobel) em vez de pixels brutos — mais robusto
- *   para detectar bordas de texto/dígitos (display LCD/LED)
- * - Resolução maior (600px em vez de 400px) — mais precisão
- * - Refinamento em 3 níveis: 1° → 0.5° → 0.25° (era só 2 níveis)
- * - Threshold de 1° para 0.5° (corrige inclinações leves)
- * - Usa coeficiente de variação (CV = std/mean) em vez de variância absoluta
- *   — mais robusto a diferenças de brilho (backlight desigual)
+ * Detecta o ângulo de inclinação (skew) da imagem usando projection profile.
+ * Converte para tons de cinza, testa ângulos de -10 a +10 graus, e encontra
+ * o ângulo com maior variância nas projeções horizontais (texto alinhado
+ * produz maior variância).
  *
  * Retorna o ângulo em graus (0 se não detectar).
  */
 async function detectarSkew(buffer: Buffer): Promise<number> {
   try {
-    // Redimensionar para análise (max 600px — mais resolução = mais precisão)
+    // Redimensionar para análise rápida (max 400px)
     const meta = await sharp(buffer).metadata();
-    const origW = meta.width || 600;
-    const origH = meta.height || 600;
-    const scale = Math.min(1, 600 / Math.max(origW, origH));
+    const origW = meta.width || 400;
+    const origH = meta.height || 400;
+    const scale = Math.min(1, 400 / Math.max(origW, origH));
     const w = Math.round(origW * scale);
     const h = Math.round(origH * scale);
 
     // Obter pixels em tons de cinza (1 byte por pixel)
-    const { data: gray } = await sharp(buffer)
+    const { data: rawPixels } = await sharp(buffer)
       .resize(w, h, { fit: 'fill' })
       .greyscale()
       .raw()
       .toBuffer({ resolveWithObject: true });
 
-    // === Pré-computar gradiente horizontal (Sobel X) ===
-    // Bordas verticais (gradiente X forte) são ideais para projection profile
-    // — linhas de texto têm muitas bordas verticais que ficam alinhadas quando
-    // a imagem está reta. Se inclinada, as bordas ficam espalhadas entre linhas.
-    const gradX = new Float64Array(w * h);
-    for (let y = 1; y < h - 1; y++) {
-      for (let x = 1; x < w - 1; x++) {
-        const idx = y * w + x;
-        // Sobel X: [-1 0 1; -2 0 2; -1 0 1]
-        const val = -gray[idx - w - 1] - 2 * gray[idx - 1] - gray[idx + w - 1]
-                  + gray[idx - w + 1] + 2 * gray[idx + 1] + gray[idx + w + 1];
-        gradX[idx] = Math.abs(val);
-      }
-    }
+    // Detectar ângulo testando rotações de -10 a +10 graus (passo 1°)
+    let melhorAngulo = 0;
+    let melhorVariancia = 0;
 
-    // Função helper: medir qualidade do alinhamento em um ângulo
-    // Usa coeficiente de variação (CV = std/mean) — robusto a brilho desigual
-    const medirAlinhamento = (angulo: number): number => {
+    for (let angulo = -10; angulo <= 10; angulo++) {
       const rad = angulo * Math.PI / 180;
       const cos = Math.cos(rad);
       const sin = Math.sin(rad);
-      const cx = w / 2;
-      const cy = h / 2;
 
-      // Para cada linha y, somar os gradientes dos pixels dessa linha
+      // Para cada linha y, somar os pixels e calcular variância entre linhas
       const somaLinhas = new Float64Array(h);
       for (let y = 0; y < h; y++) {
         let soma = 0;
         for (let x = 0; x < w; x++) {
           // Rotacionar ponto de volta para a imagem original
-          const rx = Math.round((x - cx) * cos + (y - cy) * sin + cx);
-          const ry = Math.round(-(x - cx) * sin + (y - cy) * cos + cy);
+          const rx = Math.round((x - w / 2) * cos + (y - h / 2) * sin + w / 2);
+          const ry = Math.round(-(x - w / 2) * sin + (y - h / 2) * cos + h / 2);
           if (rx >= 0 && rx < w && ry >= 0 && ry < h) {
-            soma += gradX[ry * w + rx];
+            soma += rawPixels[ry * w + rx];
           }
         }
         somaLinhas[y] = soma;
       }
 
-      // Calcular coeficiente de variação (std/mean) — maior = mais alinhado
-      let sum = 0;
-      for (let y = 0; y < h; y++) sum += somaLinhas[y];
-      const mean = sum / h;
-      if (mean < 1e-6) return 0; // evita divisão por zero
-      let sqSum = 0;
+      // Calcular variância das somas das linhas (maior = mais alinhado)
+      let media = 0;
+      for (let y = 0; y < h; y++) media += somaLinhas[y];
+      media /= h;
+      let variancia = 0;
       for (let y = 0; y < h; y++) {
-        sqSum += (somaLinhas[y] - mean) ** 2;
+        variancia += (somaLinhas[y] - media) ** 2;
       }
-      const std = Math.sqrt(sqSum / h);
-      return std / mean; // CV
-    };
+      variancia /= h;
 
-    // === Nível 1: teste de -10 a +10 graus (passo 1°) ===
-    let melhorAngulo = 0;
-    let melhorCV = medirAlinhamento(0);
-
-    for (let angulo = -10; angulo <= 10; angulo++) {
-      if (angulo === 0) continue; // já testado
-      const cv = medirAlinhamento(angulo);
-      if (cv > melhorCV) {
-        melhorCV = cv;
+      if (variancia > melhorVariancia) {
+        melhorVariancia = variancia;
         melhorAngulo = angulo;
       }
     }
 
-    // === Nível 2: refinar com passo de 0.5° perto do melhor ângulo ===
+    // Refinar com passo de 0.5 grau perto do melhor ângulo
     for (let angulo = melhorAngulo - 1; angulo <= melhorAngulo + 1; angulo += 0.5) {
-      if (angulo === melhorAngulo) continue;
-      const cv = medirAlinhamento(angulo);
-      if (cv > melhorCV) {
-        melhorCV = cv;
+      if (angulo === melhorAngulo) continue; // já testado
+      const rad = angulo * Math.PI / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const somaLinhas = new Float64Array(h);
+      for (let y = 0; y < h; y++) {
+        let soma = 0;
+        for (let x = 0; x < w; x++) {
+          const rx = Math.round((x - w / 2) * cos + (y - h / 2) * sin + w / 2);
+          const ry = Math.round(-(x - w / 2) * sin + (y - h / 2) * cos + h / 2);
+          if (rx >= 0 && rx < w && ry >= 0 && ry < h) {
+            soma += rawPixels[ry * w + rx];
+          }
+        }
+        somaLinhas[y] = soma;
+      }
+      let media = 0;
+      for (let y = 0; y < h; y++) media += somaLinhas[y];
+      media /= h;
+      let variancia = 0;
+      for (let y = 0; y < h; y++) {
+        variancia += (somaLinhas[y] - media) ** 2;
+      }
+      variancia /= h;
+      if (variancia > melhorVariancia) {
+        melhorVariancia = variancia;
         melhorAngulo = angulo;
       }
     }
 
-    // === Nível 3: refinar com passo de 0.25° (alta precisão) ===
-    for (let angulo = melhorAngulo - 0.5; angulo <= melhorAngulo + 0.5; angulo += 0.25) {
-      if (angulo === melhorAngulo) continue;
-      const cv = medirAlinhamento(angulo);
-      if (cv > melhorCV) {
-        melhorCV = cv;
-        melhorAngulo = angulo;
-      }
-    }
-
-    // Arredondar para 2 casas decimais
-    melhorAngulo = Math.round(melhorAngulo * 100) / 100;
-
-    console.log(`[Deskew-backend] Ângulo detectado: ${melhorAngulo}° (CV=${melhorCV.toFixed(4)})`);
     return melhorAngulo;
   } catch (err) {
-    console.warn('[Deskew-backend] Erro ao detectar skew:', err);
+    console.warn('[DESkew-backend] Erro ao detectar skew:', err);
     return 0;
   }
 }
@@ -437,42 +311,23 @@ export async function compressImage(base64DataUrl: string): Promise<string> {
     let bufferProcessado = buffer;
     try {
       const anguloSkew = await detectarSkew(buffer);
-      if (Math.abs(anguloSkew) >= 0.5) {
+      if (Math.abs(anguloSkew) >= 1) {
         console.log(`[COMPRESS] Deskew: corrigindo ${anguloSkew}° de inclinação`);
         bufferProcessado = await sharp(buffer)
           .rotate(anguloSkew, { background: '#ffffff' })
           .toBuffer();
       } else {
-        console.log(`[COMPRESS] Deskew: ângulo ${anguloSkew}° — muito pequeno (< 0.5°), não precisa corrigir`);
+        console.log(`[COMPRESS] Deskew: ângulo ${anguloSkew}° — muito pequeno, não precisa corrigir`);
       }
     } catch (err) {
       console.warn('[COMPRESS] Deskew falhou, usando imagem original:', err);
     }
 
-    // 2. Detectar ROI (região do display) e fazer crop vertical
-    // Aumenta resolução efetiva dos dígitos — crítico para diferenciar 0 de 8
-    try {
-      const roi = await detectarROIDisplay(bufferProcessado);
-      if (roi) {
-        const meta = await sharp(bufferProcessado).metadata();
-        const cropTop = Math.floor(meta.height * roi.top);
-        const cropHeight = Math.floor(meta.height * roi.height);
-        if (cropHeight > 0 && cropTop >= 0 && cropTop + cropHeight <= meta.height) {
-          console.log(`[COMPRESS] Crop ROI: top=${cropTop} height=${cropHeight} (de ${meta.height})`);
-          bufferProcessado = await sharp(bufferProcessado)
-            .extract({ left: 0, top: cropTop, width: meta.width, height: cropHeight })
-            .toBuffer();
-        }
-      }
-    } catch (err) {
-      console.warn('[COMPRESS] Crop ROI falhou, usando imagem completa:', err);
-    }
-
-    // 3. Pipeline enxuto — fotos nítidas não precisam de median/sharpen forte
+    // 2. Pipeline enxuto — fotos nítidas não precisam de median/sharpen forte
     const compressed = await sharp(bufferProcessado)
       // Remove canal alpha (se houver) e converte para RGB consistente
       .removeAlpha()
-      // Upscale para 2048px (após crop, dígitos ficam com resolução maior)
+      // Upscale para 2048px (suficiente para displays LCD/LED)
       // Kernel lanczos3 preserva bordas de texto
       .resize(2048, 2048, { fit: 'inside', kernel: 'lanczos3' })
       // Normaliza contraste (estica histograma) — realça texto LCD/LED
@@ -495,136 +350,6 @@ export async function compressImage(base64DataUrl: string): Promise<string> {
     return `data:image/jpeg;base64,${compressed.toString('base64')}`;
   } catch (err) {
     console.warn('[COMPRESS] Falha ao processar, enviando original:', err);
-    return base64DataUrl;
-  }
-}
-
-/**
- * Detecta se a imagem tem fundo escuro (display LCD/LED com fundo preto).
- * Calcula o brilho médio da REGIÃO CENTRAL — se < 128, considera fundo escuro.
- * 
- * IMPORTANTE: Mede apenas a região central (50% da área), não a foto inteira.
- * Fotos de displays têm muita área clara ao redor (parede, etiqueta branca)
- * que infla o brilho médio e esconde o fato de que o display é escuro.
- * 
- * Displays com fundo preto e letra branca podem confundir o Gemini.
- * Inverter cores (negativo) transforma em fundo branco com letra preta,
- * que é o padrão que o Gemini lê melhor (texto em papel).
- */
-async function temFundoEscuro(buffer: Buffer): Promise<{ escuro: boolean; brilho: number }> {
-  try {
-    const meta = await sharp(buffer).metadata();
-    const origW = meta.width || 100;
-    const origH = meta.height || 100;
-
-    // Crop da região central (50% da largura e 50% da altura)
-    const cropLeft = Math.floor(origW * 0.25);
-    const cropTop = Math.floor(origH * 0.25);
-    const cropW = Math.floor(origW * 0.5);
-    const cropH = Math.floor(origH * 0.5);
-
-    // Redimensionar região central para 100px (análise rápida)
-    const scale = Math.min(1, 100 / Math.max(cropW, cropH));
-    const w = Math.round(cropW * scale);
-    const h = Math.round(cropH * scale);
-
-    const { data: gray } = await sharp(buffer)
-      .extract({ left: cropLeft, top: cropTop, width: cropW, height: cropH })
-      .resize(w, h, { fit: 'fill' })
-      .greyscale()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-
-    // Calcular brilho médio da região central
-    let sum = 0;
-    const total = w * h;
-    for (let i = 0; i < total; i++) {
-      sum += gray[i];
-    }
-    const media = sum / total;
-    // Threshold 160 (mais permissivo) — displays coloridos têm brilho médio
-    // maior que displays pretos puros, mas ainda precisam inversão
-    const escuro = media < 160;
-    console.log(`[FUNDO] Brilho central: ${media.toFixed(0)} (0=preto, 255=branco) → ${escuro ? 'escuro (inverter)' : 'claro (manter)'}`);
-    return { escuro, brilho: media };
-  } catch (err) {
-    console.warn('[FUNDO] Erro ao detectar:', err);
-    return { escuro: false, brilho: 0 };
-  }
-}
-
-/** Variável global temporária — armazena info da última compressão agressiva */
-export let _ultimaCompressaoAgressivaInfo = { inverteuCores: false, brilhoMedio: 0 };
-
-/**
- * Comprime imagem para OCR com pipeline MÍNIMO — para foto individual.
- *
- * Revertido para processamento mínimo após testes mostrarem que
- * inversão de cores + sharpen forte + upscale 2560px estavam PIORANDO
- * a leitura (0 virava 8).
- *
- * Testes comparativos:
- * - Foto original (sem processamento): VLM lê 10259888 ✅ correto
- * - Foto processada (inversão + sharpen forte): VLM lê 18259888 ❌ errado
- *
- * Pipeline mínimo:
- * - Deskew automático (threshold 0.5°) — ajuda
- * - Upscale 2048px (não 2560px) — suficiente sem pixelizar
- * - Kernel lanczos3 — preserva bordas
- * - Normalise — ajuda contraste
- * - Saturação +30% — realça cores
- * - Sharpen MUITO LEVE (sigma 0.5) — não cria ruído
- * - JPEG 90 — qualidade boa
- * - SEM inversão de cores — estava piorando
- * - SEM median filter — desnecessário em fotos nítidas
- */
-export async function compressImageAgressiva(base64DataUrl: string): Promise<string> {
-  try {
-    const matches = base64DataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
-    if (!matches) return base64DataUrl;
-
-    const buffer = Buffer.from(matches[2], 'base64');
-    const inputSize = buffer.length;
-
-    // 1. Deskew (mantido — ajuda a alinhar)
-    let bufferProcessado = buffer;
-    try {
-      const anguloSkew = await detectarSkew(buffer);
-      if (Math.abs(anguloSkew) >= 0.5) {
-        console.log(`[COMPRESS-AGRESSIVO] Deskew: ${anguloSkew}°`);
-        bufferProcessado = await sharp(buffer)
-          .rotate(anguloSkew, { background: '#ffffff' })
-          .toBuffer();
-      }
-    } catch (err) {
-      console.warn('[COMPRESS-AGRESSIVO] Deskew falhou:', err);
-    }
-
-    // NÃO inverter cores — testes mostraram que piora a leitura
-    _ultimaCompressaoAgressivaInfo = { inverteuCores: false, brilhoMedio: 0 };
-
-    // 2. Pipeline MÍNIMO — sem inversão, sem median, sharpen muito leve
-    const compressed = await sharp(bufferProcessado)
-      .removeAlpha()
-      // Upscale 2048px (não 2560px — evita pixelização)
-      .resize(2048, 2048, { fit: 'inside', kernel: 'lanczos3' })
-      .normalise()
-      .modulate({ saturation: 1.3 })
-      // Sharpen MUITO LEVE — não cria ruído que confunde 0 com 8
-      .sharpen({ sigma: 0.5, m1: 0.2, m2: 0.1 })
-      // JPEG 90 — qualidade boa sem exagerar
-      .jpeg({ quality: 90, chromaSubsampling: '4:4:4' })
-      .toBuffer();
-
-    const outputSize = compressed.length;
-    const reduction = inputSize > 0
-      ? ((1 - outputSize / inputSize) * 100).toFixed(0)
-      : '0';
-    console.log(`[COMPRESS-AGRESSIVO] ${inputSize} -> ${outputSize} bytes (${reduction}% redução, deskew + 2048px + normalise + saturação + sharpen leve + JPEG 90 — SEM inversão)`);
-
-    return `data:image/jpeg;base64,${compressed.toString('base64')}`;
-  } catch (err) {
-    console.warn('[COMPRESS-AGRESSIVO] Falha, usando original:', err);
     return base64DataUrl;
   }
 }
@@ -830,82 +555,11 @@ export interface CallAIOptions {
   maxTokens?: number;
   timeout?: number;
   jsonMode?: boolean;
-  agressivo?: boolean; // true = pipeline agressivo (2560px/JPEG95/sharpen forte)
 }
 
 // ============================================
 // CHAMADA ÚNICA À IA (Vertex AI) — VISION/OCR
 // ============================================
-
-/**
- * Chama GLM-4.6v via z-ai-web-dev-sdk — alternativa ao Gemini.
- * Usa o mesmo pipeline de compressão (agressivo ou rápido).
- * 
- * Retorna { content: string } (mesmo formato do callAI).
- */
-export async function callAIGLM(
-  prompt: string,
-  imagem: string,
-  options: CallAIOptions = {}
-): Promise<{ content: string }> {
-  const { agressivo = false } = options;
-
-  // Pipeline de compressão (mesmo do callAI)
-  const compressedImage = agressivo
-    ? await compressImageAgressiva(imagem)
-    : await compressImage(imagem);
-
-  console.log(`[GLM-4.6v] Imagem processada (${agressivo ? 'agressivo' : 'rápido'}): ${(compressedImage.length / 1024).toFixed(0)} KB`);
-
-  // Criar config dinamicamente a partir de variáveis de ambiente
-  // (SDK z-ai-web-dev-sdk lê de arquivo .z-ai-config, mas na Vercel não temos acesso)
-  const fs = await import('fs');
-  const path = await import('path');
-  const os = await import('os');
-  
-  const config = {
-    baseUrl: process.env.Z_AI_BASE_URL || 'https://internal-api.z.ai/v1',
-    apiKey: process.env.Z_AI_API_KEY || 'Z.ai',
-    token: process.env.Z_AI_TOKEN || '',
-    chatId: process.env.Z_AI_CHAT_ID || `chat-${Date.now()}`,
-    userId: process.env.Z_AI_USER_ID || 'caixafacil',
-  };
-  
-  // Escrever config temporário no home dir (SDK procura lá)
-  const configPath = path.join(os.homedir(), '.z-ai-config');
-  try {
-    fs.writeFileSync(configPath, JSON.stringify(config));
-    console.log(`[GLM-4.6v] Config escrito em ${configPath}`);
-  } catch (err) {
-    console.warn('[GLM-4.6v] Erro ao escrever config:', err);
-  }
-
-  // Import dinâmico para evitar carregar SDK se não usado
-  const ZAI = (await import('z-ai-web-dev-sdk')).default;
-  const zai = await ZAI.create();
-
-  const response = await zai.chat.completions.createVision({
-    messages: [
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: prompt },
-          { type: 'image_url', image_url: { url: compressedImage } },
-        ],
-      },
-    ],
-    thinking: { type: 'disabled' },
-  });
-
-  const content = response.choices?.[0]?.message?.content || '';
-  console.log(`[GLM-4.6v] Resposta recebida (${content.length} chars)`);
-
-  if (!content) {
-    throw new Error('GLM-4.6v retornou resposta vazia');
-  }
-
-  return { content };
-}
 
 export async function callAI(
   prompt: string,
@@ -918,15 +572,10 @@ export async function callAI(
     maxTokens = 4096,
     timeout = AI_TIMEOUT,
     jsonMode = true,
-    agressivo = false,
   } = options;
 
   const resolvedModel = getVertexModel(model);
-  // Pipeline agressivo (2560px/JPEG95/sharpen forte) para foto individual
-  // Pipeline rápido (2048px/JPEG85/sharpen leve) para lote
-  const compressedImage = agressivo
-    ? await compressImageAgressiva(imagem)
-    : await compressImage(imagem);
+  const compressedImage = await compressImage(imagem);
   const base64Data = compressedImage.split(',')[1];
   const mimeType = compressedImage.split(';')[0].split(':')[1];
 
