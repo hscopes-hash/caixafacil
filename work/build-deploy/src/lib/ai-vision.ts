@@ -147,14 +147,13 @@ export async function avaliarNitidez(buffer: Buffer): Promise<{
     }
 
     // === DECISÃO ===
-    // Thresholds calibrados:
-    // - Global < 50: muito borrada (tremida/foco perdido) — recusa
-    // - Regiões borradas >= 5 (de 9): foco desigual severo — recusa
-    // - Global < 100 AND regiões borradas >= 3: levemente borrada mas
-    //   com áreas suficientes afetadas — recusa
-    const THRESHOLD_GLOBAL_BORRADA = 50;
-    const THRESHOLD_REGIOES_CRITICO = 5;
-    const THRESHOLD_REGIOES_MODERADO = 3;
+    // Thresholds RELAXADOS — só rejeitar fotos MUITO borradas
+    // (antes era muito agressivo, rejeitava fotos aceitáveis)
+    // - Global < 30: muito borrada (tremida/foco perdido) — recusa
+    // - Regiões borradas >= 7 (de 9): foco desigual extremo — recusa
+    // Removido: critério moderado que rejeitava fotos com 3+ regiões
+    const THRESHOLD_GLOBAL_BORRADA = 30;
+    const THRESHOLD_REGIOES_CRITICO = 7;
 
     let ilegivel = false;
     let motivo = '';
@@ -165,9 +164,6 @@ export async function avaliarNitidez(buffer: Buffer): Promise<{
     } else if (regioesBorradas >= THRESHOLD_REGIOES_CRITICO) {
       ilegivel = true;
       motivo = `Foto ilegível — foco desigual severo (${regioesBorradas}/${totalRegioes} regiões borradas)`;
-    } else if (variance < 100 && regioesBorradas >= THRESHOLD_REGIOES_MODERADO) {
-      ilegivel = true;
-      motivo = `Foto ilegível — imagem parcialmente borrada (nitidez global: ${variance.toFixed(0)}, ${regioesBorradas}/${totalRegioes} regiões borradas)`;
     }
 
     console.log(`[NITIDEZ] Global: ${variance.toFixed(0)}, regiões borradas: ${regioesBorradas}/${totalRegioes}${ilegivel ? ' → ILEGÍVEL' : ' → OK'}`);
