@@ -557,20 +557,26 @@ async function temFundoEscuro(buffer: Buffer): Promise<{ escuro: boolean; brilho
 export let _ultimaCompressaoAgressivaInfo = { inverteuCores: false, brilhoMedio: 0 };
 
 /**
- * Comprime imagem para OCR com pipeline AGRESSIVO — para foto individual.
+ * Comprime imagem para OCR com pipeline MÍNIMO — para foto individual.
  *
- * Mais lento mas mais preciso — usado quando o usuário processa uma foto
- * de cada vez (não em lote). Resolução maior e sharpen mais forte para
- * diferenciar dígitos ambíguos (0 vs 8, 3 vs 8, 5 vs 6).
+ * Revertido para processamento mínimo após testes mostrarem que
+ * inversão de cores + sharpen forte + upscale 2560px estavam PIORANDO
+ * a leitura (0 virava 8).
  *
- * - Deskew automático (threshold 0.5°)
- * - Sem crop ROI (usa imagem completa para não perder contexto)
- * - Upscale 2560px (vs 2048px do rápido)
- * - Kernel lanczos3
- * - Normalise + saturação +30%
- * - Median filter 3x3 (remove ruído)
- * - Sharpen FORTE (sigma 1.5 vs 1.0)
- * - JPEG 95 (vs 85)
+ * Testes comparativos:
+ * - Foto original (sem processamento): VLM lê 10259888 ✅ correto
+ * - Foto processada (inversão + sharpen forte): VLM lê 18259888 ❌ errado
+ *
+ * Pipeline mínimo:
+ * - Deskew automático (threshold 0.5°) — ajuda
+ * - Upscale 2048px (não 2560px) — suficiente sem pixelizar
+ * - Kernel lanczos3 — preserva bordas
+ * - Normalise — ajuda contraste
+ * - Saturação +30% — realça cores
+ * - Sharpen MUITO LEVE (sigma 0.5) — não cria ruído
+ * - JPEG 90 — qualidade boa
+ * - SEM inversão de cores — estava piorando
+ * - SEM median filter — desnecessário em fotos nítidas
  */
 export async function compressImageAgressiva(base64DataUrl: string): Promise<string> {
   try {
@@ -580,7 +586,7 @@ export async function compressImageAgressiva(base64DataUrl: string): Promise<str
     const buffer = Buffer.from(matches[2], 'base64');
     const inputSize = buffer.length;
 
-    // 1. Deskew
+    // 1. Deskew (mantido — ajuda a alinhar)
     let bufferProcessado = buffer;
     try {
       const anguloSkew = await detectarSkew(buffer);
@@ -594,47 +600,27 @@ export async function compressImageAgressiva(base64DataUrl: string): Promise<str
       console.warn('[COMPRESS-AGRESSIVO] Deskew falhou:', err);
     }
 
-    // 2. Inverter cores se fundo escuro (display LCD/LED preto)
-    // Gemini lê melhor texto preto sobre branco (padrão de papel)
-    let inverteuCores = false;
-    let brilhoMedio = 0;
-    try {
-      const { escuro, brilho } = await temFundoEscuro(bufferProcessado);
-      brilhoMedio = brilho;
-      if (escuro) {
-        console.log('[COMPRESS-AGRESSIVO] Invertendo cores (fundo escuro → claro)');
-        bufferProcessado = await sharp(bufferProcessado)
-          .negate()
-          .toBuffer();
-        inverteuCores = true;
-      }
-    } catch (err) {
-      console.warn('[COMPRESS-AGRESSIVO] Inversão de cores falhou:', err);
-    }
+    // NÃO inverter cores — testes mostraram que piora a leitura
+    _ultimaCompressaoAgressivaInfo = { inverteuCores: false, brilhoMedio: 0 };
 
-    // Atualizar info global para o endpoint poder retornar
-    _ultimaCompressaoAgressivaInfo = { inverteuCores, brilhoMedio: Math.round(brilhoMedio) };
-
-    // 3. Pipeline agressivo — máxima qualidade para diferenciar dígitos
+    // 2. Pipeline MÍNIMO — sem inversão, sem median, sharpen muito leve
     const compressed = await sharp(bufferProcessado)
       .removeAlpha()
-      // Upscale 2560px — mais resolução que 2048px
-      .resize(2560, 2560, { fit: 'inside', kernel: 'lanczos3' })
+      // Upscale 2048px (não 2560px — evita pixelização)
+      .resize(2048, 2048, { fit: 'inside', kernel: 'lanczos3' })
       .normalise()
       .modulate({ saturation: 1.3 })
-      // Median filter — remove ruído de sensor
-      .median(3)
-      // Sharpen FORTE — realça bordas de dígitos ambíguos
-      .sharpen({ sigma: 1.5, m1: 1.0, m2: 0.8 })
-      // JPEG 95 — mínima compressão
-      .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
+      // Sharpen MUITO LEVE — não cria ruído que confunde 0 com 8
+      .sharpen({ sigma: 0.5, m1: 0.2, m2: 0.1 })
+      // JPEG 90 — qualidade boa sem exagerar
+      .jpeg({ quality: 90, chromaSubsampling: '4:4:4' })
       .toBuffer();
 
     const outputSize = compressed.length;
     const reduction = inputSize > 0
       ? ((1 - outputSize / inputSize) * 100).toFixed(0)
       : '0';
-    console.log(`[COMPRESS-AGRESSIVO] ${inputSize} -> ${outputSize} bytes (${reduction}% redução, deskew + ${inverteuCores ? 'inversão + ' : ''}2560px + median + sharpen forte + JPEG 95)`);
+    console.log(`[COMPRESS-AGRESSIVO] ${inputSize} -> ${outputSize} bytes (${reduction}% redução, deskew + 2048px + normalise + saturação + sharpen leve + JPEG 90 — SEM inversão)`);
 
     return `data:image/jpeg;base64,${compressed.toString('base64')}`;
   } catch (err) {
