@@ -303,23 +303,9 @@ export async function compressImage(base64DataUrl: string): Promise<string> {
     const buffer = Buffer.from(matches[2], 'base64');
     const inputSize = buffer.length;
 
-    // 1. Detectar e corrigir inclinação (deskew) — ANTES das outras melhorias
+    // 1. Deskew REMOVIDO — estava piorando a inclinação (sinal/convenção incorreta)
+    // Usar imagem original diretamente
     let bufferProcessado = buffer;
-    try {
-      const anguloSkew = await detectarSkew(buffer);
-      if (Math.abs(anguloSkew) >= 0.5) {
-        // ⚠️ Negativar ângulo para corrigir (rotate horário vs detecção anti-horário)
-        const anguloCorrecao = -anguloSkew;
-        console.log(`[COMPRESS] Deskew: corrigindo ${anguloSkew}° → rotate(${anguloCorrecao}°)`);
-        bufferProcessado = await sharp(buffer)
-          .rotate(anguloCorrecao, { background: '#ffffff' })
-          .toBuffer();
-      } else {
-        console.log(`[COMPRESS] Deskew: ângulo ${anguloSkew}° — muito pequeno (< 0.5°), não corrige`);
-      }
-    } catch (err) {
-      console.warn('[COMPRESS] Deskew falhou, usando imagem original:', err);
-    }
 
     // 2. Pipeline enxuto — fotos nítidas não precisam de median/sharpen forte
     const compressed = await sharp(bufferProcessado)

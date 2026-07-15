@@ -4396,8 +4396,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
     setExtraindoLeitura(true);
     try {
-      // ⚠️ Corrigir inclinação da foto antes do OCR (melhora precisão)
-      const fotoCorrigida = await corrigirInclinacao(fotoCapturada);
+      // Usar foto original (deskew removido — estava piorando a inclinação)
+      const fotoCorrigida = fotoCapturada;
 
       // Usar o MESMO endpoint do lote (processar-lote-foto) que tem melhor taxa de acerto
       // — prompt estruturado (identifica máquina + lê valores) e temperature 0.05
@@ -4631,8 +4631,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 90000);
 
-        // ⚠️ Corrigir inclinação ANTES de enviar — capturar foto alinhada
-        const fotoCorrigida = await corrigirInclinacao(foto.imagem);
+        // Usar foto original (deskew removido — estava piorando a inclinação)
+        const fotoCorrigida = foto.imagem;
 
         let res: Response;
         try {
@@ -4730,6 +4730,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   : m
               ));
 
+              // Atualizar snapshot também para o setMaquinas final ter os dados
+              maquinasSnapshot = maquinasSnapshot.map(m =>
+                m.id === maquinaAtualizada.id ? { ...m, ...maquinaAtualizada } : m
+              );
+
               // ⚠️ Marcar máquina como processada no Map (useRef + tick) — fallback
               const maquinaIdProcessada = maquinaAtualizada.id;
               const maquinaCodigoProcessado = maquinaAtualizada.codigo;
@@ -4769,19 +4774,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
     setProcessandoLote(false);
 
-    // ⚠️ Aplicar fotoProcessada do snapshot para o estado React
-    // Durante o loop, setMaquinas(novasMaquinas) pode ter sido batchado pelo React
-    // e o estado 'prev' pode não ter fotoProcessada.
-    // Solução: usar maquinasSnapshot (que tem as fotos) e fazer setMaquinas final.
-    setMaquinas(prev => {
-      return prev.map(m => {
-        const snapMaquina = maquinasSnapshot.find(s => s.id === m.id);
-        if (snapMaquina && snapMaquina.fotoProcessada) {
-          return { ...m, fotoProcessada: snapMaquina.fotoProcessada };
-        }
-        return { ...m };
-      });
-    });
+    // Re-aplicar fotoProcessada do snapshot (caso setMaquinas durante o loop
+    // tenha sido batchado pelo React e perdido)
+    // ⚠️ IMPORTANTE: mesclar com prev — não sobrescrever
+    setMaquinas(prev => prev.map(m => {
+      const snapMaquina = maquinasSnapshot.find(s => s.id === m.id);
+      // Só sobrescrever fotoProcessada se snapshot tem E prev não tem
+      if (snapMaquina?.fotoProcessada && !m.fotoProcessada) {
+        return { ...m, fotoProcessada: snapMaquina.fotoProcessada };
+      }
+      return m;
+    }));
     console.log('[Lote] Re-render final com fotoProcessada do snapshot');
     const fotosProcessadas = fotosLote.filter(f => f.status === 'concluido' || f.status === 'erro');
     const concluidas = fotosProcessadas.filter(f => f.status === 'concluido' && f.resultado?.codigoReconhecido && (f.resultado.entrada !== null || f.resultado.saida !== null)).length;
@@ -4988,8 +4991,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const timeout = setTimeout(() => controller.abort(), 60000);
       globalController.signal.addEventListener(() => controller.abort(), { once: true });
 
-      // ⚠️ Corrigir inclinação ANTES de enviar — capturar foto alinhada
-      const fotoCorrigidaBg = await corrigirInclinacao(imagemBase64);
+      // Usar foto original (deskew removido — estava piorando a inclinação)
+      const fotoCorrigidaBg = imagemBase64;
 
       let res: Response;
       try {
