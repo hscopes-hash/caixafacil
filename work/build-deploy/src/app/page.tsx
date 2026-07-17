@@ -6652,6 +6652,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       console.log('[salvarLeituras] Snapshot — mercadoFotoProcessada:', mercadoFotoProcessada ? 'SIM (' + mercadoFotoProcessada.length + ' chars)' : 'NÃO');
       setResumoCartaoFoto(cartaoFotoProcessada);
       setResumoMercadoFoto(mercadoFotoProcessada);
+      // ⚠️ Limpar fotos de cartão/mercado AGORA — snapshot já foi capturado acima
+      // Antes não limpava aqui (só no fecharResumo), mas isso causava bug:
+      // a foto persistia no estado e era salva no localStorage pelo auto-save,
+      // reaparecendo na próxima leitura.
+      setCartaoFotoProcessada(null);
+      setCartaoFotoCapturada(null);
+      setCartaoResultado(null);
+      setMercadoFotoProcessada(null);
+      setMercadoFotoCapturada(null);
+      setMercadoResultado(null);
       // Guarda o valor da despesa para o resumo
       setValorDespesaSalva(totalDesp);
       // Guarda o valor da receita para o resumo
@@ -6730,8 +6740,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       resetReceitas();
       resetDespesas();
       setMaquinasAlteradas(new Map());
-      // ⚠️ NÃO limpar fotos de cartão/mercado aqui — precisam estar disponíveis
-      // no resumo modal para gerar o relatório PDF. São limpas no fecharResumo().
+      // Fotos de cartão/mercado já foram limpas acima (após snapshot do resumo)
       limparDigitacaoLS();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Erro ao salvar leituras';
