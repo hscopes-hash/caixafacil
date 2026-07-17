@@ -1056,7 +1056,9 @@ function LoginPage() {
         {/* Botão Convide pelo WhatsApp */}
         <button
           onClick={async () => {
-            const appUrl = 'https://caixafaciloficial.web.app';
+            // Usar URL atual do app (window.location.origin)
+            // Antes usava caixafaciloficial.web.app que redirecionava para Vercel
+            const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://caixafacil.app';
             const shareText = 'Confira o CaixaFacil - Sistema de gestao de maquinas de entretenimento! ' + appUrl;
             if (navigator.share) {
               try {
