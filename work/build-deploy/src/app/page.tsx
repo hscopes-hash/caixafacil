@@ -3676,7 +3676,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [debitosVencidosSalvos, setDebitosVencidosSalvos] = useState<number>(0);
   // Estados para Lançamento de Lote
   const [loteModalOpen, setLoteModalOpen] = useState(false);
-  const [fotosLote, setFotosLote] = useState<{ id: string; imagem: string; status: 'pendente' | 'processando' | 'concluido' | 'erro'; origem?: 'CÂMERA' | 'GALERIA' | 'LOTE'; resultado?: { codigoMaquina: string; codigoReconhecido: boolean; entrada?: number | null; saida?: number | null; confianca: number; observacoes: string; confiancaOCR?: number }; erro?: string; tempoMs?: number }[]>([]);
+  const [fotosLote, setFotosLote] = useState<{ id: string; imagem: string; status: 'pendente' | 'processando' | 'concluido' | 'erro'; origem?: 'CÂMERA' | 'GALERIA' | 'LOTE'; resultado?: { codigoMaquina: string; codigoReconhecido: boolean; entrada?: number | null; saida?: number | null; confianca: number; observacoes: string; confiancaOCR?: number }; erro?: string; tempoMs?: number; fotoProcessadaThumb?: string }[]>([]);
   const [processandoLote, setProcessandoLote] = useState(false);
   const [loteProgresso, setLoteProgresso] = useState(0);
   const loteIdCounter = useRef(0);
@@ -4662,12 +4662,31 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         }
 
         if (data.codigoReconhecido) {
+          // ⚠️ Gerar foto com tarja para thumbnail do card do lote
+          let fotoComTarjaThumbSync: string | undefined;
+          try {
+            const nowTs = new Date();
+            const dataStrTarja = `${nowTs.getDate().toString().padStart(2, '0')}/${(nowTs.getMonth() + 1).toString().padStart(2, '0')}/${nowTs.getFullYear().toString().slice(-2)} ${nowTs.getHours().toString().padStart(2, '0')}:${nowTs.getMinutes().toString().padStart(2, '0')}`;
+            fotoComTarjaThumbSync = await adicionarTarjaNaFoto(
+              fotoCorrigida,
+              dataStrTarja,
+              usuarioNome,
+              data.entrada ?? null,
+              data.saida ?? null,
+              foto.origem || 'LOTE'
+            );
+          } catch (err) {
+            console.warn(`[Lote] Falha ao gerar tarja para thumbnail:`, err);
+            fotoComTarjaThumbSync = fotoCorrigida;
+          }
+
           // Máquina identificada e valores extraídos em 1 chamada
           setFotosLote(prev => prev.map((f, idx) =>
             idx === i ? {
               ...f,
               status: 'concluido',
               tempoMs: tempoGasto,
+              fotoProcessadaThumb: fotoComTarjaThumbSync,
               resultado: {
                 codigoMaquina: data.codigoMaquina,
                 codigoReconhecido: true,
@@ -5027,11 +5046,30 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       console.log(`[Lote] Foto ${fotoId} processada: ${data.codigoMaquina} (reconhecido: ${data.codigoReconhecido})`);
 
       if (data.codigoReconhecido) {
+        // ⚠️ Gerar foto com tarja para thumbnail do card do lote
+        let fotoComTarjaThumb: string | undefined;
+        try {
+          const nowTs = new Date();
+          const dataStrTarja = `${nowTs.getDate().toString().padStart(2, '0')}/${(nowTs.getMonth() + 1).toString().padStart(2, '0')}/${nowTs.getFullYear().toString().slice(-2)} ${nowTs.getHours().toString().padStart(2, '0')}:${nowTs.getMinutes().toString().padStart(2, '0')}`;
+          fotoComTarjaThumb = await adicionarTarjaNaFoto(
+            fotoCorrigidaBg,
+            dataStrTarja,
+            usuarioNome,
+            data.entrada ?? null,
+            data.saida ?? null,
+            'LOTE'
+          );
+        } catch (err) {
+          console.warn(`[Lote BG] Falha ao gerar tarja para thumbnail:`, err);
+          fotoComTarjaThumb = fotoCorrigidaBg; // fallback: foto sem tarja
+        }
+
         setFotosLote(prev => prev.map(f =>
           f.id === fotoId ? {
             ...f,
             status: 'concluido' as const,
             tempoMs: Date.now() - tempoInicioBg,
+            fotoProcessadaThumb: fotoComTarjaThumb, // thumbnail com tarja para o card
             resultado: {
               codigoMaquina: data.codigoMaquina,
               codigoReconhecido: true,
@@ -9512,7 +9550,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                           }`}
                         >
                           <img
-                            src={foto.imagem}
+                            src={foto.fotoProcessadaThumb || foto.imagem}
                             alt={`Foto ${idx + 1}`}
                             className="w-14 h-14 object-cover rounded border border-border flex-shrink-0"
                           />
