@@ -338,6 +338,67 @@ export async function compressImage(base64DataUrl: string): Promise<string> {
   }
 }
 
+/**
+ * Comprime imagem para OCR com pipeline AGRESSIVO — para foto individual.
+ *
+ * Diferenças do compressImage (lote):
+ * - Deskew ativado (threshold 2° — só corrige inclinações visíveis)
+ * - Upscale 2048px (igual ao lote)
+ * - Sharpen leve (igual ao lote)
+ * - JPEG 90 (qualidade um pouco maior)
+ *
+ * Deskew usa threshold 2° (não 0.5°) para evitar falsos positivos
+ * em displays LCD/LED que têm padrões horizontais/verticais.
+ */
+export async function compressImageAgressiva(base64DataUrl: string): Promise<string> {
+  try {
+    const matches = base64DataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
+    if (!matches) return base64DataUrl;
+
+    const buffer = Buffer.from(matches[2], 'base64');
+    const inputSize = buffer.length;
+
+    // 1. Deskew — threshold 2° (só corrige inclinações visíveis)
+    let bufferProcessado = buffer;
+    try {
+      const anguloSkew = await detectarSkew(buffer);
+      if (Math.abs(anguloSkew) >= 2) {
+        // Negativar ângulo para corrigir (rotate horário vs detecção anti-horário)
+        const anguloCorrecao = -anguloSkew;
+        console.log(`[COMPRESS-AGRESSIVO] Deskew: corrigindo ${anguloSkew}° → rotate(${anguloCorrecao}°)`);
+        bufferProcessado = await sharp(buffer)
+          .rotate(anguloCorrecao, { background: '#ffffff' })
+          .toBuffer();
+      } else {
+        console.log(`[COMPRESS-AGRESSIVO] Deskew: ângulo ${anguloSkew}° — muito pequeno (< 2°), não corrige`);
+      }
+    } catch (err) {
+      console.warn('[COMPRESS-AGRESSIVO] Deskew falhou, usando imagem original:', err);
+    }
+
+    // 2. Pipeline — mesmo do lote mas com JPEG 90
+    const compressed = await sharp(bufferProcessado)
+      .removeAlpha()
+      .resize(2048, 2048, { fit: 'inside', kernel: 'lanczos3' })
+      .normalise()
+      .modulate({ saturation: 1.3 })
+      .sharpen({ sigma: 1.0, m1: 0.5, m2: 0.3 })
+      .jpeg({ quality: 90, chromaSubsampling: '4:4:4' })
+      .toBuffer();
+
+    const outputSize = compressed.length;
+    const reduction = inputSize > 0
+      ? ((1 - outputSize / inputSize) * 100).toFixed(0)
+      : '0';
+    console.log(`[COMPRESS-AGRESSIVO] ${inputSize} -> ${outputSize} bytes (${reduction}% redução, deskew 2° + 2048px + sharpen leve + JPEG 90)`);
+
+    return `data:image/jpeg;base64,${compressed.toString('base64')}`;
+  } catch (err) {
+    console.warn('[COMPRESS-AGRESSIVO] Falha, usando original:', err);
+    return base64DataUrl;
+  }
+}
+
 // ============================================
 // VERTEX AI — TOKEN DO METADATA SERVER / SA JSON
 // ============================================
@@ -539,6 +600,7 @@ export interface CallAIOptions {
   maxTokens?: number;
   timeout?: number;
   jsonMode?: boolean;
+  agressivo?: boolean; // true = pipeline agressivo (com deskew)
 }
 
 // ============================================
@@ -556,10 +618,15 @@ export async function callAI(
     maxTokens = 4096,
     timeout = AI_TIMEOUT,
     jsonMode = true,
+    agressivo = false,
   } = options;
 
   const resolvedModel = getVertexModel(model);
-  const compressedImage = await compressImage(imagem);
+  // Pipeline agressivo (com deskew) para foto individual
+  // Pipeline rápido (sem deskew) para lote
+  const compressedImage = agressivo
+    ? await compressImageAgressiva(imagem)
+    : await compressImage(imagem);
   const base64Data = compressedImage.split(',')[1];
   const mimeType = compressedImage.split(';')[0].split(':')[1];
 

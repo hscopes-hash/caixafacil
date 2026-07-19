@@ -8,7 +8,7 @@ import { enforcePlan } from '@/lib/plan-enforcement';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { imagem, codigosMaquinas, modelosMap, empresaId } = body;
+    const { imagem, codigosMaquinas, modelosMap, empresaId, agressivo } = body;
 
     if (!imagem) return NextResponse.json({ error: 'Imagem e obrigatoria' }, { status: 400 });
     if (!empresaId) return NextResponse.json({ error: 'empresaId e obrigatorio' }, { status: 400 });
@@ -56,6 +56,22 @@ ${codigosMaquinas.map((c: string) => {
   return `  - Código "${c}": rótulo entrada="${info?.nomeEntrada || 'E'}", rótulo saída="${info?.nomeSaida || 'S'}"`;
 }).join('\n')}
 
+⚠️ POSIÇÃO ESPACIAL DOS RÓTULOS — MUITO IMPORTANTE:
+Os rótulos de ENTRADA e SAÍDA estão em POSIÇÕES FIXAS no display:
+- Geralmente um ACIMA do outro (vertical) ou UM AO LADO do outro (horizontal)
+- NUNCA troque os valores entre os rótulos
+- Se a foto estiver levemente inclinada, os rótulos continuam na MESMA POSIÇÃO RELATIVA
+- Identifique PRIMEIRO qual rótulo está na posição de ENTRADA e qual está na posição de SAÍDA
+- SÓ DEPOIS leia os dígitos ao lado de cada rótulo
+- Se dois valores parecem iguais, VERIFIQUE se você está lendo o rótulo correto
+
+PROCEDIMENTO (faça em silêncio, não inclua no JSON):
+1. Localize TODOS os rótulos visíveis no display
+2. Para cada rótulo, identifique se é ENTRADA ou SAÍDA pela palavra escrita
+3. Leia os dígitos AO LADO do rótulo correto (não do rótulo vizinho)
+4. Se ENTRADA e SAÍDA resultarem no MESMO valor, VERIFIQUE se você não está lendo o mesmo campo duas vezes
+5. Confirme que cada valor pertence ao rótulo correto
+
 Para cada rótulo encontrado, leia os dígitos numéricos que aparecem ao lado/abaixo dele.
 Retorne APENAS dígitos, sem pontos e sem vírgulas. Se o display mostrar 1.234,56 retorne 123456 (ignore os separadores . e ,). Retorne o valor COMPLETO incluindo todos os dígitos visíveis (mantenha zeros à esquerda). Se ilegível, retorne null.
 
@@ -66,6 +82,7 @@ Responda APENAS com JSON:
       temperature: 0.05,
       maxTokens: 4096,
       jsonMode: true,
+      agressivo: agressivo === true, // foto individual ativa deskew + pipeline agressivo
     });
     const content = result.content;
 

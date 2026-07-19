@@ -4422,6 +4422,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           codigosMaquinas,
           modelosMap,
           empresaId: empresa?.id,
+          agressivo: true, // foto individual ativa deskew (threshold 2°)
         }),
       });
 
@@ -4470,8 +4471,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       });
       console.log('leituraExtraida definido com sucesso');
 
-      // Feedback ao usuário
-      if (data.entrada === null && data.saida === null) {
+      // ⚠️ OPÇÃO 1 — Validação de valores iguais (suspeita de erro de associação)
+      // Se ENTRADA === SAÍDA, muito provável que a IA leu o mesmo campo duas vezes
+      if (data.entrada !== null && data.saida !== null && data.entrada === data.saida) {
+        toast.warning(
+          `⚠️ Entrada e Saída com valores IGUAIS (${data.entrada}). ` +
+          `Isso pode indicar que a IA leu o mesmo campo duas vezes. ` +
+          `Verifique se os valores estão corretos antes de salvar.`,
+          { duration: 8000 }
+        );
+      } else if (data.entrada === null && data.saida === null) {
         const obs = data.observacoes ? ` Detalhe: ${data.observacoes}` : '';
         toast.warning(`Não foi possível identificar os valores na foto. Tente outra foto mais clara e certifique-se de que os rótulos "${maquinaFoto?.tipo?.nomeEntrada || 'E'}" e "${maquinaFoto?.tipo?.nomeSaida || 'S'}" estejam visíveis.${obs}`);
       } else if ((data.confianca || 0) < 70) {
