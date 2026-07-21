@@ -4734,24 +4734,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 maquinaAtualizada.diferencaEntrada - maquinaAtualizada.diferencaSaida
               );
 
-              // ⚠️ Gerar foto com tarja usando a foto ALINHADA (deskewed)
-              // Mostra thumbnail no card da máquina com a foto já corrigida
+              // ⚠️ Gerar foto com tarja e setar fotoProcessada
+              // Reutiliza fotoComTarjaThumbSync (já gerado acima) para economizar memória
               try {
-                const nowTs = new Date();
-                const dataStrTarja = `${nowTs.getDate().toString().padStart(2, '0')}/${(nowTs.getMonth() + 1).toString().padStart(2, '0')}/${nowTs.getFullYear().toString().slice(-2)} ${nowTs.getHours().toString().padStart(2, '0')}:${nowTs.getMinutes().toString().padStart(2, '0')}`;
-                const fotoComTarja = await adicionarTarjaNaFoto(
-                  fotoCorrigida, // foto alinhada (deskewed) em vez de foto.imagem (original)
-                  dataStrTarja,
-                  usuarioNome,
-                  data.entrada ?? null,
-                  data.saida ?? null,
-                  foto.origem || 'LOTE'
-                );
-                // Garantir que é uma NOVA string (forçar mudança de referência)
-                maquinaAtualizada.fotoProcessada = fotoComTarja + '';
+                maquinaAtualizada.fotoProcessada = fotoComTarjaThumbSync + '';
               } catch (err) {
-                console.warn(`[Lote] Falha ao aplicar tarja na máquina ${data.codigoMaquina}:`, err);
-                maquinaAtualizada.fotoProcessada = fotoCorrigida + ''; // fallback: foto alinhada sem tarja
+                console.warn(`[Lote] Falha ao setar fotoProcessada:`, err);
+                maquinaAtualizada.fotoProcessada = fotoCorrigida + '';
               }
 
               // ⚠️ Usar setMaquinas(prev => ...) para garantir estado mais recente
@@ -5113,23 +5102,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               maquinaAtualizada.diferencaEntrada - maquinaAtualizada.diferencaSaida
             );
 
-            // ⚠️ Gerar foto com tarja e setar fotoProcessada — mostra thumbnail no ícone
-            // Mesmo padrão do fluxo individual (aplicarLeituraExtraida) e do processarLote
+            // ⚠️ Gerar foto com tarja e setar fotoProcessada
+            // Reutiliza fotoComTarjaThumb (já gerado acima) para economizar memória
             try {
-              const nowTs = new Date();
-              const dataStrTarja = `${nowTs.getDate().toString().padStart(2, '0')}/${(nowTs.getMonth() + 1).toString().padStart(2, '0')}/${nowTs.getFullYear().toString().slice(-2)} ${nowTs.getHours().toString().padStart(2, '0')}:${nowTs.getMinutes().toString().padStart(2, '0')}`;
-              const fotoComTarja = await adicionarTarjaNaFoto(
-                fotoCorrigidaBg, // foto alinhada (deskewed) em vez de imagemBase64 (original)
-                dataStrTarja,
-                usuarioNome,
-                data.entrada ?? null,
-                data.saida ?? null,
-                'LOTE'
-              );
-              maquinaAtualizada.fotoProcessada = fotoComTarja + '';
+              maquinaAtualizada.fotoProcessada = fotoComTarjaThumb + '';
             } catch (err) {
-              console.warn(`[Lote BG] Falha ao aplicar tarja na máquina ${data.codigoMaquina}:`, err);
-              maquinaAtualizada.fotoProcessada = fotoCorrigidaBg + ''; // fallback: foto alinhada sem tarja
+              console.warn(`[Lote BG] Falha ao setar fotoProcessada:`, err);
+              maquinaAtualizada.fotoProcessada = fotoCorrigidaBg + '';
             }
 
             // ⚠️ Usar setMaquinas(prev => ...) para garantir estado mais recente
