@@ -150,19 +150,41 @@ function NumpadModal({
   onConfirm,
   titulo,
   valorInicial,
+  modoMoeda = false,
 }: {
   open: boolean;
   onClose: () => void;
   onConfirm: (valor: string) => void;
   titulo: string;
   valorInicial: string;
+  modoMoeda?: boolean;
 }) {
+  // Em modo moeda, 'valor' guarda CENTAVOS (apenas dígitos, sem vírgula)
+  // Display mostra formatado: "R$ 1.234,56"
+  // Em modo normal, 'valor' guarda dígitos diretamente (contador de máquina)
   const [valor, setValor] = useState(valorInicial);
 
   // Atualiza valor quando modal abre ou valorInicial muda
   useEffect(() => {
-    if (open) setValor(valorInicial);
-  }, [open, valorInicial]);
+    if (open) {
+      if (modoMoeda) {
+        // Converter valorInicial (formato "1234,56") para centavos ("123456")
+        if (valorInicial && valorInicial.includes(',')) {
+          const partes = valorInicial.split(',');
+          const intPart = partes[0].replace(/\D/g, '') || '0';
+          const decPart = (partes[1] || '').replace(/\D/g, '').padEnd(2, '0').substring(0, 2);
+          setValor(intPart + decPart);
+        } else if (valorInicial) {
+          // Sem vírgula — assumir que é valor inteiro em centavos
+          setValor(valorInicial.replace(/\D/g, ''));
+        } else {
+          setValor('');
+        }
+      } else {
+        setValor(valorInicial);
+      }
+    }
+  }, [open, valorInicial, modoMoeda]);
 
   // Clique audível (vibração + beep)
   const clickSound = useCallback(() => {
@@ -187,9 +209,36 @@ function NumpadModal({
     } catch {}
   }, []);
 
+  // Formatar centavos para display "R$ 1.234,56"
+  const formatarMoeda = (centavos: string): string => {
+    if (!centavos || centavos === '') return 'R$ 0,00';
+    const num = parseInt(centavos) || 0;
+    const reais = Math.floor(num / 100);
+    const cents = num % 100;
+    // Formatar com separador de milhar (ponto) — padrão brasileiro
+    const reaisStr = reais.toLocaleString('pt-BR');
+    return `R$ ${reaisStr},${cents.toString().padStart(2, '0')}`;
+  };
+
+  // Converter centavos de volta para "1234,56" (para onConfirm)
+  const centavosParaValor = (centavos: string): string => {
+    if (!centavos || centavos === '') return '0,00';
+    const num = parseInt(centavos) || 0;
+    const reais = Math.floor(num / 100);
+    const cents = num % 100;
+    return `${reais},${cents.toString().padStart(2, '0')}`;
+  };
+
   const addDigit = (d: string) => {
     clickSound();
     setValor(prev => {
+      if (modoMoeda) {
+        // Modo moeda: dígitos deslocam para esquerda (máquininha de banco)
+        // Limite de 10 dígitos = R$ 999.999,99
+        const novo = (prev + d).slice(-10);
+        return novo;
+      }
+      // Modo normal (contador de máquina)
       if (prev === '' && d === '0') return '0';
       if (prev === '0' && d !== '') return d;
       return prev + d;
@@ -198,7 +247,13 @@ function NumpadModal({
 
   const backspace = () => {
     clickSound();
-    setValor(prev => prev.slice(0, -1));
+    setValor(prev => {
+      if (modoMoeda) {
+        // Modo moeda: remove último dígito (desloca para direita)
+        return prev.slice(0, -1);
+      }
+      return prev.slice(0, -1);
+    });
   };
 
   const clear = () => {
@@ -207,13 +262,20 @@ function NumpadModal({
   };
 
   const confirm = () => {
-    onConfirm(valor);
+    if (modoMoeda) {
+      onConfirm(centavosParaValor(valor));
+    } else {
+      onConfirm(valor);
+    }
     onClose();
   };
 
   const cancel = () => {
     onClose();
   };
+
+  // Display do valor
+  const displayValor = modoMoeda ? formatarMoeda(valor) : (valor || '0');
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) cancel(); }}>
@@ -222,11 +284,16 @@ function NumpadModal({
           <DialogTitle className="text-center text-base">{titulo}</DialogTitle>
         </DialogHeader>
 
-        {/* Display do valor */}
+        {/* Display do valor — modo moeda mostra "R$ X.XXX,XX" */}
         <div className="px-4 pb-3">
           <div className="bg-muted border border-border rounded-md h-14 flex items-center justify-end pr-4 font-mono text-2xl text-foreground">
-            {valor || <span className="text-muted-foreground/50">0</span>}
+            {displayValor}
           </div>
+          {modoMoeda && (
+            <p className="text-xs text-muted-foreground text-center mt-1">
+              Dígitos deslocam para esquerda • 2 últimas = centavos
+            </p>
+          )}
         </div>
 
         {/* Teclado numérico 3x4 */}
@@ -11146,7 +11213,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         valorInicial={numpadMaquinaId && numpadCampo ? (maquinas.find(m => m.id === numpadMaquinaId)?.[numpadCampo === 'entrada' ? 'novaEntrada' : 'novaSaida'] || '') : ''}
       />
 
-      {/* Numpad para valores de receitas/despesas */}
+      {/* Numpad para valores de receitas/despesas — modo moeda (máquininha de banco) */}
       <NumpadModal
         open={numpadValorOpen}
         onClose={() => { setNumpadValorOpen(false); setNumpadValorId(null); setNumpadValorTipo(null); }}
@@ -11160,6 +11227,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           }
         }}
         titulo={numpadValorTipo === 'receita' ? 'ENTRADA — VALOR' : 'SAÍDA — VALOR'}
+        modoMoeda={true}
         valorInicial={(() => {
           if (!numpadValorId) return '';
           if (numpadValorTipo === 'receita') {
