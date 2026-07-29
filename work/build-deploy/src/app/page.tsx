@@ -3148,6 +3148,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   // Estado para extração de leitura
   const [extraindoLeitura, setExtraindoLeitura] = useState(false);
   const [leituraExtraida, setLeituraExtraida] = useState<{ entrada: number | null; saida: number | null; confianca?: number } | null>(null);
+  const [erroLeitura, setErroLeitura] = useState<string | null>(null);
   // Estado para visualização em tela cheia
   const [fotoTelaCheia, setFotoTelaCheia] = useState(false);
   const [zoomFoto, setZoomFoto] = useState(1);
@@ -4221,6 +4222,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setMaquinaFoto(maquina);
     setFotoCapturada(maquina.fotoProcessada || null);
     setLeituraExtraida(null);
+    setErroLeitura(null);
     setFotoOrigem(maquina.fotoProcessada ? 'GALERIA' : null);
     setFotoModalOpen(true);
   };
@@ -4465,6 +4467,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     }
 
     setExtraindoLeitura(true);
+    setErroLeitura(null);
     try {
       // Usar foto original (deskew removido — estava piorando a inclinação)
       const fotoCorrigida = fotoCapturada;
@@ -4532,30 +4535,44 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       // Sempre definir os valores extraídos (mesmo que sejam null)
       console.log('Definindo leituraExtraida:', data);
-      setLeituraExtraida({
-        entrada: data.entrada,
-        saida: data.saida,
-        confianca: data.confianca || 0,
-      });
-      console.log('leituraExtraida definido com sucesso');
 
-      // ⚠️ OPÇÃO 1 — Validação de valores iguais (suspeita de erro de associação)
-      // Se ENTRADA === SAÍDA, muito provável que a IA leu o mesmo campo duas vezes
-      if (data.entrada !== null && data.saida !== null && data.entrada === data.saida) {
-        toast.warning(
-          `⚠️ Entrada e Saída com valores IGUAIS (${data.entrada}). ` +
-          `Isso pode indicar que a IA leu o mesmo campo duas vezes. ` +
-          `Verifique se os valores estão corretos antes de salvar.`,
-          { duration: 8000 }
-        );
+      // ⚠️ Validar se a IA identificou a MÁQUINA CORRETA
+      // maquinaFoto é a máquina que o usuário selecionou para lançar
+      // data.codigoMaquina é o que a IA identificou na foto
+      if (data.codigoMaquina && maquinaFoto?.codigo &&
+          data.codigoMaquina.toUpperCase() !== maquinaFoto.codigo.toUpperCase()) {
+        const msgErro = `❌ ERRO: A foto é da máquina ${data.codigoMaquina}, mas você está lançando a máquina ${maquinaFoto.codigo}. Tire a foto da máquina correta.`;
+        setErroLeitura(msgErro);
+        setLeituraExtraida(null);
+    setErroLeitura(null); // não permite aplicar valores
+        toast.error(msgErro, { duration: 10000 });
       } else if (data.entrada === null && data.saida === null) {
-        const obs = data.observacoes ? ` Detalhe: ${data.observacoes}` : '';
-        toast.warning(`Não foi possível identificar os valores na foto. Tente outra foto mais clara e certifique-se de que os rótulos "${maquinaFoto?.tipo?.nomeEntrada || 'E'}" e "${maquinaFoto?.tipo?.nomeSaida || 'S'}" estejam visíveis.${obs}`);
-      } else if ((data.confianca || 0) < 70) {
-        toast.warning(`Leitura com baixa confiança (${data.confianca || 0}%). Verifique os valores.`);
+        setErroLeitura('Não foi possível identificar os valores na foto. Tente outra foto mais clara.');
+        setLeituraExtraida(null);
+    setErroLeitura(null);
       } else {
-        toast.success(`Leitura extraída com ${data.confianca || 0}% de confiança`);
+        setErroLeitura(null);
+        setLeituraExtraida({
+          entrada: data.entrada,
+          saida: data.saida,
+          confianca: data.confianca || 0,
+        });
+
+        // ⚠️ Validação de valores iguais (suspeita de erro de associação)
+        if (data.entrada !== null && data.saida !== null && data.entrada === data.saida) {
+          toast.warning(
+            `⚠️ Entrada e Saída com valores IGUAIS (${data.entrada}). ` +
+            `Isso pode indicar que a IA leu o mesmo campo duas vezes. ` +
+            `Verifique se os valores estão corretos antes de salvar.`,
+            { duration: 8000 }
+          );
+        } else if ((data.confianca || 0) < 70) {
+          toast.warning(`Leitura com baixa confiança (${data.confianca || 0}%). Verifique os valores.`);
+        } else {
+          toast.success(`Leitura extraída com ${data.confianca || 0}% de confiança`);
+        }
       }
+      console.log('leituraExtraida definido com sucesso');
 
       if (data.observacoes) {
         console.log('Observações:', data.observacoes);
@@ -4620,6 +4637,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setFotoCapturada(null);
     setMaquinaFoto(null);
     setLeituraExtraida(null);
+    setErroLeitura(null);
     setFotoOrigem(null);
     // Limpar ref para próxima foto
     fotoComTarjaRef.current = null;
@@ -9784,6 +9802,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 setFotoModalOpen(false);
                 setFotoCapturada(null);
                 setLeituraExtraida(null);
+    setErroLeitura(null);
               }
               // Caso contrario (clique fora, ESC), nao faz nada
             } else {
@@ -9930,10 +9949,20 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         <Button
                           className="w-full mt-3 bg-gradient-to-r from-green-500 to-emerald-600"
                           onClick={aplicarLeituraExtraida}
+                          disabled={!!erroLeitura}
                         >
                           <CheckCircle className="w-4 h-4 mr-2" />
                           APLICAR VALORES
                         </Button>
+                      </div>
+                    )}
+
+                    {/* Mensagem de erro — desabilita APLICAR VALORES */}
+                    {erroLeitura && (
+                      <div className="mt-3 p-3 rounded-lg bg-destructive/10 border border-destructive/30">
+                        <p className="text-sm text-destructive text-center font-medium">
+                          {erroLeitura}
+                        </p>
                       </div>
                     )}
 
@@ -9944,6 +9973,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         onClick={() => {
                           setFotoCapturada(null);
                           setLeituraExtraida(null);
+    setErroLeitura(null);
                         }}
                       >
                         <X className="w-4 h-4 mr-2" />
@@ -9965,6 +9995,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     setFotoModalOpen(false);
                     setFotoCapturada(null);
                     setLeituraExtraida(null);
+    setErroLeitura(null);
                   }}
                 >
                   Sair
