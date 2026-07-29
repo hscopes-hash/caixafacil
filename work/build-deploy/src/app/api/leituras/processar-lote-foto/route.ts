@@ -81,6 +81,7 @@ PROCEDIMENTO (faça em silêncio, não inclua no JSON):
 4. Leia os dígitos AO LADO do rótulo correto (não do rótulo vizinho)
 5. Se ENTRADA e SAÍDA resultarem no MESMO valor, VERIFIQUE se você não está lendo o mesmo campo duas vezes
 6. Confirme que cada valor pertence ao rótulo correto e à coluna TOTAL
+7. Se o valor estiver sucedido pela sigla "BRL" no display, MULTIPLIQUE o valor por 0,01 (divida por 100) antes de retornar. Exemplo: se display mostra "9530 BRL", retorne 95 (9530 × 0,01 = 95,30 → 95). Se mostra "100 BRL", retorne 1.
 
 Para cada rótulo encontrado, leia os dígitos numéricos que aparecem ao lado/abaixo dele.
 Retorne APENAS dígitos, sem pontos e sem vírgulas. Se o display mostrar 1.234,56 retorne 123456 (ignore os separadores . e ,). Retorne o valor COMPLETO incluindo todos os dígitos visíveis (mantenha zeros à esquerda). Se ilegível, retorne null.
