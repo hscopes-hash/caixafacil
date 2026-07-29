@@ -3,14 +3,14 @@ import { db } from '@/lib/db';
 import { useAuthStore } from '@/lib/auth';
 
 // Tabelas que podem ser exportadas (apenas do cliente ativo)
+// nome = identificador usado no backup, prismaModel = nome do model no Prisma (db)
 const TABELAS_DISPONIVEIS = [
-  { nome: 'leituras', label: 'Leituras', tabela: 'leitura' },
-  { nome: 'clientes', label: 'Clientes', tabela: 'cliente' },
-  { nome: 'maquinas', label: 'Máquinas', tabela: 'maquina' },
-  { nome: 'pagamentos', label: 'Pagamentos / Contas', tabela: 'conta' },
-  { nome: 'usuarios', label: 'Usuários', tabela: 'usuario' },
-  { nome: 'tipos_maquina', label: 'Tipos de Máquina', tabela: 'tipo_maquina' },
-  { nome: 'debitos', label: 'Débitos', tabela: 'debito' },
+  { nome: 'leituras', label: 'Leituras', prismaModel: 'leitura' },
+  { nome: 'clientes', label: 'Clientes', prismaModel: 'cliente' },
+  { nome: 'maquinas', label: 'Máquinas', prismaModel: 'maquina' },
+  { nome: 'pagamentos', label: 'Pagamentos / Contas', prismaModel: 'conta' },
+  { nome: 'usuarios', label: 'Usuários', prismaModel: 'usuario' },
+  { nome: 'tipos_maquina', label: 'Tipos de Máquina', prismaModel: 'tipoMaquina' },
 ];
 
 // GET — lista tabelas disponíveis para backup
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Tabela inválida' }, { status: 400 });
     }
 
-    const prismaModel = tabelaInfo.tabela as keyof typeof db;
+    const prismaModel = tabelaInfo.prismaModel as keyof typeof db;
 
     // Buscar TODOS os registros da tabela filtrados por empresaId
     let dados: any[] = [];
