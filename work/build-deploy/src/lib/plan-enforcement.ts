@@ -3,9 +3,9 @@ import { isSuperAdmin } from '@/lib/auth';
 import type { NextRequest } from 'next/server';
 
 /**
- * Modulo central de enforcement de planos SaaS.
+ * Módulo central de enforcement de planos SaaS.
  * Verifica limites de recursos, features e status da assinatura.
- * Super administradores (nivelAcesso ADMINISTRADOR) bypassam todas as restricoes.
+ * Super administradores (nivelAcesso ADMINISTRADOR) bypassam todas as restrições.
  *
  * Uso nos endpoints:
  *   const check = await enforcePlan(empresaId, { limit: 'clientes' }, request);
@@ -39,74 +39,8 @@ let cacheResult: PlanInfo | null = null;
 let cacheTime = 0;
 const CACHE_TTL = 30_000;
 
-/**
- * Mapa de features do enum Empresa.plano (sistema legado).
- * Usado como fallback quando nao existe AssinaturaSaaS ativa.
- */
-const PLANO_LEGADO_MAP: Record<string, {
-  planoNome: string;
-  limiteClientes: number;
-  limiteUsuarios: number;
-  limiteMaquinas: number;
-  recIA: boolean;
-  recChatIA: boolean;
-  recRelatorios: boolean;
-  recBackup: boolean;
-  recAPI: boolean;
-  recSuporte: string;
-}> = {
-  BASICO: {
-    planoNome: 'Basico',
-    limiteClientes: 5,
-    limiteUsuarios: 1,
-    limiteMaquinas: 2,
-    recIA: false,
-    recChatIA: false,
-    recRelatorios: false,
-    recBackup: false,
-    recAPI: false,
-    recSuporte: 'email',
-  },
-  PROFISSIONAL: {
-    planoNome: 'Profissional',
-    limiteClientes: 100,
-    limiteUsuarios: 5,
-    limiteMaquinas: 50,
-    recIA: true,
-    recChatIA: true,
-    recRelatorios: true,
-    recBackup: true,
-    recAPI: false,
-    recSuporte: 'prioritario',
-  },
-  PREMIUM: {
-    planoNome: 'Premium',
-    limiteClientes: 500,
-    limiteUsuarios: 15,
-    limiteMaquinas: 50,
-    recIA: true,
-    recChatIA: true,
-    recRelatorios: true,
-    recBackup: true,
-    recAPI: true,
-    recSuporte: 'prioritario',
-  },
-  ENTERPRISE: {
-    planoNome: 'Enterprise',
-    limiteClientes: -1,
-    limiteUsuarios: -1,
-    limiteMaquinas: -1,
-    recIA: true,
-    recChatIA: true,
-    recRelatorios: true,
-    recBackup: true,
-    recAPI: true,
-    recSuporte: '24h',
-  },
-};
-
 async function getPlanInfo(empresaId: string, request?: NextRequest): Promise<PlanInfo | null> {
-  // Super admin: retornar plano ENTERPRISE (sem limites)
+  // Super admin: retornar plano sem limites
   if (request && await isSuperAdmin(request)) {
     return {
       planoId: '',
@@ -133,14 +67,14 @@ async function getPlanInfo(empresaId: string, request?: NextRequest): Promise<Pl
   }
 
   try {
-    // Contar recursos usados em paralelo (necessario para todos os caminhos)
+    // Contar recursos usados em paralelo
     const [usadosClientes, usadosUsuarios, usadosMaquinas] = await Promise.all([
       db.cliente.count({ where: { empresaId } }),
       db.usuario.count({ where: { empresaId } }),
       db.maquina.count({ where: { cliente: { empresaId } } }),
     ]);
 
-    // 1) Tentar buscar assinatura SaaS (sistema novo)
+    // 1) Buscar assinatura SaaS ativa da empresa
     const assinatura = await db.assinaturaSaaS.findFirst({
       where: { empresaId },
       include: { planoSaaS: true },
@@ -171,31 +105,37 @@ async function getPlanInfo(empresaId: string, request?: NextRequest): Promise<Pl
       return cacheResult;
     }
 
-    // 2) Fallback: buscar Empresa.plano (enum legado)
-    const empresa = await db.empresa.findUnique({
-      where: { id: empresaId },
-      select: { plano: true },
+    // 2) Sem assinatura SaaS: buscar plano GRATUITO no cadastro de planos
+    //    (plano gratuito deve estar cadastrado na tabela planos_saas)
+    const planoGratuito = await db.planoSaaS.findFirst({
+      where: {
+        ativo: true,
+        // Identificar plano gratuito por nome (case insensitive) ou valor 0
+        OR: [
+          { nome: { contains: 'ratur', mode: 'insensitive' } },
+          { nome: { contains: 'free', mode: 'insensitive' } },
+          { valorMensal: 0 },
+        ],
+      },
+      orderBy: { ordem: 'asc' },
     });
 
-    const planoLegado = empresa?.plano ? PLANO_LEGADO_MAP[empresa.plano] : null;
-
-    if (planoLegado) {
-      console.log(`[PLAN-ENFORCEMENT] Usando plano legado Empresa.plano=${empresa.plano} para empresa ${empresaId}`);
+    if (planoGratuito) {
       cacheKey = empresaId;
       cacheTime = now;
       cacheResult = {
-        planoId: '',
-        planoNome: planoLegado.planoNome,
-        statusAssinatura: 'ATIVA',
-        limiteClientes: planoLegado.limiteClientes,
-        limiteUsuarios: planoLegado.limiteUsuarios,
-        limiteMaquinas: planoLegado.limiteMaquinas,
-        recIA: planoLegado.recIA,
-        recChatIA: planoLegado.recChatIA,
-        recRelatorios: planoLegado.recRelatorios,
-        recBackup: planoLegado.recBackup,
-        recAPI: planoLegado.recAPI,
-        recSuporte: planoLegado.recSuporte,
+        planoId: planoGratuito.id,
+        planoNome: planoGratuito.nome,
+        statusAssinatura: 'SEM_ASSINATURA',
+        limiteClientes: planoGratuito.limiteClientes,
+        limiteUsuarios: planoGratuito.limiteUsuarios,
+        limiteMaquinas: planoGratuito.limiteMaquinas,
+        recIA: planoGratuito.recIA,
+        recChatIA: planoGratuito.recChatIA,
+        recRelatorios: planoGratuito.recRelatorios,
+        recBackup: planoGratuito.recBackup,
+        recAPI: planoGratuito.recAPI,
+        recSuporte: planoGratuito.recSuporte,
         usadosClientes,
         usadosUsuarios,
         usadosMaquinas,
@@ -203,14 +143,16 @@ async function getPlanInfo(empresaId: string, request?: NextRequest): Promise<Pl
       return cacheResult;
     }
 
-    // 3) Sem plano definido = Gratuito padrao
+    // 3) Fallback final: plano gratuito hardcoded (mínimo viável)
+    //    Só usado se não houver plano gratuito cadastrado no banco
+    console.warn('[PLAN-ENFORCEMENT] Nenhum plano gratuito cadastrado no banco. Usando fallback hardcoded.');
     cacheKey = empresaId;
     cacheTime = now;
     cacheResult = {
       planoId: '',
-      planoNome: 'Gratuito (padrao)',
+      planoNome: 'Gratuito (fallback)',
       statusAssinatura: 'SEM_ASSINATURA',
-      limiteClientes: 5,
+      limiteClientes: 3,
       limiteUsuarios: 1,
       limiteMaquinas: 2,
       recIA: false,
@@ -231,26 +173,26 @@ async function getPlanInfo(empresaId: string, request?: NextRequest): Promise<Pl
 }
 
 /**
- * Verifica se a assinatura da empresa esta ativa.
- * Super admin (ADMINISTRADOR) bypassa todas as restricoes.
+ * Verifica se a assinatura da empresa está ativa.
+ * Super admin (ADMINISTRADOR) bypassa todas as restrições.
  */
 export async function checkSubscriptionStatus(empresaId: string, request?: NextRequest): Promise<{ error?: string }> {
-  // Super admin bypassa todas as restricoes
+  // Super admin bypassa todas as restrições
   if (request && await isSuperAdmin(request)) return {};
 
   const info = await getPlanInfo(empresaId, request);
 
   if (!info) {
-    return {}; // Falha tecnica = nao bloqueia
+    return {}; // Falha técnica = não bloqueia
   }
 
   const bloqueantes = ['VENCIDA', 'CANCELADA', 'SUSPENSA'];
   if (bloqueantes.includes(info.statusAssinatura)) {
     const msg = info.statusAssinatura === 'VENCIDA'
-      ? 'Sua assinatura esta vencida. Renove para continuar usando o sistema.'
+      ? 'Sua assinatura está vencida. Renove para continuar usando o sistema.'
       : info.statusAssinatura === 'CANCELADA'
         ? 'Sua assinatura foi cancelada. Assine um plano para continuar.'
-        : 'Sua assinatura esta suspensa. Entre em contato com o suporte.';
+        : 'Sua assinatura está suspensa. Entre em contato com o suporte.';
     return { error: msg };
   }
 
@@ -259,10 +201,10 @@ export async function checkSubscriptionStatus(empresaId: string, request?: NextR
 
 /**
  * Verifica se a empresa pode criar mais um recurso do tipo especificado.
- * Super admin (ADMINISTRADOR) bypassa todas as restricoes.
+ * Super admin (ADMINISTRADOR) bypassa todas as restrições.
  */
 export async function checkLimit(empresaId: string, tipo: LimitType, request?: NextRequest): Promise<{ error?: string; usados?: number; limite?: number }> {
-  // Super admin bypassa todas as restricoes
+  // Super admin bypassa todas as restrições
   if (request && await isSuperAdmin(request)) return {};
 
   const info = await getPlanInfo(empresaId, request);
@@ -288,11 +230,11 @@ export async function checkLimit(empresaId: string, tipo: LimitType, request?: N
   if (usado >= limite) {
     const labels: Record<LimitType, string> = {
       clientes: 'clientes',
-      usuarios: 'usuarios',
-      maquinas: 'maquinas',
+      usuarios: 'usuários',
+      maquinas: 'máquinas',
     };
     return {
-      error: `Limite do plano ${info.planoNome} atingido: ${usado}/${limite} ${labels[tipo]}. Faca upgrade do plano para adicionar mais.`,
+      error: `Limite do plano ${info.planoNome} atingido: ${usado}/${limite} ${labels[tipo]}. Faça upgrade do plano para adicionar mais.`,
       usados: usado,
       limite,
     };
@@ -302,11 +244,11 @@ export async function checkLimit(empresaId: string, tipo: LimitType, request?: N
 }
 
 /**
- * Verifica se a empresa tem acesso a uma feature especifica.
- * Super admin (ADMINISTRADOR) bypassa todas as restricoes.
+ * Verifica se a empresa tem acesso a uma feature específica.
+ * Super admin (ADMINISTRADOR) bypassa todas as restrições.
  */
 export async function checkFeature(empresaId: string, feature: FeatureType, request?: NextRequest): Promise<{ error?: string }> {
-  // Super admin bypassa todas as restricoes
+  // Super admin bypassa todas as restrições
   if (request && await isSuperAdmin(request)) return {};
 
   const info = await getPlanInfo(empresaId, request);
@@ -325,12 +267,12 @@ export async function checkFeature(empresaId: string, feature: FeatureType, requ
     const labels: Record<FeatureType, string> = {
       recIA: 'IA Vision (OCR)',
       recChatIA: 'Chat IA (assistente)',
-      recRelatorios: 'Relatorios avancados',
-      recBackup: 'Backup automatico',
+      recRelatorios: 'Relatórios avançados',
+      recBackup: 'Backup automático',
       recAPI: 'API dedicada',
     };
     return {
-      error: `O recurso "${labels[feature]}" nao esta disponivel no seu plano (${info.planoNome}). Faca upgrade para acessar.`,
+      error: `O recurso "${labels[feature]}" não está disponível no seu plano (${info.planoNome}). Faça upgrade para acessar.`,
     };
   }
 
@@ -338,8 +280,8 @@ export async function checkFeature(empresaId: string, feature: FeatureType, requ
 }
 
 /**
- * Verificacao completa: status + limite de recurso + feature.
- * Super admin (ADMINISTRADOR) bypassa todas as restricoes.
+ * Verificação completa: status + limite de recurso + feature.
+ * Super admin (ADMINISTRADOR) bypassa todas as restrições.
  */
 export async function enforcePlan(
   empresaId: string,
@@ -349,7 +291,7 @@ export async function enforcePlan(
   },
   request?: NextRequest,
 ): Promise<{ error?: string }> {
-  // Super admin bypassa todas as restricoes (check rapido, antes de qualquer query)
+  // Super admin bypassa todas as restrições (check rápido, antes de qualquer query)
   if (request && await isSuperAdmin(request)) return {};
 
   // 1) Verificar status da assinatura
