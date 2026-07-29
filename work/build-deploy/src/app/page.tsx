@@ -13888,6 +13888,125 @@ function ConfiguracoesEmpresaPage({ empresaId }: { empresaId: string }) {
 // ============================================
 // CONFIGURACOES PAGE (SuperAdmin — IA, Impressora, etc.)
 // ============================================
+// ============================================
+// BACKUP E RESTORE — componente reutilizável
+// ============================================
+function BackupRestoreCard({ empresaId }: { empresaId: string }) {
+  const [tabelas, setTabelas] = useState<{ nome: string; label: string }[]>([]);
+  const [tabelaSelecionada, setTabelaSelecionada] = useState('');
+  const [exportando, setExportando] = useState(false);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/backup')
+      .then(r => r.json())
+      .then(data => {
+        setTabelas(data.tabelas || []);
+        setCarregando(false);
+      })
+      .catch(() => setCarregando(false));
+  }, []);
+
+  const exportarTabela = async () => {
+    if (!tabelaSelecionada) {
+      toast.error('Selecione uma tabela');
+      return;
+    }
+
+    setExportando(true);
+    try {
+      const res = await fetch('/api/backup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tabela: tabelaSelecionada, empresaId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao exportar');
+
+      // Criar arquivo JSON para download
+      const jsonStr = JSON.stringify(data, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `backup_${tabelaSelecionada}_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success(`${data.totalRegistros} registro(s) exportado(s) da tabela ${data.label}`);
+    } catch (error) {
+      console.error('Erro ao exportar:', error);
+      toast.error(error instanceof Error ? error.message : 'Erro ao exportar');
+    } finally {
+      setExportando(false);
+    }
+  };
+
+  if (carregando) {
+    return (
+      <Card className="border-blue-500/30 bg-gradient-to-r from-blue-500/5 to-cyan-500/5">
+        <CardContent className="p-4">
+          <p className="text-sm text-muted-foreground">Carregando tabelas...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="border-blue-500/30 bg-gradient-to-r from-blue-500/5 to-cyan-500/5">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <DatabaseBackup className="w-5 h-5 text-blue-500" />
+          Backup de Dados
+        </CardTitle>
+        <CardDescription className="text-sm">
+          Exporte os dados de uma tabela do cliente ativo para um arquivo local
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="space-y-2">
+          <Label className="text-sm">Selecione a tabela</Label>
+          <Select value={tabelaSelecionada} onValueChange={setTabelaSelecionada}>
+            <SelectTrigger className="bg-muted border-border">
+              <SelectValue placeholder="Escolha uma tabela..." />
+            </SelectTrigger>
+            <SelectContent>
+              {tabelas.map((t) => (
+                <SelectItem key={t.nome} value={t.nome}>
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button
+          onClick={exportarTabela}
+          disabled={!tabelaSelecionada || exportando}
+          className="w-full bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white"
+        >
+          {exportando ? (
+            <>
+              <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Exportando...
+            </>
+          ) : (
+            <>
+              <Download className="w-4 h-4 mr-2" />
+              Exportar Tabela Selecionada
+            </>
+          )}
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          O arquivo será salvo no seu dispositivo em formato JSON com todos os registros da tabela selecionada.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ConfiguracoesPage({ empresaId, onShowGestao }: { empresaId: string; onShowGestao: () => void }) {
   const { updateEmpresa } = useAuthStore();
   const [llmApiKey, setLlmApiKey] = useState('');
@@ -14458,6 +14577,12 @@ function ConfiguracoesPage({ empresaId, onShowGestao }: { empresaId: string; onS
       <div className="pt-4">
         <Separator className="bg-border mb-6" />
         <GestaoPlanosSaaS />
+      </div>
+
+      {/* Backup e Restore */}
+      <div className="pt-4">
+        <Separator className="bg-border mb-6" />
+        <BackupRestoreCard empresaId={empresaId} />
       </div>
 
       {/* Gestão de Empresas */}

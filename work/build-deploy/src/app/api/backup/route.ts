@@ -1,151 +1,78 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { enforcePlan } from '@/lib/plan-enforcement';
+import { useAuthStore } from '@/lib/auth';
 
-// Exportar todos os dados da empresa como JSON (Backup)
+// Tabelas que podem ser exportadas (apenas do cliente ativo)
+const TABELAS_DISPONIVEIS = [
+  { nome: 'leituras', label: 'Leituras', tabela: 'leitura' },
+  { nome: 'clientes', label: 'Clientes', tabela: 'cliente' },
+  { nome: 'maquinas', label: 'Máquinas', tabela: 'maquina' },
+  { nome: 'pagamentos', label: 'Pagamentos / Contas', tabela: 'conta' },
+  { nome: 'usuarios', label: 'Usuários', tabela: 'usuario' },
+  { nome: 'tipos_maquina', label: 'Tipos de Máquina', tabela: 'tipo_maquina' },
+  { nome: 'debitos', label: 'Débitos', tabela: 'debito' },
+];
+
+// GET — lista tabelas disponíveis para backup
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const empresaId = searchParams.get('empresaId');
+    return NextResponse.json({
+      tabelas: TABELAS_DISPONIVEIS.map(t => ({ nome: t.nome, label: t.label })),
+    });
+  } catch (error) {
+    console.error('[BACKUP] Erro ao listar tabelas:', error);
+    return NextResponse.json({ error: 'Erro ao listar tabelas' }, { status: 500 });
+  }
+}
+
+// POST — exporta dados de uma tabela específica do cliente ativo
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { tabela: tabelaNome, empresaId } = body;
+
+    if (!tabelaNome) {
+      return NextResponse.json({ error: 'Tabela não especificada' }, { status: 400 });
+    }
 
     if (!empresaId) {
-      return NextResponse.json(
-        { error: 'ID da empresa é obrigatório' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'empresaId é obrigatório' }, { status: 400 });
     }
 
-    // Verificar acesso ao recurso de backup
-    const planCheck = await enforcePlan(empresaId, { feature: 'recBackup' }, request);
-    if (planCheck.error) {
-      return NextResponse.json({ error: planCheck.error }, { status: 403 });
+    const tabelaInfo = TABELAS_DISPONIVEIS.find(t => t.nome === tabelaNome);
+    if (!tabelaInfo) {
+      return NextResponse.json({ error: 'Tabela inválida' }, { status: 400 });
     }
 
-    // Verificar se a empresa existe
-    const empresa = await db.empresa.findUnique({
-      where: { id: empresaId },
+    const prismaModel = tabelaInfo.tabela as keyof typeof db;
+
+    // Buscar TODOS os registros da tabela filtrados por empresaId
+    // (exceto usuarios que filtra por empresaId, e tipos_maquina que é global)
+    let dados: any[] = [];
+    const model = db[prismaModel] as any;
+
+    if (tabelaNome === 'usuarios') {
+      dados = await model.findMany({ where: { empresaId } });
+    } else if (tabelaNome === 'tipos_maquina') {
+      // Tipos de máquina são globais (não filtrados por empresa)
+      dados = await model.findMany();
+    } else {
+      dados = await model.findMany({ where: { empresaId } });
+    }
+
+    console.log(`[BACKUP] Tabela ${tabelaNome}: ${dados.length} registros exportados (empresaId=${empresaId})`);
+
+    return NextResponse.json({
+      success: true,
+      tabela: tabelaNome,
+      label: tabelaInfo.label,
+      totalRegistros: dados.length,
+      dados,
+      exportadoEm: new Date().toISOString(),
     });
-
-    if (!empresa) {
-      return NextResponse.json(
-        { error: 'Empresa não encontrada' },
-        { status: 404 }
-      );
-    }
-
-    // Exportar todos os dados da empresa em ordem de dependência
-    const [
-      tiposMaquina,
-      clientes,
-      usuarios,
-      maquinas,
-      assinaturas,
-      pagamentos,
-      faturamentos,
-      leituras,
-      logsAcesso,
-    ] = await Promise.all([
-      // Tipos de Máquina (sem dependências)
-      db.tipoMaquina.findMany({
-        where: { empresaId },
-        orderBy: { descricao: 'asc' },
-      }),
-      // Clientes (depende da empresa)
-      db.cliente.findMany({
-        where: { empresaId },
-        orderBy: { nome: 'asc' },
-      }),
-      // Usuários (depende da empresa)
-      db.usuario.findMany({
-        where: { empresaId },
-        orderBy: { nome: 'asc' },
-      }),
-      // Máquinas (depende de cliente e tipo)
-      db.maquina.findMany({
-        where: { cliente: { empresaId } },
-        orderBy: { codigo: 'asc' },
-      }),
-      // Assinaturas (depende de cliente)
-      db.assinatura.findMany({
-        where: { cliente: { empresaId } },
-        orderBy: { dataInicio: 'desc' },
-      }),
-      // Pagamentos (depende de cliente)
-      db.pagamento.findMany({
-        where: { cliente: { empresaId } },
-        orderBy: { dataVencimento: 'desc' },
-      }),
-      // Faturamentos (depende de máquina)
-      db.faturamento.findMany({
-        where: { maquina: { cliente: { empresaId } } },
-        orderBy: { dataReferencia: 'desc' },
-      }),
-      // Leituras (depende de máquina, cliente, usuário)
-      db.leitura.findMany({
-        where: { cliente: { empresaId } },
-        orderBy: { dataLeitura: 'desc' },
-      }),
-      // Logs de Acesso (depende de usuário)
-      db.logAcesso.findMany({
-        where: { usuario: { empresaId } },
-        orderBy: { createdAt: 'desc' },
-      }),
-    ]);
-
-    const backupData = {
-      versao: '2.7.0.0',
-      dataBackup: new Date().toISOString(),
-      empresa: {
-        id: empresa.id,
-        nome: empresa.nome,
-        cnpj: empresa.cnpj,
-        email: empresa.email,
-        telefone: empresa.telefone,
-        endereco: empresa.endereco,
-        cidade: empresa.cidade,
-        estado: empresa.estado,
-        logo: empresa.logo,
-        ativa: empresa.ativa,
-        plano: empresa.plano,
-        dataVencimento: empresa.dataVencimento?.toISOString() || null,
-        isDemo: empresa.isDemo,
-        diasDemo: empresa.diasDemo,
-        bloqueada: empresa.bloqueada,
-        motivoBloqueio: empresa.motivoBloqueio,
-      },
-      resumo: {
-        tiposMaquina: tiposMaquina.length,
-        clientes: clientes.length,
-        usuarios: usuarios.length,
-        maquinas: maquinas.length,
-        assinaturas: assinaturas.length,
-        pagamentos: pagamentos.length,
-        faturamentos: faturamentos.length,
-        leituras: leituras.length,
-        logsAcesso: logsAcesso.length,
-      },
-      dados: {
-        tiposMaquina,
-        clientes,
-        usuarios: usuarios.map(u => ({
-          ...u,
-          senha: undefined, // Não exportar senhas por segurança
-        })),
-        maquinas,
-        assinaturas,
-        pagamentos,
-        faturamentos,
-        leituras,
-        logsAcesso,
-      },
-    };
-
-    return NextResponse.json(backupData);
   } catch (error) {
-    console.error('Erro ao gerar backup:', error);
-    return NextResponse.json(
-      { error: 'Erro ao gerar backup dos dados' },
-      { status: 500 }
-    );
+    console.error('[BACKUP] Erro ao exportar:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+    return NextResponse.json({ error: `Erro ao exportar: ${errorMessage}` }, { status: 500 });
   }
 }
