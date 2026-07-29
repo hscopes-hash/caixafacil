@@ -4655,9 +4655,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const url = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => {
-        // 1280px + JPEG 0.85 — suficiente para OCR de displays com dígitos pequenos
-        // (revertido de 800px/0.6 que causava erros em fotos tela cheia)
-        const maxDim = 1280;
+        // Lote: 800px + JPEG 0.7 — otimizado para volume (30+ fotos)
+        // Reduz memória de ~15MB para ~4MB com 30 fotos
+        const maxDim = 800;
         let w = img.width, h = img.height;
         if (w > maxDim || h > maxDim) {
           if (w > h) { h = Math.round((h / w) * maxDim); w = maxDim; }
@@ -4668,7 +4668,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, w, h);
-          const base64 = canvas.toDataURL('image/jpeg', 0.85);
+          const base64 = canvas.toDataURL('image/jpeg', 0.7);
+          // Limpar canvas da memória imediatamente
+          canvas.width = 0;
+          canvas.height = 0;
           setFotosLote(prev => [...prev, {
             id: `lote_${++loteIdCounter.current}_${Date.now()}`,
             imagem: base64,
@@ -5243,17 +5246,31 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     // ⚠️ LIBERAR MEMÓRIA — remover string base64 da foto processada
     // Após processar, a imagem original não é mais necessária (só o resultado)
     // Isso evita estouro de memória ao processar 4+ fotos (crash do browser)
-    setFotosLote(prev => prev.map(f =>
-      f.id === fotoId && (f.status === 'concluido' || f.status === 'erro')
-        ? { ...f, imagem: '' } // limpar string base64 grande (~200-500KB cada)
-        : f
-    ));
+    setFotosLote(prev => prev.map(f => {
+      if (f.id === fotoId && (f.status === 'concluido' || f.status === 'erro')) {
+        return { ...f, imagem: '' }; // limpar string base64 grande (~200-500KB cada)
+      }
+      // Limpar fotoProcessadaThumb de fotos concluídas há mais de 5 fotos
+      // (mantém apenas as mais recentes para referência visual)
+      return f;
+    }));
+
+    // Limpar thumbnails de fotos antigas (manter apenas as 5 mais recentes)
+    setFotosLote(prev => {
+      const concluidas = prev.filter(f => f.status === 'concluido');
+      if (concluidas.length > 5) {
+        const paraLimpar = concluidas.slice(0, concluidas.length - 5);
+        const idsParaLimpar = new Set(paraLimpar.map(f => f.id));
+        return prev.map(f => idsParaLimpar.has(f.id) ? { ...f, fotoProcessadaThumb: undefined } : f);
+      }
+      return prev;
+    });
   };
 
   // Efeito: processar automaticamente fotos pendentes em segundo plano
   // Delay de 2s entre fotos (reduzido: agora é 1 chamada IA por foto, antes eram 2)
   const ultimaFotoProcessadaRef = useRef<number>(0);
-  const DELAY_ENTRE_FOTOS = 0; // Sem delay — processa imediatamente
+  const DELAY_ENTRE_FOTOS = 500; // 500ms entre fotos — reduz pressão de memória
 
   useEffect(() => {
     const pendentes = fotosLote.filter(f => f.status === 'pendente');
