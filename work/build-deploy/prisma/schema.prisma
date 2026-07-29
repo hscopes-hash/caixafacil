@@ -160,6 +160,7 @@ model TipoMaquina {
   nomeSaida        String   @default("S")
   ativo            Boolean  @default(true)
   classe           Int      @default(0) // 0=primária, 1=secundária
+  complementoPrompt String? // Instrução adicional para o prompt de OCR
   empresaId        String
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

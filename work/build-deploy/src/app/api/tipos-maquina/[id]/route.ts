@@ -52,7 +52,7 @@ export async function PUT(
     await ensureSchema();
     const { id } = await params;
     const body = await request.json();
-    const { descricao, nomeEntrada, nomeSaida, ativo, classe } = body;
+    const { descricao, nomeEntrada, nomeSaida, ativo, classe, complementoPrompt } = body;
 
     const tipo = await db.tipoMaquina.update({
       where: { id },
@@ -62,6 +62,7 @@ export async function PUT(
         nomeSaida,
         ativo,
         classe: classe ?? 0,
+        complementoPrompt: complementoPrompt || null,
       },
     });
 

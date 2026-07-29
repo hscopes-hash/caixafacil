@@ -53,7 +53,8 @@ TAREFA 2 — LER VALORES DO DISPLAY:
 Se a máquina foi identificada, localize no display os textos de ENTRADA e SAÍDA da máquina encontrada:
 ${codigosMaquinas.map((c: string) => {
   const info = mapaModelos[c];
-  return `  - Código "${c}": rótulo entrada="${info?.nomeEntrada || 'E'}", rótulo saída="${info?.nomeSaida || 'S'}"`;
+  const compl = info?.complementoPrompt ? ` (instrução especial: ${info.complementoPrompt})` : '';
+  return `  - Código "${c}": rótulo entrada="${info?.nomeEntrada || 'E'}", rótulo saída="${info?.nomeSaida || 'S'}"${compl}`;
 }).join('\n')}
 
 ⚠️ POSIÇÃO ESPACIAL DOS RÓTULOS — MUITO IMPORTANTE:

@@ -4476,11 +4476,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       // — prompt estruturado (identifica máquina + lê valores) e temperature 0.05
       const token = useAuthStore.getState().token;
       const codigosMaquinas = maquinas.map(m => m.codigo);
-      const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string }> = {};
+      const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string; complementoPrompt?: string }> = {};
       maquinas.forEach(m => {
         modelosMap[m.codigo] = {
           nomeEntrada: m.tipo?.nomeEntrada || 'E',
           nomeSaida: m.tipo?.nomeSaida || 'S',
+          complementoPrompt: (m.tipo as any)?.complementoPrompt || undefined,
         };
       });
 
@@ -4703,11 +4704,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     try {
     // Preparar lista de códigos de máquinas e mapa de nomes E/S
     const codigosMaquinas = maquinas.map(m => m.codigo);
-    const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string }> = {};
+    const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string; complementoPrompt?: string }> = {};
     maquinas.forEach(m => {
       modelosMap[m.codigo] = {
         nomeEntrada: m.tipo?.nomeEntrada || 'E',
         nomeSaida: m.tipo?.nomeSaida || 'S',
+        complementoPrompt: (m.tipo as any)?.complementoPrompt || undefined,
       };
     });
 
@@ -5080,11 +5082,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     }
 
     const codigosMaquinas = currentMaquinas.map(m => m.codigo);
-    const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string }> = {};
+    const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string; complementoPrompt?: string }> = {};
     currentMaquinas.forEach(m => {
       modelosMap[m.codigo] = {
         nomeEntrada: m.tipo?.nomeEntrada || 'E',
         nomeSaida: m.tipo?.nomeSaida || 'S',
+        complementoPrompt: (m.tipo as any)?.complementoPrompt || undefined,
       };
     });
     let maquinasSnapshot = [...currentMaquinas];
@@ -5245,26 +5248,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
     // ⚠️ LIBERAR MEMÓRIA — remover string base64 da foto processada
     // Após processar, a imagem original não é mais necessária (só o resultado)
-    // Isso evita estouro de memória ao processar 4+ fotos (crash do browser)
-    setFotosLote(prev => prev.map(f => {
-      if (f.id === fotoId && (f.status === 'concluido' || f.status === 'erro')) {
-        return { ...f, imagem: '' }; // limpar string base64 grande (~200-500KB cada)
-      }
-      // Limpar fotoProcessadaThumb de fotos concluídas há mais de 5 fotos
-      // (mantém apenas as mais recentes para referência visual)
-      return f;
-    }));
-
-    // Limpar thumbnails de fotos antigas (manter apenas as 5 mais recentes)
-    setFotosLote(prev => {
-      const concluidas = prev.filter(f => f.status === 'concluido');
-      if (concluidas.length > 5) {
-        const paraLimpar = concluidas.slice(0, concluidas.length - 5);
-        const idsParaLimpar = new Set(paraLimpar.map(f => f.id));
-        return prev.map(f => idsParaLimpar.has(f.id) ? { ...f, fotoProcessadaThumb: undefined } : f);
-      }
-      return prev;
-    });
+    // Card agora mostra ícone OK/erro em vez de thumbnail (economiza memória)
+    setFotosLote(prev => prev.map(f =>
+      f.id === fotoId && (f.status === 'concluido' || f.status === 'erro')
+        ? { ...f, imagem: '', fotoProcessadaThumb: undefined }
+        : f
+    ));
   };
 
   // Efeito: processar automaticamente fotos pendentes em segundo plano
@@ -9644,11 +9633,26 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                             'bg-muted border-border'
                           }`}
                         >
-                          <img
-                            src={foto.fotoProcessadaThumb || foto.imagem}
-                            alt={`Foto ${idx + 1}`}
-                            className="w-14 h-14 object-cover rounded border border-border flex-shrink-0"
-                          />
+                          {/* Thumbnail ou ícone conforme status — economiza memória */}
+                          {foto.status === 'concluido' ? (
+                            <div className="w-14 h-14 flex items-center justify-center rounded border border-success/30 bg-success/10 flex-shrink-0">
+                              <CheckCircle className="w-7 h-7 text-success" />
+                            </div>
+                          ) : foto.status === 'erro' ? (
+                            <div className="w-14 h-14 flex items-center justify-center rounded border border-danger/30 bg-danger/10 flex-shrink-0">
+                              <XCircle className="w-7 h-7 text-danger" />
+                            </div>
+                          ) : foto.status === 'processando' ? (
+                            <div className="w-14 h-14 flex items-center justify-center rounded border border-amber-500/30 bg-amber-500/10 flex-shrink-0">
+                              <div className="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                            </div>
+                          ) : (
+                            <img
+                              src={foto.imagem}
+                              alt={`Foto ${idx + 1}`}
+                              className="w-14 h-14 object-cover rounded border border-border flex-shrink-0"
+                            />
+                          )}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between">
                               <p className="text-sm font-medium text-foreground">Foto {idx + 1}</p>
@@ -11303,6 +11307,7 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
     nomeEntrada: 'E',
     nomeSaida: 'S',
     classe: 0,
+    complementoPrompt: '',
   });
 
   useEffect(() => {
@@ -11387,6 +11392,7 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
       nomeEntrada: 'E',
       nomeSaida: 'S',
       classe: 0,
+      complementoPrompt: '',
     });
     setTipoEditando(null);
   };
@@ -11398,6 +11404,7 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
       nomeEntrada: tipo.nomeEntrada || 'E',
       nomeSaida: tipo.nomeSaida || 'S',
       classe: tipo.classe ?? 0,
+      complementoPrompt: (tipo as any).complementoPrompt || '',
     });
     setDialogOpen(true);
   };
@@ -11471,6 +11478,17 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
                   <option value={0}>Primária</option>
                   <option value={1}>Secundária</option>
                 </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Complemento do Prompt (OCR)</Label>
+                <Textarea
+                  value={formData.complementoPrompt}
+                  onChange={(e) => setFormData({ ...formData, complementoPrompt: e.target.value })}
+                  placeholder="Instrução adicional para a IA. Ex: quando o valor terminar com .00, ignore esses dígitos."
+                  className="bg-muted border-border text-sm"
+                  rows={2}
+                />
+                <p className="text-xs text-muted-foreground">Instrução extra enviada à IA Vision ao ler este tipo de máquina. Deixe vazio se não precisar.</p>
               </div>
             </div>
             <DialogFooter>
