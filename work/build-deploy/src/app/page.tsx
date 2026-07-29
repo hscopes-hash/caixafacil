@@ -11323,7 +11323,7 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
     if (!confirm(`Deseja excluir o tipo "${tipo.descricao}"?`)) return;
 
     try {
-      const res = await fetch(`/api/tipos-maquina/${tipo.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/tipos-maquina/${tipo.id}?empresaId=${empresaId}`, { method: 'DELETE' });
       const data = await res.json();
 
       if (!res.ok) throw new Error(data.error);
