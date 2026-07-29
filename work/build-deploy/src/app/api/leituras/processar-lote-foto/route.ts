@@ -65,12 +65,22 @@ Os rótulos de ENTRADA e SAÍDA estão em POSIÇÕES FIXAS no display:
 - SÓ DEPOIS leia os dígitos ao lado de cada rótulo
 - Se dois valores parecem iguais, VERIFIQUE se você está lendo o rótulo correto
 
+⚠️ COLUNAS PARCIAL E TOTAL — MUITO IMPORTANTE:
+Alguns displays mostram DUAS colunas de valores para cada rótulo:
+- Coluna "PARCIAL" (valor do período atual, geralmente MENOR)
+- Coluna "TOTAL" (valor acumulado, geralmente MAIOR)
+- SEMPRE retorne o valor da coluna TOTAL (NÃO o parcial)
+- Se houver apenas uma coluna de valor, retorne esse valor
+- Se houver duas colunas e não estiver claro qual é TOTAL, retorne o MAIOR dos dois valores
+- Os rótulos podem ser JOGADO (entrada), GANHO (saída), ENTRADAS, SAIDAS, etc.
+
 PROCEDIMENTO (faça em silêncio, não inclua no JSON):
 1. Localize TODOS os rótulos visíveis no display
 2. Para cada rótulo, identifique se é ENTRADA ou SAÍDA pela palavra escrita
-3. Leia os dígitos AO LADO do rótulo correto (não do rótulo vizinho)
-4. Se ENTRADA e SAÍDA resultarem no MESMO valor, VERIFIQUE se você não está lendo o mesmo campo duas vezes
-5. Confirme que cada valor pertence ao rótulo correto
+3. Verifique se há colunas PARCIAL e TOTAL — se sim, use SEMPRE a coluna TOTAL
+4. Leia os dígitos AO LADO do rótulo correto (não do rótulo vizinho)
+5. Se ENTRADA e SAÍDA resultarem no MESMO valor, VERIFIQUE se você não está lendo o mesmo campo duas vezes
+6. Confirme que cada valor pertence ao rótulo correto e à coluna TOTAL
 
 Para cada rótulo encontrado, leia os dígitos numéricos que aparecem ao lado/abaixo dele.
 Retorne APENAS dígitos, sem pontos e sem vírgulas. Se o display mostrar 1.234,56 retorne 123456 (ignore os separadores . e ,). Retorne o valor COMPLETO incluindo todos os dígitos visíveis (mantenha zeros à esquerda). Se ilegível, retorne null.
