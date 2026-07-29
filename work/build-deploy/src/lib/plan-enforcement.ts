@@ -105,7 +105,28 @@ const PLANO_LEGADO_MAP: Record<string, {
   },
 };
 
-async function getPlanInfo(empresaId: string): Promise<PlanInfo | null> {
+async function getPlanInfo(empresaId: string, request?: NextRequest): Promise<PlanInfo | null> {
+  // Super admin: retornar plano ENTERPRISE (sem limites)
+  if (request && await isSuperAdmin(request)) {
+    return {
+      planoId: '',
+      planoNome: 'Super Admin (sem limites)',
+      statusAssinatura: 'ATIVA',
+      limiteClientes: -1,
+      limiteUsuarios: -1,
+      limiteMaquinas: -1,
+      recIA: true,
+      recChatIA: true,
+      recRelatorios: true,
+      recBackup: true,
+      recAPI: true,
+      recSuporte: '24h',
+      usadosClientes: 0,
+      usadosUsuarios: 0,
+      usadosMaquinas: 0,
+    };
+  }
+
   const now = Date.now();
   if (cacheKey === empresaId && cacheResult && now - cacheTime < CACHE_TTL) {
     return cacheResult;
@@ -217,7 +238,7 @@ export async function checkSubscriptionStatus(empresaId: string, request?: NextR
   // Super admin bypassa todas as restricoes
   if (request && await isSuperAdmin(request)) return {};
 
-  const info = await getPlanInfo(empresaId);
+  const info = await getPlanInfo(empresaId, request);
 
   if (!info) {
     return {}; // Falha tecnica = nao bloqueia
@@ -244,7 +265,7 @@ export async function checkLimit(empresaId: string, tipo: LimitType, request?: N
   // Super admin bypassa todas as restricoes
   if (request && await isSuperAdmin(request)) return {};
 
-  const info = await getPlanInfo(empresaId);
+  const info = await getPlanInfo(empresaId, request);
 
   if (!info) return {};
 
@@ -288,7 +309,7 @@ export async function checkFeature(empresaId: string, feature: FeatureType, requ
   // Super admin bypassa todas as restricoes
   if (request && await isSuperAdmin(request)) return {};
 
-  const info = await getPlanInfo(empresaId);
+  const info = await getPlanInfo(empresaId, request);
 
   if (!info) return {};
 
@@ -353,6 +374,6 @@ export async function enforcePlan(
 /**
  * Retorna info completa do plano para uso no frontend.
  */
-export async function getPlanInfoForFrontend(empresaId: string): Promise<PlanInfo | null> {
-  return getPlanInfo(empresaId);
+export async function getPlanInfoForFrontend(empresaId: string, request?: NextRequest): Promise<PlanInfo | null> {
+  return getPlanInfo(empresaId, request);
 }
