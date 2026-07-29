@@ -4515,7 +4515,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           usuarioNome,
           data.entrada,
           data.saida,
-          fotoOrigem
+          fotoOrigem,
+          data.codigoMaquina || null
         );
         setFotoCapturada(fotoComTarja);
         // ⚠️ Armazena em ref para evitar race condition com estado assíncrono
@@ -4749,7 +4750,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               usuarioNome,
               data.entrada ?? null,
               data.saida ?? null,
-              foto.origem || 'LOTE'
+              foto.origem || 'LOTE',
+              data.codigoMaquina || null
             );
           } catch (err) {
             console.warn(`[Lote] Falha ao gerar tarja para thumbnail:`, err);
@@ -4944,7 +4946,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             usuarioNome,
             r.entrada ?? null,
             r.saida ?? null,
-            foto.origem || 'LOTE'
+            foto.origem || 'LOTE',
+            r.codigoMaquina || null
           );
           // Converter para File
           const response = await fetch(fotoComTarja);
@@ -5122,7 +5125,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             usuarioNome,
             data.entrada ?? null,
             data.saida ?? null,
-            'LOTE'
+            'LOTE',
+            data.codigoMaquina || null
           );
         } catch (err) {
           console.warn(`[Lote BG] Falha ao gerar tarja para thumbnail:`, err);
@@ -5470,7 +5474,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     operador: string,
     entrada: number | null,
     saida: number | null,
-    origem: 'CÂMERA' | 'GALERIA' | 'LOTE' | null = null
+    origem: 'CÂMERA' | 'GALERIA' | 'LOTE' | null = null,
+    numeroMaquina?: string | null
   ): Promise<string> => {
     return new Promise((resolve, reject) => {
       // Timeout de segurança (10 segundos)
@@ -5548,10 +5553,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           const entradaStr = String(entrada ?? '-');
           const saidaStr = String(saida ?? '-');
           const origemStr = origem || '-';
+          const numMaquinaStr = numeroMaquina || '-';
 
           // Medir largura de cada texto para posicionar colunas
-          const cabecalhos = ['Data Hora          ', 'Operador', 'ENTR', 'SAÍDA', 'Origem'];
-          const valores = [data, usuarioLimitado, entradaStr, saidaStr, origemStr];
+          const cabecalhos = ['Data Hora          ', 'NUM', 'Operador', 'ENTR', 'SAÍDA', 'Origem'];
+          const valores = [data, numMaquinaStr, usuarioLimitado, entradaStr, saidaStr, origemStr];
 
           // Medir a largura de cada cabeçalho (com fonte maior) e valor (com fonte normal)
           const largurasCab = cabecalhos.map(t => ctx.measureText(t).width);
