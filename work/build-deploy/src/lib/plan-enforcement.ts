@@ -332,18 +332,18 @@ export async function enforcePlan(
   if (request && await isSuperAdmin(request)) return {};
 
   // 1) Verificar status da assinatura
-  const statusCheck = await checkSubscriptionStatus(empresaId);
+  const statusCheck = await checkSubscriptionStatus(empresaId, request);
   if (statusCheck.error) return statusCheck;
 
   // 2) Verificar limite de recurso
   if (options?.limit) {
-    const limitCheck = await checkLimit(empresaId, options.limit);
+    const limitCheck = await checkLimit(empresaId, options.limit, request);
     if (limitCheck.error) return limitCheck;
   }
 
   // 3) Verificar feature
   if (options?.feature) {
-    const featureCheck = await checkFeature(empresaId, options.feature);
+    const featureCheck = await checkFeature(empresaId, options.feature, request);
     if (featureCheck.error) return featureCheck;
   }
 
