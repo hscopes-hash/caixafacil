@@ -13895,7 +13895,9 @@ function BackupRestoreCard({ empresaId }: { empresaId: string }) {
   const [tabelas, setTabelas] = useState<{ nome: string; label: string }[]>([]);
   const [tabelaSelecionada, setTabelaSelecionada] = useState('');
   const [exportando, setExportando] = useState(false);
+  const [importando, setImportando] = useState(false);
   const [carregando, setCarregando] = useState(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch('/api/backup')
@@ -13945,6 +13947,46 @@ function BackupRestoreCard({ empresaId }: { empresaId: string }) {
     }
   };
 
+  const importarArquivo = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImportando(true);
+    try {
+      const text = await file.text();
+      const backup = JSON.parse(text);
+
+      if (!backup.tabela || !backup.dados || !Array.isArray(backup.dados)) {
+        throw new Error('Arquivo de backup inválido');
+      }
+
+      const res = await fetch('/api/backup/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tabela: backup.tabela,
+          empresaId,
+          dados: backup.dados,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao importar');
+
+      toast.success(
+        `${data.importados} importado(s), ${data.pulados} já existiam, ${data.erros} erro(s)`,
+        { duration: 6000 }
+      );
+    } catch (error) {
+      console.error('Erro ao importar:', error);
+      toast.error(error instanceof Error ? error.message : 'Erro ao importar');
+    } finally {
+      setImportando(false);
+      // Limpar input para permitir reimportar o mesmo arquivo
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   if (carregando) {
     return (
       <Card className="border-blue-500/30 bg-gradient-to-r from-blue-500/5 to-cyan-500/5">
@@ -13960,18 +14002,19 @@ function BackupRestoreCard({ empresaId }: { empresaId: string }) {
       <CardHeader className="pb-3">
         <CardTitle className="text-base font-semibold flex items-center gap-2">
           <DatabaseBackup className="w-5 h-5 text-blue-500" />
-          Backup de Dados
+          Backup e Restauração de Dados
         </CardTitle>
         <CardDescription className="text-sm">
-          Exporte os dados de uma tabela do cliente ativo para um arquivo local
+          Exporte dados de uma tabela ou importe de outra empresa
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
+        {/* Exportar */}
         <div className="space-y-2">
-          <Label className="text-sm">Selecione a tabela</Label>
+          <Label className="text-sm font-semibold">Exportar (Backup)</Label>
           <Select value={tabelaSelecionada} onValueChange={setTabelaSelecionada}>
             <SelectTrigger className="bg-muted border-border">
-              <SelectValue placeholder="Escolha uma tabela..." />
+              <SelectValue placeholder="Escolha uma tabela para exportar..." />
             </SelectTrigger>
             <SelectContent>
               {tabelas.map((t) => (
@@ -13981,26 +14024,63 @@ function BackupRestoreCard({ empresaId }: { empresaId: string }) {
               ))}
             </SelectContent>
           </Select>
+          <Button
+            onClick={exportarTabela}
+            disabled={!tabelaSelecionada || exportando}
+            className="w-full bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white"
+          >
+            {exportando ? (
+              <>
+                <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Exportando...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4 mr-2" />
+                Exportar Tabela Selecionada
+              </>
+            )}
+          </Button>
         </div>
-        <Button
-          onClick={exportarTabela}
-          disabled={!tabelaSelecionada || exportando}
-          className="w-full bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white"
-        >
-          {exportando ? (
-            <>
-              <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              Exportando...
-            </>
-          ) : (
-            <>
-              <Download className="w-4 h-4 mr-2" />
-              Exportar Tabela Selecionada
-            </>
-          )}
-        </Button>
+
+        <Separator className="bg-border" />
+
+        {/* Importar */}
+        <div className="space-y-2">
+          <Label className="text-sm font-semibold">Importar (Restaurar)</Label>
+          <p className="text-xs text-muted-foreground">
+            Selecione um arquivo de backup JSON para importar. Os dados serão vinculados à empresa ativa.
+            Registros duplicados (mesmo nome/descrição) serão pulados.
+          </p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={importarArquivo}
+            className="hidden"
+          />
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importando}
+            variant="outline"
+            className="w-full border-blue-500/50 hover:bg-blue-500/10"
+          >
+            {importando ? (
+              <>
+                <div className="w-4 h-4 mr-2 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                Importando...
+              </>
+            ) : (
+              <>
+                <Upload className="w-4 h-4 mr-2" />
+                Selecionar Arquivo de Backup
+              </>
+            )}
+          </Button>
+        </div>
+
         <p className="text-xs text-muted-foreground">
-          O arquivo será salvo no seu dispositivo em formato JSON com todos os registros da tabela selecionada.
+          Tabelas suportadas para importação: Tipos de Máquina, Clientes, Usuários.
         </p>
       </CardContent>
     </Card>
