@@ -9573,7 +9573,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       <input
                         type="file"
                         accept="image/*"
-                        capture="environment"
                         className="hidden"
                         onChange={(event) => {
                           const file = event.target.files?.[0];
@@ -9875,7 +9874,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       <input
                         type="file"
                         accept="image/*"
-                        capture="environment"
                         onChange={(e) => handleFileChange(e, 'CÂMERA')}
                         className="hidden"
                       />
@@ -10064,13 +10062,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 {!cartaoFotoCapturada ? (
                   <div className="grid grid-cols-2 gap-3">
                     <label className="cursor-pointer">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        onChange={(e) => handleFileChangeCartao(e, 'CÂMERA')}
-                        className="hidden"
-                      />
+                      <input type="file" accept="image/*" onChange={(e) => handleFileChangeCartao(e, 'CÂMERA')} className="hidden" id="cartao-camera-input" />
                       <div className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 hover:from-amber-500/30 hover:to-orange-500/30 transition-colors">
                         <Camera className="w-6 h-6 text-warning" />
                         <span className="text-sm text-warning font-medium">Câmera</span>
@@ -10159,7 +10151,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 {!mercadoFotoCapturada ? (
                   <div className="grid grid-cols-2 gap-3">
                     <label className="cursor-pointer">
-                      <input type="file" accept="image/*" capture="environment" onChange={(e) => handleFileChangeMercado(e, 'CAMERA')} className="hidden" />
+                      <input type="file" accept="image/*" onChange={(e) => handleFileChangeMercado(e, 'CAMERA')} className="hidden" id="mercado-camera-input" />
                       <div className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 hover:from-amber-500/30 hover:to-orange-500/30 transition-colors">
                         <Camera className="w-6 h-6 text-warning" />
                         <span className="text-sm text-warning font-medium">Camera</span>
