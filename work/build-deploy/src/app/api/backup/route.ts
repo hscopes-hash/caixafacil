@@ -47,18 +47,11 @@ export async function POST(request: NextRequest) {
     const prismaModel = tabelaInfo.tabela as keyof typeof db;
 
     // Buscar TODOS os registros da tabela filtrados por empresaId
-    // (exceto usuarios que filtra por empresaId, e tipos_maquina que é global)
     let dados: any[] = [];
     const model = db[prismaModel] as any;
 
-    if (tabelaNome === 'usuarios') {
-      dados = await model.findMany({ where: { empresaId } });
-    } else if (tabelaNome === 'tipos_maquina') {
-      // Tipos de máquina são globais (não filtrados por empresa)
-      dados = await model.findMany();
-    } else {
-      dados = await model.findMany({ where: { empresaId } });
-    }
+    // Todas as tabelas são filtradas por empresaId (incluindo tipos_maquina)
+    dados = await model.findMany({ where: { empresaId } });
 
     console.log(`[BACKUP] Tabela ${tabelaNome}: ${dados.length} registros exportados (empresaId=${empresaId})`);
 

@@ -82,6 +82,27 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    const { searchParams } = new URL(request.url);
+    const empresaId = searchParams.get('empresaId');
+
+    if (!empresaId) {
+      return NextResponse.json(
+        { error: 'empresaId é obrigatório' },
+        { status: 400 }
+      );
+    }
+
+    // Verificar se o tipo pertence à empresa do usuário
+    const tipo = await db.tipoMaquina.findFirst({
+      where: { id, empresaId },
+    });
+
+    if (!tipo) {
+      return NextResponse.json(
+        { error: 'Tipo de máquina não encontrado ou não pertence a esta empresa' },
+        { status: 404 }
+      );
+    }
 
     // Verificar se há máquinas usando este tipo
     const maquinasUsando = await db.maquina.count({
