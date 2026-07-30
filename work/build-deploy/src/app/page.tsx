@@ -1412,6 +1412,8 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
     acertoPercentual: '50',
     formaCobranca: '' as string,
     liberarDigitacaoLeitura: true as boolean,
+    nomeCartao1: 'CARTÃO1' as string,
+    nomeCartao2: 'CARTÃO2' as string,
   });
 
   useEffect(() => {
@@ -1541,6 +1543,8 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
       acertoPercentual: String(cliente.acertoPercentual ?? 50),
       formaCobranca: cliente.formaCobranca || '',
       liberarDigitacaoLeitura: (cliente as any).liberarDigitacaoLeitura !== false,
+      nomeCartao1: (cliente as any).nomeCartao1 || 'CARTÃO1',
+      nomeCartao2: (cliente as any).nomeCartao2 || 'CARTÃO2',
     });
     setDialogOpen(true);
   };
@@ -1701,6 +1705,30 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
                       onCheckedChange={(checked) => setFormData({ ...formData, liberarDigitacaoLeitura: checked })}
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* Nomes dos campos de cartão */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Nome do Cartão 1</Label>
+                  <Input
+                    value={formData.nomeCartao1 || 'CARTÃO1'}
+                    onChange={(e) => setFormData({ ...formData, nomeCartao1: e.target.value })}
+                    placeholder="CARTÃO1"
+                    className="bg-muted border-border"
+                    maxLength={20}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Nome do Cartão 2</Label>
+                  <Input
+                    value={formData.nomeCartao2 || 'CARTÃO2'}
+                    onChange={(e) => setFormData({ ...formData, nomeCartao2: e.target.value })}
+                    placeholder="CARTÃO2"
+                    className="bg-muted border-border"
+                    maxLength={20}
+                  />
                 </div>
               </div>
               <DialogFooter>
@@ -3162,6 +3190,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [maquinasSalvas, setMaquinasSalvas] = useState<MaquinaLeitura[]>([]);
   // Snapshots de fotos de cartão/mercado no momento do save (para o relatório)
   const [resumoCartaoFoto, setResumoCartaoFoto] = useState<string | null>(null);
+  const [resumoCartao2Foto, setResumoCartao2Foto] = useState<string | null>(null);
   const [resumoMercadoFoto, setResumoMercadoFoto] = useState<string | null>(null);
   // Estado para Extrato 2a Via
   const [segundaViaOpen, setSegundaViaOpen] = useState(false);
@@ -3320,6 +3349,59 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setCartaoResultado(null);
     setExtraindoCartao(false);
     setCartaoModalOpen(true);
+  };
+
+  // ============================================
+  // Funções para foto do cartão 2 (segundo cartão)
+  // ============================================
+  const abrirModalCartao2 = () => {
+    setCartao2FotoCapturada(null);
+    setCartao2FotoProcessada(null);
+    setCartao2ModalOpen(true);
+  };
+
+  const handleFileChangeCartao2 = (event: React.ChangeEvent<HTMLInputElement>, origem: 'CÂMERA' | 'GALERIA') => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const maxDimensao = 1920;
+            let largura = img.width;
+            let altura = img.height;
+            if (largura > maxDimensao || altura > maxDimensao) {
+              if (largura > altura) {
+                altura = Math.round((altura / largura) * maxDimensao);
+                largura = maxDimensao;
+              } else {
+                largura = Math.round((largura / altura) * maxDimensao);
+                altura = maxDimensao;
+              }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = largura;
+            canvas.height = altura;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, largura, altura);
+              const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.8);
+              setCartao2FotoCapturada(imagemRedimensionada);
+              setCartao2FotoProcessada(null);
+            }
+          } catch (error) {
+            console.error('Erro ao processar imagem:', error);
+            toast.error('Erro ao processar imagem. Tente outra foto.');
+          }
+        };
+        img.onerror = () => {
+          toast.error('Erro ao carregar imagem. Tente outra foto.');
+        };
+        img.src = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleFileChangeCartao = (event: React.ChangeEvent<HTMLInputElement>, origem: 'CÂMERA' | 'GALERIA') => {
@@ -3483,7 +3565,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       // Atualizar campo Cartão com o valor total
       const valorFormatado = cartaoResultado.total.toFixed(2).replace('.', ',');
       setDespesasItens(prev => prev.map(item =>
-        item.id === 'cartao' ? { ...item, valor: valorFormatado } : item
+        item.id === 'cartao1' ? { ...item, valor: valorFormatado } : item
       ));
       toast.success(`Total R$ ${valorFormatado} aplicado ao campo CARTÃO`);
       setCartaoModalOpen(false);
@@ -3934,6 +4016,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         if (savedData.saldoAnterior !== undefined) setSaldoAnterior(savedData.saldoAnterior);
         // Restaurar fotos de canhoto de cartão e cupons do mercado
         if (savedData.cartaoFotoProcessada !== undefined) setCartaoFotoProcessada(savedData.cartaoFotoProcessada);
+        if (savedData.cartao2FotoProcessada !== undefined) setCartao2FotoProcessada(savedData.cartao2FotoProcessada);
         if (savedData.mercadoFotoProcessada !== undefined) setMercadoFotoProcessada(savedData.mercadoFotoProcessada);
       }
     } catch (error) {
@@ -6494,7 +6577,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const salvarDigitacaoLS = useCallback(() => {
     if (!clienteSelecionado) return;
     // NAO salvar se nao ha nada digitado (evita sobrescrever dados reais com vazio)
-    const temAlgo = maquinas.some(m => m.novaEntrada || m.novaSaida) || receitasItens.some(d => (parseFloat(d.valor?.replace(',', '.') || '0')) !== 0) || despesasItens.some(d => (parseFloat(d.valor?.replace(',', '.') || '0')) > 0) || !!cartaoFotoProcessada || !!mercadoFotoProcessada;
+    const temAlgo = maquinas.some(m => m.novaEntrada || m.novaSaida) || receitasItens.some(d => (parseFloat(d.valor?.replace(',', '.') || '0')) !== 0) || despesasItens.some(d => (parseFloat(d.valor?.replace(',', '.') || '0')) > 0) || !!cartaoFotoProcessada || !!cartao2FotoProcessada || !!mercadoFotoProcessada;
     if (!temAlgo) return;
     try {
       const dados = {
@@ -6515,6 +6598,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         valorPago,
         saldoAnterior,
         cartaoFotoProcessada,
+        cartao2FotoProcessada,
         mercadoFotoProcessada,
       };
       localStorage.setItem(LS_KEY(modoOperacao, clienteSelecionado.id), JSON.stringify(dados));
@@ -6624,6 +6708,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setCartaoFotoProcessada(null);
     setCartaoFotoCapturada(null);
     setCartaoResultado(null);
+    setCartao2FotoProcessada(null);
+    setCartao2FotoCapturada(null);
     setMercadoFotoProcessada(null);
     setMercadoFotoCapturada(null);
     setMercadoResultado(null);
@@ -6676,11 +6762,20 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     // Adicionar foto do canhoto de cartão (se houver) ao upload
     if (cartaoFotoProcessada) {
       fotosParaUpload.push({
-        maquinaId: 'cartao-canhoto',
-        codigo: 'CARTAO',
+        maquinaId: 'cartao1-canhoto',
+        codigo: 'CARTAO1',
         fotoBase64: cartaoFotoProcessada,
       });
-      console.log('[salvarLeituras] Foto do canhoto de cartão adicionada ao upload');
+      console.log('[salvarLeituras] Foto do canhoto de cartão 1 adicionada ao upload');
+    }
+    // Adicionar foto do canhoto de cartão 2 (se houver) ao upload
+    if (cartao2FotoProcessada) {
+      fotosParaUpload.push({
+        maquinaId: 'cartao2-canhoto',
+        codigo: 'CARTAO2',
+        fotoBase64: cartao2FotoProcessada,
+      });
+      console.log('[salvarLeituras] Foto do canhoto de cartão 2 adicionada ao upload');
     }
     // Adicionar foto dos cupons fiscais do mercado (se houver) ao upload
     if (mercadoFotoProcessada) {
@@ -6782,6 +6877,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       console.log('[salvarLeituras] Snapshot — cartaoFotoProcessada:', cartaoFotoProcessada ? 'SIM (' + cartaoFotoProcessada.length + ' chars)' : 'NÃO');
       console.log('[salvarLeituras] Snapshot — mercadoFotoProcessada:', mercadoFotoProcessada ? 'SIM (' + mercadoFotoProcessada.length + ' chars)' : 'NÃO');
       setResumoCartaoFoto(cartaoFotoProcessada);
+      setResumoCartao2Foto(cartao2FotoProcessada);
       setResumoMercadoFoto(mercadoFotoProcessada);
       // ⚠️ Limpar fotos de cartão/mercado AGORA — snapshot já foi capturado acima
       // Antes não limpava aqui (só no fecharResumo), mas isso causava bug:
@@ -7450,7 +7546,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       let alturaFinal = padding + 40 + 30 + 30 + (operadores.size > 0 ? 30 : 0) + 10 + 30;
       alturaFinal += maquinasArr.length * (CARD_HEIGHT + 20);
       // Espaço para card CARTÃO e MERCADO (se houver fotos no GCS)
-      const temCartao2via = segundaViaFotos.some(f => f.codigo === 'CARTAO' || f.maquinaId === 'cartao-canhoto');
+      const temCartao2via = segundaViaFotos.some(f => f.codigo === 'CARTAO1' || f.codigo === 'CARTAO2' || f.maquinaId === 'cartao1-canhoto' || f.maquinaId === 'cartao2-canhoto');
       const temMercado2via = segundaViaFotos.some(f => f.codigo === 'MERCADO' || f.maquinaId === 'mercado-cupons');
       if (temCartao2via) alturaFinal += 200 + 10;
       if (temMercado2via) alturaFinal += 200 + 10;
@@ -7529,7 +7625,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       // Card CARTÃO (canhotos) — se houver foto no GCS
       if (temCartao2via) {
-        const cartaoFoto = segundaViaFotos.find(f => f.codigo === 'CARTAO' || f.maquinaId === 'cartao-canhoto');
+        const cartaoFoto = segundaViaFotos.find(f => f.codigo === 'CARTAO1' || f.codigo === 'CARTAO2' || f.maquinaId === 'cartao1-canhoto' || f.maquinaId === 'cartao2-canhoto');
         const cartaoCardH = 200;
         ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
         ctx.strokeRect(padding, y, A4_W - padding * 2, cartaoCardH);
@@ -8135,6 +8231,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       }
       // Adicionar foto dos canhotos de cartão
       if (cartaoFotoProcessada) fotos.push(cartaoFotoProcessada);
+      if (cartao2FotoProcessada) fotos.push(cartao2FotoProcessada);
       // Adicionar foto dos cupons do mercado
       if (mercadoFotoProcessada) fotos.push(mercadoFotoProcessada);
       console.log('[Telegram Resumo] Fotos processadas:', fotos.length);
@@ -8359,11 +8456,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setValorReceitaSalva(0);
     // Limpar snapshots de fotos de cartão/mercado
     setResumoCartaoFoto(null);
+    setResumoCartao2Foto(null);
     setResumoMercadoFoto(null);
     // Limpar fotos de canhoto de cartão e cupons do mercado após fechar resumo
     setCartaoFotoProcessada(null);
     setCartaoFotoCapturada(null);
     setCartaoResultado(null);
+    setCartao2FotoProcessada(null);
+    setCartao2FotoCapturada(null);
     setMercadoFotoProcessada(null);
     setMercadoFotoCapturada(null);
     setMercadoResultado(null);
@@ -8977,14 +9077,26 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                               <Camera className="w-4 h-4" />
                             </Button>
                           )}
-                          {item.id === 'cartao' && (
+                          {item.id === 'cartao1' && (
                             <Button
                               type="button"
                               variant="ghost"
                               size="sm"
                               onClick={() => abrirModalCartao()}
                               className="h-8 w-8 p-0 text-muted-foreground hover:text-warning shrink-0"
-                              title="Capturar canhotos de cartão"
+                              title={`Capturar canhotos — ${clienteSelecionado?.nomeCartao1 || 'CARTÃO1'}`}
+                            >
+                              <Camera className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {item.id === 'cartao2' && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => abrirModalCartao2()}
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-warning shrink-0"
+                              title={`Capturar canhotos — ${clienteSelecionado?.nomeCartao2 || 'CARTÃO2'}`}
                             >
                               <Camera className="w-4 h-4" />
                             </Button>
@@ -10037,7 +10149,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <CreditCard className="w-5 h-5" />
-                  Capturar Canhotos de Cartão
+                  {clienteSelecionado?.nomeCartao1 || 'CARTÃO1'} — Canhotos
                 </DialogTitle>
                 <DialogDescription className="text-muted-foreground">
                   Tire uma foto dos canhotos ou selecione da galeria. A foto será preservada e enviada junto com as fotos da leitura.
@@ -10119,6 +10231,62 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   </div>
                 )}
               </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Modal de Canhotos de Cartão 2 */}
+          <Dialog open={cartao2ModalOpen} onOpenChange={setCartao2ModalOpen}>
+            <DialogContent className="bg-card border-border text-foreground max-w-md max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <CreditCard className="w-5 h-5" />
+                  {clienteSelecionado?.nomeCartao2 || 'CARTÃO2'} — Canhotos
+                </DialogTitle>
+                <DialogDescription className="text-muted-foreground">
+                  Tire uma foto dos canhotos ou selecione da galeria. A foto será preservada e enviada junto com as fotos da leitura.
+                </DialogDescription>
+              </DialogHeader>
+
+              {!cartao2FotoCapturada ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="cursor-pointer">
+                    <input type="file" accept="image/*" onChange={(e) => handleFileChangeCartao2(e, 'CÂMERA')} className="hidden" id="cartao2-camera-input" />
+                    <div className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 hover:from-amber-500/30 hover:to-orange-500/30 transition-colors">
+                      <Camera className="w-6 h-6 text-warning" />
+                      <span className="text-sm text-warning font-medium">Câmera</span>
+                    </div>
+                  </label>
+                  <label className="cursor-pointer">
+                    <input type="file" accept="image/*" onChange={(e) => handleFileChangeCartao2(e, 'GALERIA')} className="hidden" />
+                    <div className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-muted border-border hover:bg-accent transition-colors">
+                      <ImageIcon className="w-6 h-6 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground font-medium">Galeria</span>
+                    </div>
+                  </label>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <img src={cartao2FotoCapturada} alt="Canhotos" className="w-full rounded-lg" />
+                  <Button
+                    className="w-full bg-green-600 hover:bg-green-700 text-white"
+                    onClick={() => { setCartao2FotoProcessada(cartao2FotoCapturada); setCartao2ModalOpen(false); toast.success(`Foto de ${clienteSelecionado?.nomeCartao2 || 'CARTÃO2'} preservada`); }}
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Confirmar Foto
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => { setCartao2FotoCapturada(null); setCartao2FotoProcessada(null); }}
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Nova Foto
+                  </Button>
+                </div>
+              )}
+              {cartao2FotoProcessada && (
+                <p className="text-xs text-success text-center mt-2">✓ Foto preservada para envio</p>
+              )}
             </DialogContent>
           </Dialog>
 
