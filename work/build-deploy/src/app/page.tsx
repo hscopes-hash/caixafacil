@@ -68,6 +68,8 @@ interface Cliente {
   acertoPercentual?: number;
   formaCobranca?: string;
   liberarDigitacaoLeitura?: boolean;
+  nomeCartao1?: string;
+  nomeCartao2?: string;
   ativo: boolean;
   bloqueado: boolean;
   motivoBloqueio?: string;
@@ -3209,7 +3211,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     { id: 'bonus', descricao: 'BONUS', valor: '', fixo: true },
     { id: 'diaria', descricao: 'DIÁRIA', valor: '', fixo: true },
     { id: 'horas_extras', descricao: 'HORAS EXTRAS', valor: '', fixo: true },
-    { id: 'cartao', descricao: 'CARTÃO', valor: '', fixo: true },
+    { id: 'cartao1', descricao: 'CARTÃO1', valor: '', fixo: true },
+    { id: 'cartao2', descricao: 'CARTÃO2', valor: '', fixo: true },
     { id: 'dinheiro', descricao: 'DINHEIRO', valor: '', fixo: true },
     { id: 'caixa_final', descricao: 'CAIXA FINAL', valor: '', fixo: true },
   ]);
@@ -3245,6 +3248,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [cartaoModalOpen, setCartaoModalOpen] = useState(false);
   const [cartaoFotoCapturada, setCartaoFotoCapturada] = useState<string | null>(null);
   const [cartaoFotoProcessada, setCartaoFotoProcessada] = useState<string | null>(null);
+  // Cartão 2 — segundo campo de cartão
+  const [cartao2ModalOpen, setCartao2ModalOpen] = useState(false);
+  const [cartao2FotoCapturada, setCartao2FotoCapturada] = useState<string | null>(null);
+  const [cartao2FotoProcessada, setCartao2FotoProcessada] = useState<string | null>(null);
   const [extraindoCartao, setExtraindoCartao] = useState(false);
   const [cartaoResultado, setCartaoResultado] = useState<{ tickets: number[]; total: number; totalIA?: number; totalConferido: boolean; quantidade: number } | null>(null);
 
@@ -3732,7 +3739,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       { id: 'bonus', descricao: 'BONUS', valor: '', fixo: true },
       { id: 'diaria', descricao: 'DIÁRIA', valor: '', fixo: true },
       { id: 'horas_extras', descricao: 'HORAS EXTRAS', valor: '', fixo: true },
-      { id: 'cartao', descricao: 'CARTÃO', valor: '', fixo: true },
+      { id: 'cartao1', descricao: 'CARTÃO1', valor: '', fixo: true },
+    { id: 'cartao2', descricao: 'CARTÃO2', valor: '', fixo: true },
       { id: 'dinheiro', descricao: 'DINHEIRO', valor: '', fixo: true },
       { id: 'caixa_final', descricao: 'CAIXA FINAL', valor: '', fixo: true },
     ]);

@@ -6,6 +6,8 @@ import { enforcePlan } from '@/lib/plan-enforcement';
 async function ensureSchema() {
   try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "formaCobranca" TEXT`); } catch {}
   try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "liberarDigitacaoLeitura" BOOLEAN NOT NULL DEFAULT true`); } catch {}
+  try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "nomeCartao1" TEXT NOT NULL DEFAULT 'CARTÃO1'`); } catch {}
+  try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "nomeCartao2" TEXT NOT NULL DEFAULT 'CARTÃO2'`); } catch {}
 }
 
 // Listar clientes da empresa
@@ -79,6 +81,8 @@ export async function POST(request: NextRequest) {
       acertoPercentual,
       formaCobranca,
       liberarDigitacaoLeitura,
+      nomeCartao1,
+      nomeCartao2,
     } = body;
 
     if (!nome || !empresaId) {
@@ -132,6 +136,8 @@ export async function POST(request: NextRequest) {
         acertoPercentual: acerto,
         ...(formaCobranca ? { formaCobranca } : {}),
         liberarDigitacaoLeitura: liberarDigitacaoLeitura !== undefined ? Boolean(liberarDigitacaoLeitura) : true,
+        nomeCartao1: nomeCartao1 || 'CARTÃO1',
+        nomeCartao2: nomeCartao2 || 'CARTÃO2',
       },
     });
 

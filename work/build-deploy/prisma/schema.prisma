@@ -132,6 +132,8 @@ model Cliente {
   acertoPercentual Int             @default(50)  // Percentual do acerto do cliente (padrão 50%)
   formaCobranca   String?                       // "COBRANCA" ou "LEITURA" — define o modo padrão na tela de cobranças
   liberarDigitacaoLeitura Boolean @default(true) // Liberar digitação manual da leitura atual? Se false, apenas preenchimento via OCR (foto)
+  nomeCartao1     String          @default("CARTÃO1")  // Nome do campo de cartão 1
+  nomeCartao2     String          @default("CARTÃO2")  // Nome do campo de cartão 2
   ativo           Boolean         @default(true)
   bloqueado       Boolean         @default(false)
   motivoBloqueio  String?

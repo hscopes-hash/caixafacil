@@ -5,6 +5,8 @@ import { db } from '@/lib/db';
 async function ensureSchema() {
   try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "formaCobranca" TEXT`); } catch {}
   try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "liberarDigitacaoLeitura" BOOLEAN NOT NULL DEFAULT true`); } catch {}
+  try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "nomeCartao1" TEXT NOT NULL DEFAULT 'CARTÃO1'`); } catch {}
+  try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "nomeCartao2" TEXT NOT NULL DEFAULT 'CARTÃO2'`); } catch {}
 }
 
 // Buscar cliente por ID
@@ -77,6 +79,8 @@ export async function PUT(
       acertoPercentual,
       formaCobranca,
       liberarDigitacaoLeitura,
+      nomeCartao1,
+      nomeCartao2,
     } = body;
 
     const data: Record<string, unknown> = {};
@@ -106,6 +110,8 @@ export async function PUT(
     }
     if (formaCobranca !== undefined) data.formaCobranca = formaCobranca;
     if (liberarDigitacaoLeitura !== undefined) data.liberarDigitacaoLeitura = Boolean(liberarDigitacaoLeitura);
+    if (nomeCartao1 !== undefined) data.nomeCartao1 = nomeCartao1 || 'CARTÃO1';
+    if (nomeCartao2 !== undefined) data.nomeCartao2 = nomeCartao2 || 'CARTÃO2';
 
     const cliente = await db.cliente.update({
       where: { id },
