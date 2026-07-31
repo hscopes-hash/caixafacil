@@ -5188,13 +5188,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
     console.log(`[Lote] Processando foto ${fotoId} (endpoint unificado)...`);
 
+    const tempoInicioBg = Date.now(); // definido ANTES do try para estar disponível no catch
+
     try {
       if (globalController.signal.aborted) {
         throw new DOMException('Timeout global de processamento atingido', 'AbortError');
       }
 
       // UNICA CHAMADA: identificar + extrair
-      const tempoInicioBg = Date.now();
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60000);
       globalController.signal.addEventListener(() => controller.abort(), { once: true });
