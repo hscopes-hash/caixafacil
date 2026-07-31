@@ -4922,7 +4922,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               // ⚠️ Gerar foto com tarja e setar fotoProcessada
               // Reutiliza fotoComTarjaThumbSync (já gerado acima) para economizar memória
               try {
-                maquinaAtualizada.fotoProcessada = fotoComTarjaThumbSync + '';
+                maquinaAtualizada.fotoProcessada = (fotoComTarjaThumbSync || fotoCorrigida) + '';
               } catch (err) {
                 console.warn(`[Lote] Falha ao setar fotoProcessada:`, err);
                 maquinaAtualizada.fotoProcessada = fotoCorrigida + '';
@@ -5293,7 +5293,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             // ⚠️ Gerar foto com tarja e setar fotoProcessada
             // Reutiliza fotoComTarjaThumb (já gerado acima) para economizar memória
             try {
-              maquinaAtualizada.fotoProcessada = fotoComTarjaThumb + '';
+              maquinaAtualizada.fotoProcessada = (fotoComTarjaThumb || fotoCorrigidaBg) + '';
             } catch (err) {
               console.warn(`[Lote BG] Falha ao setar fotoProcessada:`, err);
               maquinaAtualizada.fotoProcessada = fotoCorrigidaBg + '';
@@ -5342,11 +5342,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     // ⚠️ LIBERAR MEMÓRIA — remover string base64 da foto processada
     // Após processar, a imagem original não é mais necessária (só o resultado)
     // Card agora mostra ícone OK/erro em vez de thumbnail (economiza memória)
-    setFotosLote(prev => prev.map(f =>
-      f.id === fotoId && (f.status === 'concluido' || f.status === 'erro')
-        ? { ...f, imagem: '', fotoProcessadaThumb: undefined }
-        : f
-    ));
+    try {
+      setFotosLote(prev => prev.map(f =>
+        f.id === fotoId && (f.status === 'concluido' || f.status === 'erro')
+          ? { ...f, imagem: '', fotoProcessadaThumb: undefined }
+          : f
+      ));
+    } catch (memErr) {
+      console.warn(`[Lote] Erro ao limpar memória da foto ${fotoId}:`, memErr);
+    }
   };
 
   // Efeito: processar automaticamente fotos pendentes em segundo plano
