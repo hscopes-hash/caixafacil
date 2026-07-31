@@ -3155,6 +3155,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [saving, setSaving] = useState(false);
   const [extratoVisivel, setExtratoVisivel] = useState(false);
   const [saldoAnterior, setSaldoAnterior] = useState(0);
+  const [turno, setTurno] = useState<'NENHUM' | 'MANHA' | 'TARDE' | 'NOITE'>('NENHUM');
   const [recebido, setRecebido] = useState('');
   // Modo de operação derivado do cliente ou forçado por ajusteMode
   const [modoOperacao, setModoOperacao] = useState<'COBRANCA' | 'LEITURA' | 'AJUSTE'>(() => ajusteMode ? 'AJUSTE' : 'COBRANCA');
@@ -4051,6 +4052,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setExtratoVisivel(false);
     setRecebido('');
     setSaldoAnterior(0);
+    setTurno('NENHUM');
     // Limpar campos de receita e despesa ao trocar de cliente
     resetReceitas();
     resetDespesas();
@@ -6010,7 +6012,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
     let texto = `__________________\n`;
     texto += `${clienteSelecionado.nome.toUpperCase()}\n`;
-    texto += `Data: ${segundaViaSelecionada?.data}\n`;
+    const turno2via = segundaViaDados.find((l: any) => l.turno)?.turno;
+    texto += `Data: ${segundaViaSelecionada?.data}${turno2via ? ` — Turno: ${turno2via === 'MANHA' ? 'MANHÃ' : turno2via}` : ''}\n`;
     const operadoresSet = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => normalizarOperador(l.usuario)));
     const opList = Array.from(operadoresSet);
     if (opList.length > 0) texto += `Operador: ${opList.join(', ')}\n`;
@@ -6317,7 +6320,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       // 3) Caption
       const modo2via = clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANÇA' : 'LEITURA';
-      const caption = `RELATÓRIO DE ${modo2via} - ${clienteSelecionado.nome.toUpperCase()}\nData: ${segundaViaSelecionada?.data || ''}`;
+      const caption = `RELATÓRIO DE ${modo2via} - ${clienteSelecionado.nome.toUpperCase()}\nData: ${segundaViaSelecionada?.data || ''}${(() => { const t = segundaViaDados.find((l: any) => l.turno)?.turno; return t ? ` — Turno: ${t === 'MANHA' ? 'MANHÃ' : t}` : ''; })()}`;
 
       // 4) Web Share API com o PDF (funciona em mobile)
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -6597,6 +6600,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         formaPagamento,
         valorPago,
         saldoAnterior,
+        turno,
         cartaoFotoProcessada,
         cartao2FotoProcessada,
         mercadoFotoProcessada,
@@ -6649,6 +6653,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       if (dados.formaPagamento !== undefined) { setFormaPagamento(dados.formaPagamento); restaurou = true; }
       if (dados.valorPago !== undefined) { setValorPago(dados.valorPago); restaurou = true; }
       if (dados.saldoAnterior !== undefined) { setSaldoAnterior(dados.saldoAnterior); restaurou = true; }
+      if (dados.turno !== undefined) { setTurno(dados.turno); restaurou = true; }
       // Restaurar fotos de canhoto de cartão e cupons do mercado
       if (dados.cartaoFotoProcessada !== undefined) { setCartaoFotoProcessada(dados.cartaoFotoProcessada); restaurou = true; }
       if (dados.mercadoFotoProcessada !== undefined) { setMercadoFotoProcessada(dados.mercadoFotoProcessada); restaurou = true; }
@@ -6702,6 +6707,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setRecebido('');
     setFormaPagamento(null);
     setValorPago('');
+    setTurno('NENHUM');
     resetReceitas();
     resetDespesas();
     // Limpar fotos de canhoto de cartão e cupons do mercado ao cancelar
@@ -6856,6 +6862,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           receita: receitasParaSalvar.length > 0 ? JSON.stringify(receitasParaSalvar) : null,
           valorReceita: totalRec !== 0 ? totalRec : null,
           fotoGcsPath: fotoGcsPath,
+          turno: turno !== 'NENHUM' ? turno : null,
         }),
       });
 
@@ -7580,7 +7587,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       ctx.font = FONT_SUBTITLE;
       ctx.fillText(clienteSelecionado?.nome?.toUpperCase() || '', A4_W / 2, y); y += 30;
       ctx.font = FONT_VALUE;
-      ctx.fillText(`Data: ${segundaViaSelecionada?.data || ''}`, A4_W / 2, y); y += 30;
+      const turno2viaPdf = segundaViaDados.find((l: any) => l.turno)?.turno;
+      ctx.fillText(`Data: ${segundaViaSelecionada?.data || ''}${turno2viaPdf ? ` — Turno: ${turno2viaPdf === 'MANHA' ? 'MANHÃ' : turno2viaPdf}` : ''}`, A4_W / 2, y); y += 30;
       if (operadores.size > 0) { ctx.fillText(`Operador: ${Array.from(operadores).join(', ')}`, A4_W / 2, y); y += 30; }
       y += 10;
       ctx.strokeStyle = '#000000'; ctx.lineWidth = 2;
@@ -7898,7 +7906,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       ctx.font = FONT_SUBTITLE;
       ctx.fillText(clienteSelecionado?.nome?.toUpperCase() || '', A4_W / 2, y); y += 30;
       ctx.font = FONT_VALUE;
-      ctx.fillText(`Data: ${dataFormatada}`, A4_W / 2, y); y += 30;
+      ctx.fillText(`Data: ${dataFormatada}${turno !== 'NENHUM' ? ` — Turno: ${turno === 'MANHA' ? 'MANHÃ' : turno}` : ''}`, A4_W / 2, y); y += 30;
       ctx.fillText(`Operador: ${usuarioNome}`, A4_W / 2, y); y += 30;
       y += 10;
       ctx.strokeStyle = '#000000'; ctx.lineWidth = 2;
@@ -8773,6 +8781,29 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             )}
 
           </div>
+
+          {/* Seletor de Turno */}
+          {clienteSelecionado && modoOperacao !== 'AJUSTE' && (
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Turno</Label>
+              <div className="grid grid-cols-4 gap-1">
+                {(['NENHUM', 'MANHA', 'TARDE', 'NOITE'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setTurno(t)}
+                    className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      turno === t
+                        ? 'bg-amber-500 text-white'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    }`}
+                  >
+                    {t === 'MANHA' ? 'MANHÃ' : t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -10788,7 +10819,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       <p className="font-bold text-xs opacity-60 mb-1">EXTRATO DE {clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANÇA' : 'LEITURA'} 2a VIA</p>
                       <p className="font-bold">{clienteSelecionado?.nome?.toUpperCase()}</p>
                     </div>
-                    <p>Data: {segundaViaSelecionada?.data}</p>
+                    <p>Data: {segundaViaSelecionada?.data}{(() => { const t = segundaViaDados.find((l: any) => l.turno)?.turno; return t ? ` — Turno: ${t === 'MANHA' ? 'MANHÃ' : t}` : ''; })()}</p>
                     {(() => {
                       const operadores = new Set(segundaViaDados.filter(l => l.usuario?.nome).map(l => normalizarOperador(l.usuario)));
                       const qtdFotos = segundaViaDados.filter(l => l.fotoGcsPath).length;
@@ -10908,7 +10939,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                           {clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'RELATÓRIO DE COBRANÇA' : 'RELATÓRIO DE LEITURA'}
                         </p>
                         <p className="font-bold text-sm">{clienteSelecionado?.nome?.toUpperCase()}</p>
-                        <p className="text-sm">Data: {segundaViaSelecionada?.data}</p>
+                        <p className="text-sm">Data: {segundaViaSelecionada?.data}{(() => { const t = segundaViaDados.find((l: any) => l.turno)?.turno; return t ? ` — Turno: ${t === 'MANHA' ? 'MANHÃ' : t}` : ''; })()}</p>
                         {(() => {
                           const operadores = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => normalizarOperador(l.usuario)));
                           return operadores.size > 0 ? <p className="text-sm">Operador: {Array.from(operadores).join(', ')}</p> : null;
@@ -11150,7 +11181,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     {modoOperacao === 'COBRANCA' ? 'RELATÓRIO DE COBRANÇA' : modoOperacao === 'LEITURA' ? 'RELATÓRIO DE LEITURA' : 'RELATÓRIO DE AJUSTE'}
                   </p>
                   <p className="font-bold text-sm">{clienteSelecionado?.nome?.toUpperCase()}</p>
-                  <p className="text-sm">Data: {dataFormatada}</p>
+                  <p className="text-sm">Data: {dataFormatada}{turno !== 'NENHUM' ? ` — Turno: ${turno === 'MANHA' ? 'MANHÃ' : turno}` : ''}</p>
                   <p className="text-sm">Operador: {usuarioNome}</p>
                 </div>
 

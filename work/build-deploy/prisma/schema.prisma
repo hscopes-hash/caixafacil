@@ -293,6 +293,7 @@ model Leitura {
   caixa             String?   // JSON dos itens de caixa
   valorCaixa        Float?    // Diferença de caixa (caixa inicial - demais)
   fotoGcsPath       String?   // Caminho GCS do pacote criptografado de fotos (compartilhado por batch)
+  turno             String?   // Turno da leitura: MANHA, TARDE, NOITE (null = NENHUM)
   createdAt         DateTime  @default(now())
 
   maquina           Maquina   @relation(fields: [maquinaId], references: [id], onDelete: Cascade)

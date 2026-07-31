@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
+// Garantir coluna turno
+async function ensureSchema() {
+  try { await db.$executeRawUnsafe(`ALTER TABLE leituras ADD COLUMN IF NOT EXISTS turno TEXT`); } catch {}
+}
+
 // Listar leituras
 export async function GET(request: NextRequest) {
   try {
@@ -79,8 +84,9 @@ export async function GET(request: NextRequest) {
 // Criar nova leitura (batch - múltiplas máquinas)
 export async function POST(request: NextRequest) {
   try {
+    await ensureSchema();
     const body = await request.json();
-    const { leituras, clienteId, usuarioId, despesa, valorDespesa, receita, valorReceita, caixa, valorCaixa, fotoGcsPath } = body;
+    const { leituras, clienteId, usuarioId, despesa, valorDespesa, receita, valorReceita, caixa, valorCaixa, fotoGcsPath, turno } = body;
 
     console.log('[LEITURAS POST] Recebido:', {
       qtdLeituras: leituras?.length || 0,
@@ -153,6 +159,7 @@ export async function POST(request: NextRequest) {
             valorCaixa: valorReceita || null,
             // Fotos criptografadas no GCS (compartilhado por batch)
             fotoGcsPath: fotoGcsPath || null,
+            turno: turno || null,
           },
         });
 
