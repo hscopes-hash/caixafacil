@@ -4819,12 +4819,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         idx === i ? { ...f, status: 'processando' } : f
       ));
 
+      // ⚠️ tempoInicio definido ANTES do try para estar disponível no catch
+      const tempoInicio = Date.now();
+
       try {
         // =============================================
         // UNICA CHAMADA: identificar + extrair valores
         // (antes eram 2 chamadas sequenciais)
         // =============================================
-        const tempoInicio = Date.now();
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 90000);
 
