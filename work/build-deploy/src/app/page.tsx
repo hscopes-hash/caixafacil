@@ -48,6 +48,7 @@ import PainelFinanceiroSaaS from '@/components/PainelFinanceiroSaaS';
 import { redirectToCheckout } from '@/components/MercadoPagoCheckout';
 import ChatIAPage from '@/components/ChatIAPage';
 import GruaDashboard from '@/components/GruaDashboard';
+import LeiturasErrorBoundary from '@/components/LeiturasErrorBoundary';
 
 // ============================================
 // TYPES
@@ -16837,10 +16838,14 @@ export default function App() {
           <TiposMaquinaPage empresaId={empresa?.id || ''} isAdmin={isAdmin} />
         )}
         {activeTab === 'leituras' && hasPermissao('leituras') && (
-          <LeiturasPage empresaId={empresa?.id || ''} isSupervisor={isSupervisor} usuarioId={usuario?.id || ''} usuarioNome={usuario?.nome || 'OPERADOR'} />
+          <LeiturasErrorBoundary>
+            <LeiturasPage empresaId={empresa?.id || ''} isSupervisor={isSupervisor} usuarioId={usuario?.id || ''} usuarioNome={usuario?.nome || 'OPERADOR'} />
+          </LeiturasErrorBoundary>
         )}
         {activeTab === 'ajuste-leitura' && (isSupervisor || isAdmin) && (
-          <LeiturasPage empresaId={empresa?.id || ''} isSupervisor={isSupervisor} usuarioId={usuario?.id || ''} usuarioNome={usuario?.nome || 'OPERADOR'} ajusteMode={true} />
+          <LeiturasErrorBoundary>
+            <LeiturasPage empresaId={empresa?.id || ''} isSupervisor={isSupervisor} usuarioId={usuario?.id || ''} usuarioNome={usuario?.nome || 'OPERADOR'} ajusteMode={true} />
+          </LeiturasErrorBoundary>
         )}
         {activeTab === 'receber' && hasPermissao('receber') && (
           <ReceberPage empresaId={empresa?.id || ''} />
