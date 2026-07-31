@@ -6357,11 +6357,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const phone = clienteSelecionado.telefone?.replace(/\D/g, '') || '';
 
       const downloadLink = document.createElement('a');
-      downloadLink.href = URL.createObjectURL(file);
+      const pdfUrl = URL.createObjectURL(file);
+      downloadLink.href = pdfUrl;
       downloadLink.download = fileName;
       document.body.appendChild(downloadLink);
       downloadLink.click();
       document.body.removeChild(downloadLink);
+      setTimeout(() => URL.revokeObjectURL(pdfUrl), 5000);
 
       if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
         const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
@@ -7575,12 +7577,20 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       alturaFinal += 60 + 140 + 40 + padding;
 
       // Criar canvas único
+      // ⚠️ iOS Safari limita canvas a ~16.7M pixels — escalar down se necessário
+      const MAX_CANVAS_PIXELS = 14_000_000; // margem de segurança
+      let escalaReal = SCALE;
+      const pixelsNecessarios = A4_W * alturaFinal * SCALE * SCALE;
+      if (pixelsNecessarios > MAX_CANVAS_PIXELS) {
+        escalaReal = Math.sqrt(MAX_CANVAS_PIXELS / (A4_W * alturaFinal));
+        console.warn(`[PDF] Canvas muito grande para iOS — reduzindo escala de ${SCALE}x para ${escalaReal.toFixed(2)}x`);
+      }
       const canvas = document.createElement('canvas');
-      canvas.width = A4_W * SCALE;
-      canvas.height = alturaFinal * SCALE;
+      canvas.width = Math.round(A4_W * escalaReal);
+      canvas.height = Math.round(alturaFinal * escalaReal);
       const ctx = canvas.getContext('2d');
       if (!ctx) return null;
-      ctx.scale(SCALE, SCALE);
+      ctx.scale(escalaReal, escalaReal);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
 
@@ -7896,12 +7906,20 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       }
       alturaFinal += 60 + 140 + 40 + padding;
 
+      // ⚠️ iOS Safari limita canvas a ~16.7M pixels — escalar down se necessário
+      const MAX_CANVAS_PIXELS_RESUMO = 14_000_000;
+      let escalaResumo = SCALE;
+      const pixelsResumo = A4_W * alturaFinal * SCALE * SCALE;
+      if (pixelsResumo > MAX_CANVAS_PIXELS_RESUMO) {
+        escalaResumo = Math.sqrt(MAX_CANVAS_PIXELS_RESUMO / (A4_W * alturaFinal));
+        console.warn(`[PDF Resumo] Canvas muito grande para iOS — reduzindo escala de ${SCALE}x para ${escalaResumo.toFixed(2)}x`);
+      }
       const canvas = document.createElement('canvas');
-      canvas.width = A4_W * SCALE;
-      canvas.height = alturaFinal * SCALE;
+      canvas.width = Math.round(A4_W * escalaResumo);
+      canvas.height = Math.round(alturaFinal * escalaResumo);
       const ctx = canvas.getContext('2d');
       if (!ctx) return null;
-      ctx.scale(SCALE, SCALE);
+      ctx.scale(escalaResumo, escalaResumo);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
 
@@ -8148,11 +8166,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const phone = clienteSelecionado.telefone?.replace(/\D/g, '') || '';
 
       const downloadLink = document.createElement('a');
-      downloadLink.href = URL.createObjectURL(file);
+      const pdfUrl = URL.createObjectURL(file);
+      downloadLink.href = pdfUrl;
       downloadLink.download = fileName;
       document.body.appendChild(downloadLink);
       downloadLink.click();
       document.body.removeChild(downloadLink);
+      setTimeout(() => URL.revokeObjectURL(pdfUrl), 5000);
 
       if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
         const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
@@ -10417,7 +10437,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               setZoomFoto(1);
             }
           }}>
-            <DialogContent className="bg-black border-0 p-0 max-w-none w-screen h-screen m-0 flex flex-col" style={{ width: '100vw', height: '100vh' }}>
+            <DialogContent className="bg-black border-0 p-0 max-w-none w-screen h-screen m-0 flex flex-col" style={{ width: '100vw', height: '100dvh' }}>
               {/* Botão fechar */}
               <button
                 className="absolute top-4 right-4 z-50 p-3 rounded-full bg-white/20 hover:bg-white/30 text-white"
@@ -16319,7 +16339,7 @@ function PWAInstallBanner() {
 
   const handleDismiss = () => {
     setShowBanner(false);
-    localStorage.setItem('pwa-install-dismissed', 'true');
+    try { localStorage.setItem('pwa-install-dismissed', 'true'); } catch {}
   };
 
   if (!showBanner) return null;
