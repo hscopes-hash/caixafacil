@@ -5354,43 +5354,47 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   };
 
   // Efeito: processar automaticamente fotos pendentes em segundo plano
-  // Delay de 2s entre fotos (reduzido: agora é 1 chamada IA por foto, antes eram 2)
+  // Usa delay maior (2s) para evitar race conditions e estouro de memória
   const ultimaFotoProcessadaRef = useRef<number>(0);
-  const DELAY_ENTRE_FOTOS = 500; // 500ms entre fotos — reduz pressão de memória
+  const DELAY_ENTRE_FOTOS = 2000; // 2s entre fotos — evita crash por memória
 
   useEffect(() => {
-    const pendentes = fotosLote.filter(f => f.status === 'pendente');
+    const pendentes = fotosLote.filter(f => f.status === 'pendente' && f.imagem); // só fotos com imagem
     const processando = fotosLote.some(f => f.status === 'processando');
 
     if (pendentes.length > 0 && !processando && !processandoEmBackground.current && maquinas.length > 0) {
       const tempoDesdeUltima = Date.now() - ultimaFotoProcessadaRef.current;
       const delayNecessario = Math.max(0, DELAY_ENTRE_FOTOS - tempoDesdeUltima);
 
-      if (delayNecessario > 0) {
-        // Aguardar o delay antes de processar a proxima foto
-        console.log(`[Lote] Aguardando ${Math.round(delayNecessario / 1000)}s antes de processar proxima foto...`);
-        const timer = setTimeout(() => {
-          processandoEmBackground.current = true;
-          const fotoParaProcessar = pendentes[0];
-          processarFotoEmBackground(fotoParaProcessar.id, fotoParaProcessar.imagem)
-            .catch(err => console.error('[Lote] Erro inesperado:', err))
-            .finally(() => {
-              processandoEmBackground.current = false;
-              ultimaFotoProcessadaRef.current = Date.now();
-            });
-        }, delayNecessario);
-
-        return () => clearTimeout(timer);
-      } else {
+      const timer = setTimeout(() => {
         processandoEmBackground.current = true;
         const fotoParaProcessar = pendentes[0];
-        processarFotoEmBackground(fotoParaProcessar.id, fotoParaProcessar.imagem)
-          .catch(err => console.error('[Lote] Erro inesperado:', err))
+        // Capturar imagem ANTES de processar (evita race com limpeza de memória)
+        const imagemCapturada = fotoParaProcessar.imagem;
+        if (!imagemCapturada) {
+          // Imagem já foi limpa — marcar como erro e continuar
+          setFotosLote(prev => prev.map(f =>
+            f.id === fotoParaProcessar.id ? { ...f, status: 'erro' as const, erro: 'Imagem não disponível', tempoMs: 0 } : f
+          ));
+          processandoEmBackground.current = false;
+          ultimaFotoProcessadaRef.current = Date.now();
+          return;
+        }
+        processarFotoEmBackground(fotoParaProcessar.id, imagemCapturada)
+          .catch(err => {
+            console.error('[Lote] Erro inesperado:', err);
+            // Marcar como erro em vez de crashar
+            setFotosLote(prev => prev.map(f =>
+              f.id === fotoParaProcessar.id ? { ...f, status: 'erro' as const, erro: err instanceof Error ? err.message : 'Erro', tempoMs: 0 } : f
+            ));
+          })
           .finally(() => {
             processandoEmBackground.current = false;
             ultimaFotoProcessadaRef.current = Date.now();
           });
-      }
+      }, delayNecessario);
+
+      return () => clearTimeout(timer);
     }
   }, [fotosLote, maquinas]);
 
