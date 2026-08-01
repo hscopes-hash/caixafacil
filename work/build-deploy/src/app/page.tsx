@@ -38,7 +38,7 @@ import {
   Plus, Pencil, Trash2, Eye, Ban, CheckCircle, AlertTriangle, Building2,
   ClipboardList, Printer, Camera, X, Image as ImageIcon, Layers, MessageCircle, LogIn,
   CalendarDays, ShieldAlert, FileText, Sun, Moon, DatabaseBackup, Download, Upload, HardDrive, SlidersHorizontal,
-  Key, Wifi, EyeOff, CreditCard, ExternalLink, ChevronDown, ChevronUp, ChevronLeft, RotateCcw, Crown, Check, CheckCircle2, XCircle, Sparkles, Zap, Shield, Info,
+  Key, Wifi, EyeOff, CreditCard, ExternalLink, ChevronDown, ChevronUp, ChevronLeft, RotateCcw, Crown, Check, CheckCircle2, XCircle, Sparkles, Zap, Shield, Info, Loader2,
   Receipt, Mic, MicOff, Send, Volume2, VolumeX, ShoppingCart, ShoppingBag, Maximize2, Minimize2, Monitor, User, Lock, QrCode, BookOpen, Globe, Save, HelpCircle, Landmark, MapPin, Copy, Bot, Calculator, Phone, Smartphone
 } from 'lucide-react';
 import { VERSION_DISPLAY, VERSION_STRING, VERSION_WITH_DATE } from '@/lib/version';
@@ -71,6 +71,8 @@ interface Cliente {
   liberarDigitacaoLeitura?: boolean;
   nomeCartao1?: string;
   nomeCartao2?: string;
+  tCartao1?: string;
+  tCartao2?: string;
   ativo: boolean;
   bloqueado: boolean;
   motivoBloqueio?: string;
@@ -1415,6 +1417,8 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
     liberarDigitacaoLeitura: true as boolean,
     nomeCartao1: 'CARTÃO1' as string,
     nomeCartao2: 'CARTÃO2' as string,
+    tCartao1: '' as string,
+    tCartao2: '' as string,
   });
 
   useEffect(() => {
@@ -1522,6 +1526,10 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
       acertoPercentual: '50',
       formaCobranca: '',
       liberarDigitacaoLeitura: true,
+      nomeCartao1: 'CARTÃO1',
+      nomeCartao2: 'CARTÃO2',
+      tCartao1: '',
+      tCartao2: '',
     });
     setClienteEditando(null);
   };
@@ -1546,6 +1554,8 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
       liberarDigitacaoLeitura: (cliente as any).liberarDigitacaoLeitura !== false,
       nomeCartao1: (cliente as any).nomeCartao1 || 'CARTÃO1',
       nomeCartao2: (cliente as any).nomeCartao2 || 'CARTÃO2',
+      tCartao1: (cliente as any).tCartao1 || '',
+      tCartao2: (cliente as any).tCartao2 || '',
     });
     setDialogOpen(true);
   };
@@ -1709,27 +1719,75 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
                 </div>
               </div>
 
-              {/* Nomes dos campos de cartão */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Nome do Cartão 1</Label>
-                  <Input
-                    value={formData.nomeCartao1 || 'CARTÃO1'}
-                    onChange={(e) => setFormData({ ...formData, nomeCartao1: e.target.value })}
-                    placeholder="CARTÃO1"
-                    className="bg-muted border-border"
-                    maxLength={20}
-                  />
+              {/* Cards das máquinas de cartão — um card por máquina */}
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-foreground">Máquinas de Cartão</p>
+                <p className="text-xs text-muted-foreground -mt-2">
+                  Configure o nome exibido para cada máquina e o título do campo de TOTAL que aparece no canhoto
+                  (ex: <span className="font-mono">VALOR A PAGAR</span>, <span className="font-mono">TOTAL</span>, <span className="font-mono">VENDA</span>).
+                  O título é usado pela IA Vision para localizar o valor correto em cada canhoto.
+                </p>
+
+                {/* Card CARTÃO 1 */}
+                <div className="border border-border rounded-lg p-3 bg-muted/40 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-warning" />
+                    <span className="text-sm font-semibold">Máquina 1</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Nome (exibição)</Label>
+                      <Input
+                        value={formData.nomeCartao1 || 'CARTÃO1'}
+                        onChange={(e) => setFormData({ ...formData, nomeCartao1: e.target.value })}
+                        placeholder="CARTÃO1"
+                        className="bg-muted border-border h-9"
+                        maxLength={20}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">TCARTÃO1 — título do campo de TOTAL</Label>
+                      <Input
+                        value={formData.tCartao1 || ''}
+                        onChange={(e) => setFormData({ ...formData, tCartao1: e.target.value })}
+                        placeholder="VALOR A PAGAR"
+                        className="bg-muted border-border h-9"
+                        maxLength={40}
+                      />
+                      <p className="text-[10px] text-muted-foreground">Em branco = IA usa "VALOR A PAGAR" ou "TOTAL"</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Nome do Cartão 2</Label>
-                  <Input
-                    value={formData.nomeCartao2 || 'CARTÃO2'}
-                    onChange={(e) => setFormData({ ...formData, nomeCartao2: e.target.value })}
-                    placeholder="CARTÃO2"
-                    className="bg-muted border-border"
-                    maxLength={20}
-                  />
+
+                {/* Card CARTÃO 2 */}
+                <div className="border border-border rounded-lg p-3 bg-muted/40 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-warning" />
+                    <span className="text-sm font-semibold">Máquina 2</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Nome (exibição)</Label>
+                      <Input
+                        value={formData.nomeCartao2 || 'CARTÃO2'}
+                        onChange={(e) => setFormData({ ...formData, nomeCartao2: e.target.value })}
+                        placeholder="CARTÃO2"
+                        className="bg-muted border-border h-9"
+                        maxLength={20}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">TCARTÃO2 — título do campo de TOTAL</Label>
+                      <Input
+                        value={formData.tCartao2 || ''}
+                        onChange={(e) => setFormData({ ...formData, tCartao2: e.target.value })}
+                        placeholder="VALOR A PAGAR"
+                        className="bg-muted border-border h-9"
+                        maxLength={40}
+                      />
+                      <p className="text-[10px] text-muted-foreground">Em branco = IA usa "VALOR A PAGAR" ou "TOTAL"</p>
+                    </div>
+                  </div>
                 </div>
               </div>
               <DialogFooter>
@@ -3194,6 +3252,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [resumoCartaoFoto, setResumoCartaoFoto] = useState<string | null>(null);
   const [resumoCartao2Foto, setResumoCartao2Foto] = useState<string | null>(null);
   const [resumoMercadoFoto, setResumoMercadoFoto] = useState<string | null>(null);
+  // Snapshot dos nomes das máquinas de cartão no momento do save — usado nos rótulos do resumo e da 2a via
+  const [resumoCartaoNome1, setResumoCartaoNome1] = useState<string>('CARTÃO1');
+  const [resumoCartaoNome2, setResumoCartaoNome2] = useState<string>('CARTÃO2');
   // Estado para Extrato 2a Via
   const [segundaViaOpen, setSegundaViaOpen] = useState(false);
   // Estado para Excluir Leitura (mesmo padrão da 2a via)
@@ -3284,7 +3345,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [cartao2FotoCapturada, setCartao2FotoCapturada] = useState<string | null>(null);
   const [cartao2FotoProcessada, setCartao2FotoProcessada] = useState<string | null>(null);
   const [extraindoCartao, setExtraindoCartao] = useState(false);
+  const [extraindoCartao2, setExtraindoCartao2] = useState(false);
   const [cartaoResultado, setCartaoResultado] = useState<{ tickets: number[]; total: number; totalIA?: number; totalConferido: boolean; quantidade: number } | null>(null);
+  const [cartao2Resultado, setCartao2Resultado] = useState<{ tickets: number[]; total: number; totalIA?: number; totalConferido: boolean; quantidade: number } | null>(null);
 
   // Estados para foto do mercado (cupons fiscais)
   const [mercadoModalOpen, setMercadoModalOpen] = useState(false);
@@ -3359,6 +3422,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const abrirModalCartao2 = () => {
     setCartao2FotoCapturada(null);
     setCartao2FotoProcessada(null);
+    setCartao2Resultado(null);
+    setExtraindoCartao2(false);
     setCartao2ModalOpen(true);
   };
 
@@ -3391,6 +3456,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.8);
               setCartao2FotoCapturada(imagemRedimensionada);
               setCartao2FotoProcessada(null);
+              setCartao2Resultado(null);
             }
           } catch (error) {
             console.error('Erro ao processar imagem:', error);
@@ -3453,19 +3519,28 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     }
   };
 
-  const extrairValoresCartao = async () => {
-    if (!cartaoFotoCapturada) {
+  // Extrai canhotos de cartão usando IA Vision.
+  // cartaoNum: 1 (usa tCartao1 do cliente) ou 2 (usa tCartao2 do cliente).
+  // Se tCartao for vazio, a IA usa o padrão "VALOR A PAGAR" ou "TOTAL".
+  const extrairValoresCartao = async (cartaoNum: 1 | 2 = 1) => {
+    const fotoCapturada = cartaoNum === 1 ? cartaoFotoCapturada : cartao2FotoCapturada;
+    const setExtraindo = cartaoNum === 1 ? setExtraindoCartao : setExtraindoCartao2;
+    const setResultado = cartaoNum === 1 ? setCartaoResultado : setCartao2Resultado;
+    const nomeCartao = (cartaoNum === 1 ? clienteSelecionado?.nomeCartao1 : clienteSelecionado?.nomeCartao2) || (cartaoNum === 1 ? 'CARTÃO1' : 'CARTÃO2');
+    const campoTotal = (cartaoNum === 1 ? clienteSelecionado?.tCartao1 : clienteSelecionado?.tCartao2) || '';
+
+    if (!fotoCapturada) {
       toast.error('Nenhuma foto capturada');
       return;
     }
-    setExtraindoCartao(true);
-    setCartaoResultado(null);
+    setExtraindo(true);
+    setResultado(null);
     try {
       const token = useAuthStore.getState().token;
       const res = await fetch('/api/leituras/extrair-cartao', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ imagem: cartaoFotoCapturada, empresaId: empresaId }),
+        body: JSON.stringify({ imagem: fotoCapturada, empresaId: empresaId, campoTotal }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -3485,18 +3560,18 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         totalConferido: data.totalConferido ?? true,
         quantidade: data.quantidade || tickets.length,
       };
-      setCartaoResultado(resultado);
+      setResultado(resultado);
 
       if (!resultado.totalConferido && resultado.totalIA !== undefined) {
         toast.warning(`IA disse R$ ${resultado.totalIA.toFixed(2)} mas a soma correta e R$ ${totalFinal.toFixed(2)}. Usando valor conferido.`);
       } else {
-        toast.success(`${resultado.quantidade} ticket(s) identificado(s) - Total: R$ ${totalFinal.toFixed(2)}`);
+        toast.success(`${nomeCartao}: ${resultado.quantidade} ticket(s) - Total: R$ ${totalFinal.toFixed(2)}`);
       }
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Erro desconhecido';
       toast.error(msg);
     } finally {
-      setExtraindoCartao(false);
+      setExtraindo(false);
     }
   };
 
@@ -3569,8 +3644,27 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       setDespesasItens(prev => prev.map(item =>
         item.id === 'cartao1' ? { ...item, valor: valorFormatado } : item
       ));
-      toast.success(`Total R$ ${valorFormatado} aplicado ao campo CARTÃO`);
+      toast.success(`Total R$ ${valorFormatado} aplicado ao campo ${clienteSelecionado?.nomeCartao1 || 'CARTÃO1'}`);
       setCartaoModalOpen(false);
+    } catch (error) {
+      console.error('Erro ao aplicar valores:', error);
+      toast.error('Erro ao processar a foto. Tente novamente.');
+    }
+  };
+
+  const aplicarValoresCartao2 = async () => {
+    if (!cartao2Resultado || !cartao2FotoCapturada) return;
+    try {
+      // Gerar foto com tarja
+      const fotoComTarja = await adicionarTarjaCartao(cartao2FotoCapturada, cartao2Resultado.total, cartao2Resultado.quantidade);
+      setCartao2FotoProcessada(fotoComTarja);
+      // Atualizar campo Cartão 2 com o valor total
+      const valorFormatado = cartao2Resultado.total.toFixed(2).replace('.', ',');
+      setDespesasItens(prev => prev.map(item =>
+        item.id === 'cartao2' ? { ...item, valor: valorFormatado } : item
+      ));
+      toast.success(`Total R$ ${valorFormatado} aplicado ao campo ${clienteSelecionado?.nomeCartao2 || 'CARTÃO2'}`);
+      setCartao2ModalOpen(false);
     } catch (error) {
       console.error('Erro ao aplicar valores:', error);
       toast.error('Erro ao processar a foto. Tente novamente.');
@@ -4020,6 +4114,26 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         if (savedData.cartaoFotoProcessada !== undefined) setCartaoFotoProcessada(savedData.cartaoFotoProcessada);
         if (savedData.cartao2FotoProcessada !== undefined) setCartao2FotoProcessada(savedData.cartao2FotoProcessada);
         if (savedData.mercadoFotoProcessada !== undefined) setMercadoFotoProcessada(savedData.mercadoFotoProcessada);
+      }
+
+      // ⚠️ Sincronizar descrições de CARTÃO1/CARTÃO2 com os nomes dinâmicos do cliente.
+      // Isto roda DEPOIS da restauração do localStorage para garantir que os nomes
+      // do cliente selecionado prevaleçam sobre quaisquer valores salvos anteriormente.
+      // Caso o cliente tenha renomeado as máquinas, os labels novos são aplicados.
+      const cli = clientes.find(c => c.id === clienteId);
+      if (cli) {
+        const nomeC1 = cli.nomeCartao1 || 'CARTÃO1';
+        const nomeC2 = cli.nomeCartao2 || 'CARTÃO2';
+        setReceitasItens(prev => prev.map(item =>
+          item.id === 'cartao1' ? { ...item, descricao: nomeC1 } :
+          item.id === 'cartao2' ? { ...item, descricao: nomeC2 } :
+          item
+        ));
+        setDespesasItens(prev => prev.map(item =>
+          item.id === 'cartao1' ? { ...item, descricao: nomeC1 } :
+          item.id === 'cartao2' ? { ...item, descricao: nomeC2 } :
+          item
+        ));
       }
     } catch (error) {
       toast.error('Erro ao carregar máquinas');
@@ -6623,7 +6737,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     } catch {
       // localStorage cheio ou indisponivel — silencioso
     }
-  }, [clienteSelecionado, maquinas, receitasItens, despesasItens, modoOperacao, recebido, formaPagamento, valorPago, saldoAnterior, cartaoFotoProcessada, mercadoFotoProcessada]);
+  }, [clienteSelecionado, maquinas, receitasItens, despesasItens, modoOperacao, recebido, formaPagamento, valorPago, saldoAnterior, cartaoFotoProcessada, cartao2FotoProcessada, mercadoFotoProcessada]);
 
   const carregarDigitacaoLS = useCallback(() => {
     if (!clienteSelecionado) return false;
@@ -6676,6 +6790,48 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       return false;
     }
   }, [clienteSelecionado, modoOperacao]);
+
+  // Sincronizar descrições de CARTÃO1/CARTÃO2 nas receitas e despesas com os nomes do cliente selecionado.
+  // Cobre: troca de cliente, cliente recém-editado no cadastro, re-render após edição.
+  // NOTA: a restauração do localStorage em loadMaquinasCliente também faz essa sincronização
+  // para garantir que os nomes prevaleçam sobre valores salvos anteriormente.
+  useEffect(() => {
+    if (!clienteSelecionado) return;
+    const nomeC1 = clienteSelecionado.nomeCartao1 || 'CARTÃO1';
+    const nomeC2 = clienteSelecionado.nomeCartao2 || 'CARTÃO2';
+    setReceitasItens(prev => {
+      const idx1 = prev.findIndex(i => i.id === 'cartao1');
+      const idx2 = prev.findIndex(i => i.id === 'cartao2');
+      if (idx1 === -1 || idx2 === -1) return prev;
+      if (prev[idx1].descricao === nomeC1 && prev[idx2].descricao === nomeC2) return prev;
+      return prev.map(item =>
+        item.id === 'cartao1' ? { ...item, descricao: nomeC1 } :
+        item.id === 'cartao2' ? { ...item, descricao: nomeC2 } :
+        item
+      );
+    });
+    setDespesasItens(prev => {
+      const idx1 = prev.findIndex(i => i.id === 'cartao1');
+      const idx2 = prev.findIndex(i => i.id === 'cartao2');
+      if (idx1 === -1 || idx2 === -1) return prev;
+      if (prev[idx1].descricao === nomeC1 && prev[idx2].descricao === nomeC2) return prev;
+      return prev.map(item =>
+        item.id === 'cartao1' ? { ...item, descricao: nomeC1 } :
+        item.id === 'cartao2' ? { ...item, descricao: nomeC2 } :
+        item
+      );
+    });
+  }, [clienteSelecionado?.nomeCartao1, clienteSelecionado?.nomeCartao2, clienteSelecionado?.id]);
+
+  // Atualizar referência de clienteSelecionado quando a lista de clientes mudar
+  // (ex: após editar o cliente no cadastro, os nomes nomeCartao1/nomeCartao2 podem ter mudado)
+  useEffect(() => {
+    if (!clienteSelecionado) return;
+    const atualizado = clientes.find(c => c.id === clienteSelecionado.id);
+    if (atualizado && atualizado !== clienteSelecionado) {
+      setClienteSelecionado(atualizado);
+    }
+  }, [clientes]);
 
   const limparDigitacaoLS = useCallback((modo?: string, clienteId?: string) => {
     try {
@@ -6730,6 +6886,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setCartaoResultado(null);
     setCartao2FotoProcessada(null);
     setCartao2FotoCapturada(null);
+    setCartao2Resultado(null);
     setMercadoFotoProcessada(null);
     setMercadoFotoCapturada(null);
     setMercadoResultado(null);
@@ -6900,6 +7057,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       setResumoCartaoFoto(cartaoFotoProcessada);
       setResumoCartao2Foto(cartao2FotoProcessada);
       setResumoMercadoFoto(mercadoFotoProcessada);
+      setResumoCartaoNome1(clienteSelecionado?.nomeCartao1 || 'CARTÃO1');
+      setResumoCartaoNome2(clienteSelecionado?.nomeCartao2 || 'CARTÃO2');
       // ⚠️ Limpar fotos de cartão/mercado AGORA — snapshot já foi capturado acima
       // Antes não limpava aqui (só no fecharResumo), mas isso causava bug:
       // a foto persistia no estado e era salva no localStorage pelo auto-save,
@@ -6907,6 +7066,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       setCartaoFotoProcessada(null);
       setCartaoFotoCapturada(null);
       setCartaoResultado(null);
+      setCartao2FotoProcessada(null);
+      setCartao2FotoCapturada(null);
+      setCartao2Resultado(null);
       setMercadoFotoProcessada(null);
       setMercadoFotoCapturada(null);
       setMercadoResultado(null);
@@ -7567,9 +7729,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       let alturaFinal = padding + 40 + 30 + 30 + (operadores.size > 0 ? 30 : 0) + 10 + 30;
       alturaFinal += maquinasArr.length * (CARD_HEIGHT + 20);
       // Espaço para card CARTÃO e MERCADO (se houver fotos no GCS)
-      const temCartao2via = segundaViaFotos.some(f => f.codigo === 'CARTAO1' || f.codigo === 'CARTAO2' || f.maquinaId === 'cartao1-canhoto' || f.maquinaId === 'cartao2-canhoto');
+      const temCartao1_2via = segundaViaFotos.some(f => f.codigo === 'CARTAO1' || f.maquinaId === 'cartao1-canhoto');
+      const temCartao2_2via = segundaViaFotos.some(f => f.codigo === 'CARTAO2' || f.maquinaId === 'cartao2-canhoto');
+      const temCartao2via = temCartao1_2via || temCartao2_2via;
       const temMercado2via = segundaViaFotos.some(f => f.codigo === 'MERCADO' || f.maquinaId === 'mercado-cupons');
-      if (temCartao2via) alturaFinal += 200 + 10;
+      if (temCartao1_2via) alturaFinal += 200 + 10;
+      if (temCartao2_2via) alturaFinal += 200 + 10;
       if (temMercado2via) alturaFinal += 200 + 10;
       alturaFinal += 10 + 30; // separador
       if (temReceitasExtras || temDespesasExtras) {
@@ -7653,33 +7818,42 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         y += CARD_HEIGHT + 10;
       }
 
-      // Card CARTÃO (canhotos) — se houver foto no GCS
+      // Cards CARTÃO 1 e CARTÃO 2 (canhotos) — se houver foto no GCS
       if (temCartao2via) {
-        const cartaoFoto = segundaViaFotos.find(f => f.codigo === 'CARTAO1' || f.codigo === 'CARTAO2' || f.maquinaId === 'cartao1-canhoto' || f.maquinaId === 'cartao2-canhoto');
-        const cartaoCardH = 200;
-        ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
-        ctx.strokeRect(padding, y, A4_W - padding * 2, cartaoCardH);
-        const cfotoX = padding + 10, cfotoY = y + 10, cfotoW = 180, cfotoH = 180;
-        ctx.fillStyle = '#f0f0f0'; ctx.fillRect(cfotoX, cfotoY, cfotoW, cfotoH);
-        if (cartaoFoto) {
-          try {
-            const cImg = await new Promise<HTMLImageElement>((resolve) => {
-              const img = new Image();
-              img.onload = () => resolve(img);
-              img.onerror = () => resolve(img);
-              img.src = cartaoFoto.fotoBase64;
-            });
-            if (cImg.complete && cImg.naturalWidth > 0) {
-              const ar = cImg.naturalWidth / cImg.naturalHeight;
-              let dw = cfotoW, dh = cfotoH;
-              if (ar > 1) { dw = cfotoW; dh = Math.round(cfotoW / ar); } else { dh = cfotoH; dw = Math.round(cfotoH * ar); }
-              ctx.drawImage(cImg, cfotoX + Math.round((cfotoW - dw) / 2), cfotoY + Math.round((cfotoH - dh) / 2), dw, dh);
-            }
-          } catch {}
-        }
-        ctx.fillStyle = '#000000'; ctx.font = FONT_LABEL; ctx.textAlign = 'left';
-        ctx.fillText(`${clienteSelecionado?.nomeCartao1 || 'CARTÃO1'} — Canhotos`, cfotoX + cfotoW + 20, y + 60);
-        y += cartaoCardH + 10;
+        const nomeC1 = clienteSelecionado?.nomeCartao1 || 'CARTÃO1';
+        const nomeC2 = clienteSelecionado?.nomeCartao2 || 'CARTÃO2';
+        const cartao1Foto = segundaViaFotos.find(f => f.codigo === 'CARTAO1' || f.maquinaId === 'cartao1-canhoto');
+        const cartao2Foto = segundaViaFotos.find(f => f.codigo === 'CARTAO2' || f.maquinaId === 'cartao2-canhoto');
+
+        const drawCartaoCard = async (foto: { fotoBase64: string } | undefined, label: string) => {
+          const cartaoCardH = 200;
+          ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
+          ctx.strokeRect(padding, y, A4_W - padding * 2, cartaoCardH);
+          const cfotoX = padding + 10, cfotoY = y + 10, cfotoW = 180, cfotoH = 180;
+          ctx.fillStyle = '#f0f0f0'; ctx.fillRect(cfotoX, cfotoY, cfotoW, cfotoH);
+          if (foto) {
+            try {
+              const cImg = await new Promise<HTMLImageElement>((resolve) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => resolve(img);
+                img.src = foto.fotoBase64;
+              });
+              if (cImg.complete && cImg.naturalWidth > 0) {
+                const ar = cImg.naturalWidth / cImg.naturalHeight;
+                let dw = cfotoW, dh = cfotoH;
+                if (ar > 1) { dw = cfotoW; dh = Math.round(cfotoW / ar); } else { dh = cfotoH; dw = Math.round(cfotoH * ar); }
+                ctx.drawImage(cImg, cfotoX + Math.round((cfotoW - dw) / 2), cfotoY + Math.round((cfotoH - dh) / 2), dw, dh);
+              }
+            } catch {}
+          }
+          ctx.fillStyle = '#000000'; ctx.font = FONT_LABEL; ctx.textAlign = 'left';
+          ctx.fillText(`${label} — Canhotos`, cfotoX + cfotoW + 20, y + 60);
+          y += cartaoCardH + 10;
+        };
+
+        if (cartao1Foto) await drawCartaoCard(cartao1Foto, nomeC1);
+        if (cartao2Foto) await drawCartaoCard(cartao2Foto, nomeC2);
       }
 
       // Card MERCADO (cupons) — se houver foto no GCS
@@ -7897,8 +8071,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       let alturaFinal = padding + 40 + 30 + 30 + 30 + 10 + 30;
       alturaFinal += maquinasSalvas.length * (CARD_HEIGHT + 20);
-      // Espaço para card CARTÃO (se houver foto)
+      // Espaço para card CARTÃO 1 e 2 (se houver foto)
       if (resumoCartaoFoto) alturaFinal += 200 + 10;
+      if (resumoCartao2Foto) alturaFinal += 200 + 10;
       // Espaço para card MERCADO (se houver foto)
       if (resumoMercadoFoto) alturaFinal += 200 + 10;
       alturaFinal += 10 + 30;
@@ -7973,7 +8148,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         y += CARD_HEIGHT;
       }
 
-      // Card CARTÃO (canhotos) — só se houver foto
+      // Card CARTÃO 1 (canhotos) — só se houver foto
       if (resumoCartaoFoto) {
         const cartaoCardH = 200;
         ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
@@ -7995,8 +8170,34 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           }
         } catch {}
         ctx.fillStyle = '#000000'; ctx.font = FONT_LABEL; ctx.textAlign = 'left';
-        ctx.fillText(`${clienteSelecionado?.nomeCartao1 || 'CARTÃO1'} — Canhotos`, fotoX + fotoW + 20, y + 60);
+        ctx.fillText(`${resumoCartaoNome1} — Canhotos`, fotoX + fotoW + 20, y + 60);
         y += cartaoCardH + 10;
+      }
+
+      // Card CARTÃO 2 (canhotos) — só se houver foto
+      if (resumoCartao2Foto) {
+        const cartao2CardH = 200;
+        ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
+        ctx.strokeRect(padding, y, A4_W - padding * 2, cartao2CardH);
+        const c2fotoX = padding + 10, c2fotoY = y + 10, c2fotoW = 180, c2fotoH = 180;
+        ctx.fillStyle = '#f0f0f0'; ctx.fillRect(c2fotoX, c2fotoY, c2fotoW, c2fotoH);
+        try {
+          const cartao2Img = await new Promise<HTMLImageElement>((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(img);
+            img.src = resumoCartao2Foto!;
+          });
+          if (cartao2Img.complete && cartao2Img.naturalWidth > 0) {
+            const ar = cartao2Img.naturalWidth / cartao2Img.naturalHeight;
+            let dw = c2fotoW, dh = c2fotoH;
+            if (ar > 1) { dw = c2fotoW; dh = Math.round(c2fotoW / ar); } else { dh = c2fotoH; dw = Math.round(c2fotoH * ar); }
+            ctx.drawImage(cartao2Img, c2fotoX + Math.round((c2fotoW - dw) / 2), c2fotoY + Math.round((c2fotoH - dh) / 2), dw, dh);
+          }
+        } catch {}
+        ctx.fillStyle = '#000000'; ctx.font = FONT_LABEL; ctx.textAlign = 'left';
+        ctx.fillText(`${resumoCartaoNome2} — Canhotos`, c2fotoX + c2fotoW + 20, y + 60);
+        y += cartao2CardH + 10;
       }
 
       // Card MERCADO (cupons) — só se houver foto
@@ -8498,12 +8699,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setResumoCartaoFoto(null);
     setResumoCartao2Foto(null);
     setResumoMercadoFoto(null);
+    setResumoCartaoNome1('CARTÃO1');
+    setResumoCartaoNome2('CARTÃO2');
     // Limpar fotos de canhoto de cartão e cupons do mercado após fechar resumo
     setCartaoFotoProcessada(null);
     setCartaoFotoCapturada(null);
     setCartaoResultado(null);
     setCartao2FotoProcessada(null);
     setCartao2FotoCapturada(null);
+    setCartao2Resultado(null);
     setMercadoFotoProcessada(null);
     setMercadoFotoCapturada(null);
     setMercadoResultado(null);
@@ -10270,9 +10474,61 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   </div>
                 ) : (
                   <div className="space-y-3">
+                    {/* Mostra resultado da IA quando disponível */}
+                    {cartaoResultado && (
+                      <div className="border border-green-700/40 bg-green-50 dark:bg-green-950/20 rounded-lg p-3 text-sm">
+                        <p className="font-semibold text-green-700 dark:text-green-400">
+                          {cartaoResultado.quantidade} ticket(s) — Total: R$ {cartaoResultado.total.toFixed(2)}
+                        </p>
+                        {!cartaoResultado.totalConferido && cartaoResultado.totalIA !== undefined && (
+                          <p className="text-xs text-amber-600 mt-1">
+                            IA informou R$ {cartaoResultado.totalIA.toFixed(2)} — usando soma conferida.
+                          </p>
+                        )}
+                        {clienteSelecionado?.tCartao1 && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Campo buscado: <span className="font-mono">{clienteSelecionado.tCartao1}</span>
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Botão Processar com IA — extrai valores dos canhotos */}
+                    {!cartaoResultado && (
+                      <Button
+                        className="w-full bg-gradient-to-r from-amber-500 to-orange-600"
+                        disabled={extraindoCartao}
+                        onClick={() => extrairValoresCartao(1)}
+                      >
+                        {extraindoCartao ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            PROCESSANDO IA...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4 mr-2" />
+                            PROCESSAR COM IA {clienteSelecionado?.tCartao1 ? `(${clienteSelecionado.tCartao1})` : ''}
+                          </>
+                        )}
+                      </Button>
+                    )}
+
+                    {/* Botão Aplicar Valor — após extração IA */}
+                    {cartaoResultado && (
+                      <Button
+                        className="w-full bg-gradient-to-r from-green-500 to-emerald-600"
+                        onClick={aplicarValoresCartao}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        APLICAR R$ {cartaoResultado.total.toFixed(2).replace('.', ',')}
+                      </Button>
+                    )}
+
                     {/* Botão Confirmar Foto — apenas preserva a foto, sem IA */}
                     <Button
-                      className="w-full bg-gradient-to-r from-green-500 to-emerald-600"
+                      variant="outline"
+                      className="w-full"
                       onClick={() => {
                         setCartaoFotoProcessada(cartaoFotoCapturada);
                         toast.success('Foto do canhoto salva! Será enviada junto com a leitura.');
@@ -10280,7 +10536,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       }}
                     >
                       <CheckCircle className="w-4 h-4 mr-2" />
-                      CONFIRMAR FOTO
+                      SÓ PRESERVAR FOTO
                     </Button>
 
                     {/* Botão Nova Foto */}
@@ -10310,46 +10566,128 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 </DialogDescription>
               </DialogHeader>
 
-              {!cartao2FotoCapturada ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="cursor-pointer">
-                    <input type="file" accept="image/*" onChange={(e) => handleFileChangeCartao2(e, 'CÂMERA')} className="hidden" id="cartao2-camera-input" />
-                    <div className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 hover:from-amber-500/30 hover:to-orange-500/30 transition-colors">
-                      <Camera className="w-6 h-6 text-warning" />
-                      <span className="text-sm text-warning font-medium">Câmera</span>
-                    </div>
-                  </label>
-                  <label className="cursor-pointer">
-                    <input type="file" accept="image/*" onChange={(e) => handleFileChangeCartao2(e, 'GALERIA')} className="hidden" />
-                    <div className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-muted border-border hover:bg-accent transition-colors">
-                      <ImageIcon className="w-6 h-6 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground font-medium">Galeria</span>
-                    </div>
-                  </label>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <img src={cartao2FotoCapturada} alt="Canhotos" className="w-full rounded-lg" />
-                  <Button
-                    className="w-full bg-green-600 hover:bg-green-700 text-white"
-                    onClick={() => { setCartao2FotoProcessada(cartao2FotoCapturada); setCartao2ModalOpen(false); toast.success(`Foto de ${clienteSelecionado?.nomeCartao2 || 'CARTÃO2'} preservada`); }}
-                  >
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Confirmar Foto
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => { setCartao2FotoCapturada(null); setCartao2FotoProcessada(null); }}
-                  >
-                    <X className="w-4 h-4 mr-2" />
-                    Nova Foto
-                  </Button>
-                </div>
-              )}
-              {cartao2FotoProcessada && (
-                <p className="text-xs text-success text-center mt-2">✓ Foto preservada para envio</p>
-              )}
+              <div className="space-y-4">
+                {/* Preview da foto */}
+                {cartao2FotoCapturada ? (
+                  <div className="relative">
+                    <img
+                      src={cartao2FotoProcessada || cartao2FotoCapturada}
+                      alt="Canhotos capturados"
+                      className="w-full max-h-[40vh] object-contain rounded-lg border border-border mx-auto"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-2 right-2 bg-background/80 hover:bg-card"
+                      onClick={() => { setCartao2FotoCapturada(null); setCartao2FotoProcessada(null); setCartao2Resultado(null); }}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
+                    <CreditCard className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+                    <p className="text-muted-foreground text-sm">Nenhum canhoto capturado</p>
+                    <p className="text-muted-foreground text-xs mt-1">Fotografe todos os canhotos de uma vez</p>
+                  </div>
+                )}
+
+                {/* Botões de captura */}
+                {!cartao2FotoCapturada ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="cursor-pointer">
+                      <input type="file" accept="image/*" onChange={(e) => handleFileChangeCartao2(e, 'CÂMERA')} className="hidden" id="cartao2-camera-input" />
+                      <div className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 hover:from-amber-500/30 hover:to-orange-500/30 transition-colors">
+                        <Camera className="w-6 h-6 text-warning" />
+                        <span className="text-sm text-warning font-medium">Câmera</span>
+                      </div>
+                    </label>
+                    <label className="cursor-pointer">
+                      <input type="file" accept="image/*" onChange={(e) => handleFileChangeCartao2(e, 'GALERIA')} className="hidden" />
+                      <div className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-muted border-border hover:bg-accent transition-colors">
+                        <ImageIcon className="w-6 h-6 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground font-medium">Galeria</span>
+                      </div>
+                    </label>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Mostra resultado da IA quando disponível */}
+                    {cartao2Resultado && (
+                      <div className="border border-green-700/40 bg-green-50 dark:bg-green-950/20 rounded-lg p-3 text-sm">
+                        <p className="font-semibold text-green-700 dark:text-green-400">
+                          {cartao2Resultado.quantidade} ticket(s) — Total: R$ {cartao2Resultado.total.toFixed(2)}
+                        </p>
+                        {!cartao2Resultado.totalConferido && cartao2Resultado.totalIA !== undefined && (
+                          <p className="text-xs text-amber-600 mt-1">
+                            IA informou R$ {cartao2Resultado.totalIA.toFixed(2)} — usando soma conferida.
+                          </p>
+                        )}
+                        {clienteSelecionado?.tCartao2 && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Campo buscado: <span className="font-mono">{clienteSelecionado.tCartao2}</span>
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Botão Processar com IA — extrai valores dos canhotos */}
+                    {!cartao2Resultado && (
+                      <Button
+                        className="w-full bg-gradient-to-r from-amber-500 to-orange-600"
+                        disabled={extraindoCartao2}
+                        onClick={() => extrairValoresCartao(2)}
+                      >
+                        {extraindoCartao2 ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            PROCESSANDO IA...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4 mr-2" />
+                            PROCESSAR COM IA {clienteSelecionado?.tCartao2 ? `(${clienteSelecionado.tCartao2})` : ''}
+                          </>
+                        )}
+                      </Button>
+                    )}
+
+                    {/* Botão Aplicar Valor — após extração IA */}
+                    {cartao2Resultado && (
+                      <Button
+                        className="w-full bg-gradient-to-r from-green-500 to-emerald-600"
+                        onClick={aplicarValoresCartao2}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        APLICAR R$ {cartao2Resultado.total.toFixed(2).replace('.', ',')}
+                      </Button>
+                    )}
+
+                    {/* Botão Confirmar Foto — apenas preserva a foto, sem IA */}
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => {
+                        setCartao2FotoProcessada(cartao2FotoCapturada);
+                        toast.success(`Foto de ${clienteSelecionado?.nomeCartao2 || 'CARTÃO2'} preservada! Será enviada junto com a leitura.`);
+                        setCartao2ModalOpen(false);
+                      }}
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      SÓ PRESERVAR FOTO
+                    </Button>
+
+                    {/* Botão Nova Foto */}
+                    <Button
+                      className="w-full bg-red-600 hover:bg-red-700 text-white"
+                      onClick={() => { setCartao2FotoCapturada(null); setCartao2FotoProcessada(null); setCartao2Resultado(null); }}
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      Nova Foto
+                    </Button>
+                  </div>
+                )}
+              </div>
             </DialogContent>
           </Dialog>
 
@@ -11061,14 +11399,26 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                               })}
                             </div>
 
-                            {/* Card CARTÃO (canhotos) — só se houver foto */}
+                            {/* Card CARTÃO 1 (canhotos) — só se houver foto */}
                             {resumoCartaoFoto && (
                               <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
                                 <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
                                   <img src={resumoCartaoFoto} alt="Canhotos" className="w-full h-full object-contain" />
                                 </div>
                                 <div className="flex-1 text-sm flex items-center">
-                                  <p className="text-base font-bold">{clienteSelecionado?.nomeCartao1 || 'CARTÃO1'} — Canhotos</p>
+                                  <p className="text-base font-bold">{resumoCartaoNome1} — Canhotos</p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Card CARTÃO 2 (canhotos) — só se houver foto */}
+                            {resumoCartao2Foto && (
+                              <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
+                                <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
+                                  <img src={resumoCartao2Foto} alt="Canhotos" className="w-full h-full object-contain" />
+                                </div>
+                                <div className="flex-1 text-sm flex items-center">
+                                  <p className="text-base font-bold">{resumoCartaoNome2} — Canhotos</p>
                                 </div>
                               </div>
                             )}
@@ -11272,14 +11622,26 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         })}
                       </div>
 
-                      {/* Card CARTÃO (canhotos) — só se houver foto */}
+                      {/* Card CARTÃO 1 (canhotos) — só se houver foto */}
                       {resumoCartaoFoto && (
                         <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
                           <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
                             <img src={resumoCartaoFoto} alt="Canhotos" className="w-full h-full object-contain" />
                           </div>
                           <div className="flex-1 text-sm flex items-center">
-                            <p className="text-base font-bold">{clienteSelecionado?.nomeCartao1 || 'CARTÃO1'} — Canhotos</p>
+                            <p className="text-base font-bold">{resumoCartaoNome1} — Canhotos</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Card CARTÃO 2 (canhotos) — só se houver foto */}
+                      {resumoCartao2Foto && (
+                        <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
+                          <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
+                            <img src={resumoCartao2Foto} alt="Canhotos" className="w-full h-full object-contain" />
+                          </div>
+                          <div className="flex-1 text-sm flex items-center">
+                            <p className="text-base font-bold">{resumoCartaoNome2} — Canhotos</p>
                           </div>
                         </div>
                       )}

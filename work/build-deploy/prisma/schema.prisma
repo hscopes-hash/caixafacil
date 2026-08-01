@@ -134,6 +134,8 @@ model Cliente {
   liberarDigitacaoLeitura Boolean @default(true) // Liberar digitação manual da leitura atual? Se false, apenas preenchimento via OCR (foto)
   nomeCartao1     String          @default("CARTÃO1")  // Nome do campo de cartão 1
   nomeCartao2     String          @default("CARTÃO2")  // Nome do campo de cartão 2
+  tCartao1        String?                               // Título do campo de TOTAL no canhoto do cartão 1 (ex: "VALOR A PAGAR", "TOTAL")
+  tCartao2        String?                               // Título do campo de TOTAL no canhoto do cartão 2
   ativo           Boolean         @default(true)
   bloqueado       Boolean         @default(false)
   motivoBloqueio  String?

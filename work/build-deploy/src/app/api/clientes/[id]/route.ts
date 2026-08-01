@@ -7,6 +7,8 @@ async function ensureSchema() {
   try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "liberarDigitacaoLeitura" BOOLEAN NOT NULL DEFAULT true`); } catch {}
   try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "nomeCartao1" TEXT NOT NULL DEFAULT 'CARTÃO1'`); } catch {}
   try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "nomeCartao2" TEXT NOT NULL DEFAULT 'CARTÃO2'`); } catch {}
+  try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "tCartao1" TEXT`); } catch {}
+  try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "tCartao2" TEXT`); } catch {}
 }
 
 // Buscar cliente por ID
@@ -81,6 +83,8 @@ export async function PUT(
       liberarDigitacaoLeitura,
       nomeCartao1,
       nomeCartao2,
+      tCartao1,
+      tCartao2,
     } = body;
 
     const data: Record<string, unknown> = {};
@@ -112,6 +116,8 @@ export async function PUT(
     if (liberarDigitacaoLeitura !== undefined) data.liberarDigitacaoLeitura = Boolean(liberarDigitacaoLeitura);
     if (nomeCartao1 !== undefined) data.nomeCartao1 = nomeCartao1 || 'CARTÃO1';
     if (nomeCartao2 !== undefined) data.nomeCartao2 = nomeCartao2 || 'CARTÃO2';
+    if (tCartao1 !== undefined) data.tCartao1 = (typeof tCartao1 === 'string' ? tCartao1.trim() : '') || null;
+    if (tCartao2 !== undefined) data.tCartao2 = (typeof tCartao2 === 'string' ? tCartao2.trim() : '') || null;
 
     const cliente = await db.cliente.update({
       where: { id },

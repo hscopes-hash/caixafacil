@@ -8,6 +8,8 @@ async function ensureSchema() {
   try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "liberarDigitacaoLeitura" BOOLEAN NOT NULL DEFAULT true`); } catch {}
   try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "nomeCartao1" TEXT NOT NULL DEFAULT 'CARTÃO1'`); } catch {}
   try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "nomeCartao2" TEXT NOT NULL DEFAULT 'CARTÃO2'`); } catch {}
+  try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "tCartao1" TEXT`); } catch {}
+  try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "tCartao2" TEXT`); } catch {}
 }
 
 // Listar clientes da empresa
@@ -83,6 +85,8 @@ export async function POST(request: NextRequest) {
       liberarDigitacaoLeitura,
       nomeCartao1,
       nomeCartao2,
+      tCartao1,
+      tCartao2,
     } = body;
 
     if (!nome || !empresaId) {
@@ -138,6 +142,8 @@ export async function POST(request: NextRequest) {
         liberarDigitacaoLeitura: liberarDigitacaoLeitura !== undefined ? Boolean(liberarDigitacaoLeitura) : true,
         nomeCartao1: nomeCartao1 || 'CARTÃO1',
         nomeCartao2: nomeCartao2 || 'CARTÃO2',
+        tCartao1: tCartao1?.trim() || null,
+        tCartao2: tCartao2?.trim() || null,
       },
     });
 

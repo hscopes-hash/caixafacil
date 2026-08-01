@@ -39,7 +39,7 @@ function removerTrocoSuspeito(tickets: number[]): number[] {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { imagem, empresaId } = body;
+    const { imagem, empresaId, campoTotal } = body;
 
     if (!imagem) {
       return NextResponse.json({ error: 'Imagem é obrigatória' }, { status: 400 });
@@ -61,10 +61,17 @@ export async function POST(request: NextRequest) {
 
     const model = llmModel;
 
+    // campoTotal: título do campo de TOTAL informado no cadastro do cliente (ex: "VALOR A PAGAR", "TOTAL", "VENDA").
+    // Se vier vazio, cai no padrão histórico "VALOR A PAGAR" ou "TOTAL".
+    const campo = (typeof campoTotal === 'string' ? campoTotal.trim() : '').toUpperCase();
+    const rotulosBusca = campo
+      ? `"${campo}"`
+      : `"VALOR A PAGAR" ou "TOTAL"`;
+
     const prompt = `Esta foto contém VÁRIOS cupons fiscais empilhados.
 
-Sua única tarefa: de cada cupom, extraia APENAS o valor que aparece ao lado dos textos "VALOR A PAGAR" ou "TOTAL", seguido de "R$".
-São os únicos dois campos que importam. Ignore TODOS os outros valores do cupom (itens, troco, desconto, subtotal, formas de pagamento, etc).
+Sua única tarefa: de cada cupom, extraia APENAS o valor que aparece ao lado do texto ${rotulosBusca}, seguido de "R$".
+São os únicos campos que importam. Ignore TODOS os outros valores do cupom (itens, troco, desconto, subtotal, formas de pagamento, etc).
 
 Cada cupom fiscal tem exatamente UM desses campos. Encontre todos os cupons na imagem e extraia o valor de cada um.
 
