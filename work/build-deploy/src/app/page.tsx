@@ -3214,7 +3214,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [saving, setSaving] = useState(false);
   const [extratoVisivel, setExtratoVisivel] = useState(false);
   const [saldoAnterior, setSaldoAnterior] = useState(0);
-  const [turno, setTurno] = useState<'NENHUM' | 'MANHA' | 'TARDE' | 'NOITE'>('NENHUM');
+  const [turno, setTurno] = useState<'NENHUM' | 'MANHA' | 'TARDE' | 'NOITE' | 'MADRUGADA'>('NENHUM');
   const [recebido, setRecebido] = useState('');
   // Modo de operação derivado do cliente ou forçado por ajusteMode
   const [modoOperacao, setModoOperacao] = useState<'COBRANCA' | 'LEITURA' | 'AJUSTE'>(() => ajusteMode ? 'AJUSTE' : 'COBRANCA');
@@ -9022,8 +9022,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           {clienteSelecionado && modoOperacao !== 'AJUSTE' && (
             <div className="space-y-2">
               <Label className="text-muted-foreground">Turno</Label>
-              <div className="grid grid-cols-4 gap-1">
-                {(['NENHUM', 'MANHA', 'TARDE', 'NOITE'] as const).map((t) => (
+              <div className="grid grid-cols-5 gap-1">
+                {(['NENHUM', 'MANHA', 'TARDE', 'NOITE', 'MADRUGADA'] as const).map((t) => (
                   <button
                     key={t}
                     type="button"
