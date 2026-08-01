@@ -1746,7 +1746,7 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs">TCARTÃO1 — título do campo de TOTAL</Label>
+                      <Label className="text-xs">Identificador do Total</Label>
                       <Input
                         value={formData.tCartao1 || ''}
                         onChange={(e) => setFormData({ ...formData, tCartao1: e.target.value })}
@@ -1777,7 +1777,7 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs">TCARTÃO2 — título do campo de TOTAL</Label>
+                      <Label className="text-xs">Identificador do Total</Label>
                       <Input
                         value={formData.tCartao2 || ''}
                         onChange={(e) => setFormData({ ...formData, tCartao2: e.target.value })}
