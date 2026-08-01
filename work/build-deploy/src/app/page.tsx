@@ -7678,7 +7678,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           } catch {}
         }
         ctx.fillStyle = '#000000'; ctx.font = FONT_LABEL; ctx.textAlign = 'left';
-        ctx.fillText('CARTÃO — Canhotos', cfotoX + cfotoW + 20, y + 60);
+        ctx.fillText(`${clienteSelecionado?.nomeCartao1 || 'CARTÃO1'} — Canhotos`, cfotoX + cfotoW + 20, y + 60);
         y += cartaoCardH + 10;
       }
 
@@ -7995,7 +7995,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           }
         } catch {}
         ctx.fillStyle = '#000000'; ctx.font = FONT_LABEL; ctx.textAlign = 'left';
-        ctx.fillText('CARTÃO — Canhotos', fotoX + fotoW + 20, y + 60);
+        ctx.fillText(`${clienteSelecionado?.nomeCartao1 || 'CARTÃO1'} — Canhotos`, fotoX + fotoW + 20, y + 60);
         y += cartaoCardH + 10;
       }
 
@@ -11068,7 +11068,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                                   <img src={resumoCartaoFoto} alt="Canhotos" className="w-full h-full object-contain" />
                                 </div>
                                 <div className="flex-1 text-sm flex items-center">
-                                  <p className="text-base font-bold">CARTÃO — Canhotos</p>
+                                  <p className="text-base font-bold">{clienteSelecionado?.nomeCartao1 || 'CARTÃO1'} — Canhotos</p>
                                 </div>
                               </div>
                             )}
@@ -11279,7 +11279,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                             <img src={resumoCartaoFoto} alt="Canhotos" className="w-full h-full object-contain" />
                           </div>
                           <div className="flex-1 text-sm flex items-center">
-                            <p className="text-base font-bold">CARTÃO — Canhotos</p>
+                            <p className="text-base font-bold">{clienteSelecionado?.nomeCartao1 || 'CARTÃO1'} — Canhotos</p>
                           </div>
                         </div>
                       )}
