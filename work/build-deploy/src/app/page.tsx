@@ -3214,7 +3214,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [saving, setSaving] = useState(false);
   const [extratoVisivel, setExtratoVisivel] = useState(false);
   const [saldoAnterior, setSaldoAnterior] = useState(0);
-  const [turno, setTurno] = useState<'NENHUM' | 'MANHA' | 'TARDE' | 'NOITE' | 'MADRUGADA'>('NENHUM');
+  const [turno, setTurno] = useState<'INTEGRAL' | 'MANHA' | 'TARDE' | 'NOITE' | 'MADRUGADA'>('INTEGRAL');
   const [recebido, setRecebido] = useState('');
   // Modo de operação derivado do cliente ou forçado por ajusteMode
   const [modoOperacao, setModoOperacao] = useState<'COBRANCA' | 'LEITURA' | 'AJUSTE'>(() => ajusteMode ? 'AJUSTE' : 'COBRANCA');
@@ -4167,7 +4167,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setExtratoVisivel(false);
     setRecebido('');
     setSaldoAnterior(0);
-    setTurno('NENHUM');
+    setTurno('INTEGRAL');
     // Limpar campos de receita e despesa ao trocar de cliente
     resetReceitas();
     resetDespesas();
@@ -6877,7 +6877,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setRecebido('');
     setFormaPagamento(null);
     setValorPago('');
-    setTurno('NENHUM');
+    setTurno('INTEGRAL');
     resetReceitas();
     resetDespesas();
     // Limpar fotos de canhoto de cartão e cupons do mercado ao cancelar
@@ -7033,7 +7033,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           receita: receitasParaSalvar.length > 0 ? JSON.stringify(receitasParaSalvar) : null,
           valorReceita: totalRec !== 0 ? totalRec : null,
           fotoGcsPath: fotoGcsPath,
-          turno: turno !== 'NENHUM' ? turno : null,
+          turno: turno !== 'INTEGRAL' ? turno : null,
         }),
       });
 
@@ -8111,7 +8111,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       ctx.font = FONT_SUBTITLE;
       ctx.fillText(clienteSelecionado?.nome?.toUpperCase() || '', A4_W / 2, y); y += 30;
       ctx.font = FONT_VALUE;
-      ctx.fillText(`Data: ${dataFormatada}${turno !== 'NENHUM' ? ` — Turno: ${turno === 'MANHA' ? 'MANHÃ' : turno}` : ''}`, A4_W / 2, y); y += 30;
+      ctx.fillText(`Data: ${dataFormatada}${turno !== 'INTEGRAL' ? ` — Turno: ${turno === 'MANHA' ? 'MANHÃ' : turno}` : ''}`, A4_W / 2, y); y += 30;
       ctx.fillText(`Operador: ${usuarioNome}`, A4_W / 2, y); y += 30;
       y += 10;
       ctx.strokeStyle = '#000000'; ctx.lineWidth = 2;
@@ -9023,7 +9023,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             <div className="space-y-2">
               <Label className="text-muted-foreground">Turno</Label>
               <div className="grid grid-cols-5 gap-1">
-                {(['NENHUM', 'MANHA', 'TARDE', 'NOITE', 'MADRUGADA'] as const).map((t) => (
+                {(['INTEGRAL', 'MANHA', 'TARDE', 'NOITE', 'MADRUGADA'] as const).map((t) => (
                   <button
                     key={t}
                     type="button"
@@ -11563,7 +11563,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     {modoOperacao === 'COBRANCA' ? 'RELATÓRIO DE COBRANÇA' : modoOperacao === 'LEITURA' ? 'RELATÓRIO DE LEITURA' : 'RELATÓRIO DE AJUSTE'}
                   </p>
                   <p className="font-bold text-sm">{clienteSelecionado?.nome?.toUpperCase()}</p>
-                  <p className="text-sm">Data: {dataFormatada}{turno !== 'NENHUM' ? ` — Turno: ${turno === 'MANHA' ? 'MANHÃ' : turno}` : ''}</p>
+                  <p className="text-sm">Data: {dataFormatada}{turno !== 'INTEGRAL' ? ` — Turno: ${turno === 'MANHA' ? 'MANHÃ' : turno}` : ''}</p>
                   <p className="text-sm">Operador: {usuarioNome}</p>
                 </div>
 
