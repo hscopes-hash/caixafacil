@@ -3408,6 +3408,40 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   // ============================================
   // Funções para foto do cartão (canhotos)
   // ============================================
+
+  // Helper: abre a câmera do sistema criando um input dinâmico com capture="environment".
+  // Isto evita o bug de múltiplos inputs com capture conflitando no iOS Safari.
+  // O input é criado, clicado, e removido após a seleção — só existe um por vez.
+  const abrirCameraDinamico = (onFile: (file: File) => void) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.capture = 'environment'; // força abertura da câmera traseira no mobile
+    input.style.position = 'fixed';
+    input.style.left = '-9999px';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+
+    let cleanupDone = false;
+    const cleanup = () => {
+      if (cleanupDone) return;
+      cleanupDone = true;
+      document.body.removeChild(input);
+    };
+
+    input.addEventListener('change', (e) => {
+      const target = e.target as HTMLInputElement;
+      const file = target.files?.[0];
+      if (file) onFile(file);
+      // cleanup após pequeno delay para evitar race com onChange do React
+      setTimeout(cleanup, 100);
+    });
+    // cleanup se usuário cancelar (focus volta à janela sem selecionar arquivo)
+    window.addEventListener('focus', () => setTimeout(cleanup, 1000), { once: true });
+
+    input.click();
+  };
+
   const abrirModalCartao = () => {
     setCartaoFotoCapturada(null);
     setCartaoFotoProcessada(null);
@@ -3427,100 +3461,124 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setCartao2ModalOpen(true);
   };
 
-  const handleFileChangeCartao2 = (event: React.ChangeEvent<HTMLInputElement>, origem: 'CÂMERA' | 'GALERIA') => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const img = new Image();
-        img.onload = () => {
-          try {
-            const maxDimensao = 2560;
-            let largura = img.width;
-            let altura = img.height;
-            if (largura > maxDimensao || altura > maxDimensao) {
-              if (largura > altura) {
-                altura = Math.round((altura / largura) * maxDimensao);
-                largura = maxDimensao;
-              } else {
-                largura = Math.round((largura / altura) * maxDimensao);
-                altura = maxDimensao;
-              }
+  // Processa um arquivo de imagem do cartão 2 (redimensiona + comprime + seta estado).
+  const processarFotoCartao2 = (file: File) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const maxDimensao = 2560;
+          let largura = img.width;
+          let altura = img.height;
+          if (largura > maxDimensao || altura > maxDimensao) {
+            if (largura > altura) {
+              altura = Math.round((altura / largura) * maxDimensao);
+              largura = maxDimensao;
+            } else {
+              largura = Math.round((largura / altura) * maxDimensao);
+              altura = maxDimensao;
             }
-            const canvas = document.createElement('canvas');
-            canvas.width = largura;
-            canvas.height = altura;
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              ctx.imageSmoothingEnabled = true;
-              ctx.imageSmoothingQuality = 'high';
-              ctx.drawImage(img, 0, 0, largura, altura);
-              const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.92);
-              setCartao2FotoCapturada(imagemRedimensionada);
-              setCartao2FotoProcessada(null);
-              setCartao2Resultado(null);
-            }
-          } catch (error) {
-            console.error('Erro ao processar imagem:', error);
-            toast.error('Erro ao processar imagem. Tente outra foto.');
           }
-        };
-        img.onerror = () => {
-          toast.error('Erro ao carregar imagem. Tente outra foto.');
-        };
-        img.src = reader.result as string;
+          const canvas = document.createElement('canvas');
+          canvas.width = largura;
+          canvas.height = altura;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, largura, altura);
+            const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.92);
+            setCartao2FotoCapturada(imagemRedimensionada);
+            setCartao2FotoProcessada(null);
+            setCartao2Resultado(null);
+          }
+        } catch (error) {
+          console.error('Erro ao processar imagem:', error);
+          toast.error('Erro ao processar imagem. Tente outra foto.');
+        }
       };
-      reader.readAsDataURL(file);
-    }
+      img.onerror = () => {
+        toast.error('Erro ao carregar imagem. Tente outra foto.');
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
-  const handleFileChangeCartao = (event: React.ChangeEvent<HTMLInputElement>, origem: 'CÂMERA' | 'GALERIA') => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const img = new Image();
-        img.onload = () => {
-          try {
-            const maxDimensao = 2560;
-            let largura = img.width;
-            let altura = img.height;
-            if (largura > maxDimensao || altura > maxDimensao) {
-              if (largura > altura) {
-                altura = Math.round((altura / largura) * maxDimensao);
-                largura = maxDimensao;
-              } else {
-                largura = Math.round((largura / altura) * maxDimensao);
-                altura = maxDimensao;
-              }
-            }
-            const canvas = document.createElement('canvas');
-            canvas.width = largura;
-            canvas.height = altura;
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              ctx.imageSmoothingEnabled = true;
-              ctx.imageSmoothingQuality = 'high';
-              ctx.drawImage(img, 0, 0, largura, altura);
-              const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.92);
-              setCartaoFotoCapturada(imagemRedimensionada);
-              setCartaoFotoProcessada(null);
-              setCartaoResultado(null);
-            } else {
-              setCartaoFotoCapturada(reader.result as string);
-            }
-          } catch (error) {
-            console.error('Erro ao processar imagem:', error);
-            toast.error('Erro ao processar imagem. Tente outra foto.');
-          }
-        };
-        img.onerror = () => {
-          toast.error('Erro ao carregar imagem. Tente outra foto.');
-        };
-        img.src = reader.result as string;
-      };
-      reader.readAsDataURL(file);
+  // Galeria: input estático (sem capture) — abre seletor de arquivos
+  const handleFileChangeCartao2 = (event: React.ChangeEvent<HTMLInputElement>, origem: 'CÂMERA' | 'GALERIA') => {
+    if (origem === 'CÂMERA') {
+      abrirCameraDinamico(processarFotoCartao2);
+      event.target.value = '';
+      return;
     }
+    const file = event.target.files?.[0];
+    if (file) processarFotoCartao2(file);
+    event.target.value = '';
+  };
+
+  // Processa um arquivo de imagem do cartão 1 (redimensiona + comprime + seta estado).
+  // Usado tanto pelo input da galeria quanto pelo abrirCameraDinamico.
+  const processarFotoCartao = (file: File) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const maxDimensao = 2560;
+          let largura = img.width;
+          let altura = img.height;
+          if (largura > maxDimensao || altura > maxDimensao) {
+            if (largura > altura) {
+              altura = Math.round((altura / largura) * maxDimensao);
+              largura = maxDimensao;
+            } else {
+              largura = Math.round((largura / altura) * maxDimensao);
+              altura = maxDimensao;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = largura;
+          canvas.height = altura;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, largura, altura);
+            const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.92);
+            setCartaoFotoCapturada(imagemRedimensionada);
+            setCartaoFotoProcessada(null);
+            setCartaoResultado(null);
+          } else {
+            setCartaoFotoCapturada(reader.result as string);
+          }
+        } catch (error) {
+          console.error('Erro ao processar imagem:', error);
+          toast.error('Erro ao processar imagem. Tente outra foto.');
+        }
+      };
+      img.onerror = () => {
+        toast.error('Erro ao carregar imagem. Tente outra foto.');
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Galeria: input estático (sem capture) — abre seletor de arquivos
+  const handleFileChangeCartao = (event: React.ChangeEvent<HTMLInputElement>, origem: 'CÂMERA' | 'GALERIA') => {
+    if (origem === 'CÂMERA') {
+      // Câmera: input dinâmico com capture="environment"
+      abrirCameraDinamico(processarFotoCartao);
+      // Limpa o input estático para permitir reusar
+      event.target.value = '';
+      return;
+    }
+    const file = event.target.files?.[0];
+    if (file) processarFotoCartao(file);
+    // Limpa para permitir selecionar o mesmo arquivo novamente
+    event.target.value = '';
   };
 
   // Extrai canhotos de cartão usando IA Vision.
@@ -3686,53 +3744,64 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setMercadoModalOpen(true);
   };
 
-  const handleFileChangeMercado = (event: React.ChangeEvent<HTMLInputElement>, origem: 'CÂMERA' | 'GALERIA') => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const img = new Image();
-        img.onload = () => {
-          try {
-            const maxDimensao = 2560;
-            let largura = img.width;
-            let altura = img.height;
-            if (largura > maxDimensao || altura > maxDimensao) {
-              if (largura > altura) {
-                altura = Math.round((altura / largura) * maxDimensao);
-                largura = maxDimensao;
-              } else {
-                largura = Math.round((largura / altura) * maxDimensao);
-                altura = maxDimensao;
-              }
-            }
-            const canvas = document.createElement('canvas');
-            canvas.width = largura;
-            canvas.height = altura;
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              ctx.imageSmoothingEnabled = true;
-              ctx.imageSmoothingQuality = 'high';
-              ctx.drawImage(img, 0, 0, largura, altura);
-              const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.92);
-              setMercadoFotoCapturada(imagemRedimensionada);
-              setMercadoFotoProcessada(null);
-              setMercadoResultado(null);
+  // Processa um arquivo de imagem do mercado (cupons) — redimensiona + comprime + seta estado.
+  const processarFotoMercado = (file: File) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const maxDimensao = 2560;
+          let largura = img.width;
+          let altura = img.height;
+          if (largura > maxDimensao || altura > maxDimensao) {
+            if (largura > altura) {
+              altura = Math.round((altura / largura) * maxDimensao);
+              largura = maxDimensao;
             } else {
-              setMercadoFotoCapturada(reader.result as string);
+              largura = Math.round((largura / altura) * maxDimensao);
+              altura = maxDimensao;
             }
-          } catch (error) {
-            console.error('Erro ao processar imagem:', error);
-            toast.error('Erro ao processar imagem. Tente outra foto.');
           }
-        };
-        img.onerror = () => {
-          toast.error('Erro ao carregar imagem. Tente outra foto.');
-        };
-        img.src = reader.result as string;
+          const canvas = document.createElement('canvas');
+          canvas.width = largura;
+          canvas.height = altura;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, largura, altura);
+            const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.92);
+            setMercadoFotoCapturada(imagemRedimensionada);
+            setMercadoFotoProcessada(null);
+            setMercadoResultado(null);
+          } else {
+            setMercadoFotoCapturada(reader.result as string);
+          }
+        } catch (error) {
+          console.error('Erro ao processar imagem:', error);
+          toast.error('Erro ao processar imagem. Tente outra foto.');
+        }
       };
-      reader.readAsDataURL(file);
+      img.onerror = () => {
+        toast.error('Erro ao carregar imagem. Tente outra foto.');
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Galeria: input estático (sem capture) — abre seletor de arquivos
+  // Câmera: input dinâmico com capture="environment"
+  const handleFileChangeMercado = (event: React.ChangeEvent<HTMLInputElement>, origem: 'CÂMERA' | 'GALERIA') => {
+    if (origem === 'CÂMERA') {
+      abrirCameraDinamico(processarFotoMercado);
+      event.target.value = '';
+      return;
     }
+    const file = event.target.files?.[0];
+    if (file) processarFotoMercado(file);
+    event.target.value = '';
   };
 
   const extrairValoresMercado = async () => {
@@ -4441,59 +4510,72 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setFotoModalOpen(true);
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, origem: 'CÂMERA' | 'GALERIA') => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setFotoOrigem(origem);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        // Redimensionar imagem para evitar problemas de memória
-        const img = new Image();
-        img.onload = () => {
-          try {
-            // 1280px + JPEG 0.85 — suficiente para OCR de displays com dígitos pequenos
-            // (revertido de 800px/0.6 que causava erros em fotos tela cheia)
-            const maxDimensao = 1280;
-            let largura = img.width;
-            let altura = img.height;
-            
-            if (largura > maxDimensao || altura > maxDimensao) {
-              if (largura > altura) {
-                altura = Math.round((altura / largura) * maxDimensao);
-                largura = maxDimensao;
-              } else {
-                largura = Math.round((largura / altura) * maxDimensao);
-                altura = maxDimensao;
-              }
-            }
-            
-            // Criar canvas para redimensionar
-            const canvas = document.createElement('canvas');
-            canvas.width = largura;
-            canvas.height = altura;
-            const ctx = canvas.getContext('2d');
-            
-            if (ctx) {
-              ctx.drawImage(img, 0, 0, largura, altura);
-              const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.85);
-              setFotoCapturada(imagemRedimensionada);
+  // Processa um arquivo de imagem da máquina (redimensiona + comprime + seta estado).
+  // 1280px + JPEG 0.85 — suficiente para OCR de displays com dígitos pequenos
+  // (revertido de 800px/0.6 que causava erros em fotos tela cheia)
+  const processarFotoMaquina = (file: File, origem: 'CÂMERA' | 'GALERIA') => {
+    setFotoOrigem(origem);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      // Redimensionar imagem para evitar problemas de memória
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const maxDimensao = 1280;
+          let largura = img.width;
+          let altura = img.height;
+
+          if (largura > maxDimensao || altura > maxDimensao) {
+            if (largura > altura) {
+              altura = Math.round((altura / largura) * maxDimensao);
+              largura = maxDimensao;
             } else {
-              // Se não conseguir redimensionar, usa original
-              setFotoCapturada(reader.result as string);
+              largura = Math.round((largura / altura) * maxDimensao);
+              altura = maxDimensao;
             }
-          } catch (error) {
-            console.error('Erro ao processar imagem:', error);
-            toast.error('Erro ao processar imagem. Tente outra foto.');
           }
-        };
-        img.onerror = () => {
-          console.error('Erro ao carregar imagem');
-          toast.error('Erro ao carregar imagem. Tente outra foto.');
-        };
-        img.src = reader.result as string;
+
+          // Criar canvas para redimensionar
+          const canvas = document.createElement('canvas');
+          canvas.width = largura;
+          canvas.height = altura;
+          const ctx = canvas.getContext('2d');
+
+          if (ctx) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, largura, altura);
+            const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.85);
+            setFotoCapturada(imagemRedimensionada);
+          } else {
+            // Se não conseguir redimensionar, usa original
+            setFotoCapturada(reader.result as string);
+          }
+        } catch (error) {
+          console.error('Erro ao processar imagem:', error);
+          toast.error('Erro ao processar imagem. Tente outra foto.');
+        }
       };
-      reader.readAsDataURL(file);
+      img.onerror = () => {
+        console.error('Erro ao carregar imagem');
+        toast.error('Erro ao carregar imagem. Tente outra foto.');
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Galeria: input estático (sem capture) — abre seletor de arquivos
+  // Câmera: input dinâmico com capture="environment"
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, origem: 'CÂMERA' | 'GALERIA') => {
+    if (origem === 'CÂMERA') {
+      abrirCameraDinamico((file) => processarFotoMaquina(file, 'CÂMERA'));
+      event.target.value = '';
+      return;
     }
+    const file = event.target.files?.[0];
+    if (file) processarFotoMaquina(file, 'GALERIA');
+    event.target.value = '';
   };
 
   // Enviar foto para WhatsApp do grupo do cliente
@@ -9951,25 +10033,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 {/* Botoes Tirar Foto / Galeria */}
                 {!processandoLote && (
                   <div className="flex gap-2">
-                    <label className="cursor-pointer flex-1">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (!file) return;
-                          event.target.value = '';
-                          processarArquivoImagem(file, 'CÂMERA');
-                        }}
-                      />
-                      <Button className="w-full bg-gradient-to-r from-indigo-500 to-purple-600" asChild>
-                        <span>
-                          <Camera className="w-4 h-4 mr-2" />
-                          CÂMERA
-                        </span>
-                      </Button>
-                    </label>
+                    <Button
+                      className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-600"
+                      onClick={() => abrirCameraDinamico((file) => processarArquivoImagem(file, 'CÂMERA'))}
+                    >
+                      <Camera className="w-4 h-4 mr-2" />
+                      CÂMERA
+                    </Button>
                     <label className="cursor-pointer flex-1">
                       <input
                         type="file"
@@ -10267,18 +10337,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   <>
                   <div className="grid grid-cols-2 gap-3">
                     {/* Botão Tirar Foto */}
-                    <label className="cursor-pointer">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleFileChange(e, 'CÂMERA')}
-                        className="hidden"
-                      />
+                    <button
+                      type="button"
+                      onClick={() => abrirCameraDinamico((file) => processarFotoMaquina(file, 'CÂMERA'))}
+                      className="cursor-pointer"
+                    >
                       <div className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 hover:from-amber-500/30 hover:to-orange-500/30 transition-colors">
                         <Camera className="w-6 h-6 text-warning" />
                         <span className="text-sm text-warning font-medium">Tirar Foto</span>
                       </div>
-                    </label>
+                    </button>
 
                     {/* Botão Galeria */}
                     <label className="cursor-pointer">
@@ -10458,13 +10526,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 {/* Botões de captura */}
                 {!cartaoFotoCapturada ? (
                   <div className="grid grid-cols-2 gap-3">
-                    <label className="cursor-pointer">
-                      <input type="file" accept="image/*" onChange={(e) => handleFileChangeCartao(e, 'CÂMERA')} className="hidden" id="cartao-camera-input" />
+                    <button
+                      type="button"
+                      onClick={() => abrirCameraDinamico(processarFotoCartao)}
+                      className="cursor-pointer"
+                    >
                       <div className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 hover:from-amber-500/30 hover:to-orange-500/30 transition-colors">
                         <Camera className="w-6 h-6 text-warning" />
                         <span className="text-sm text-warning font-medium">Câmera</span>
                       </div>
-                    </label>
+                    </button>
                     <label className="cursor-pointer">
                       <input
                         type="file"
@@ -10601,13 +10672,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 {/* Botões de captura */}
                 {!cartao2FotoCapturada ? (
                   <div className="grid grid-cols-2 gap-3">
-                    <label className="cursor-pointer">
-                      <input type="file" accept="image/*" onChange={(e) => handleFileChangeCartao2(e, 'CÂMERA')} className="hidden" id="cartao2-camera-input" />
+                    <button
+                      type="button"
+                      onClick={() => abrirCameraDinamico(processarFotoCartao2)}
+                      className="cursor-pointer"
+                    >
                       <div className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 hover:from-amber-500/30 hover:to-orange-500/30 transition-colors">
                         <Camera className="w-6 h-6 text-warning" />
                         <span className="text-sm text-warning font-medium">Câmera</span>
                       </div>
-                    </label>
+                    </button>
                     <label className="cursor-pointer">
                       <input type="file" accept="image/*" onChange={(e) => handleFileChangeCartao2(e, 'GALERIA')} className="hidden" />
                       <div className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-muted border-border hover:bg-accent transition-colors">
@@ -10737,13 +10811,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
                 {!mercadoFotoCapturada ? (
                   <div className="grid grid-cols-2 gap-3">
-                    <label className="cursor-pointer">
-                      <input type="file" accept="image/*" onChange={(e) => handleFileChangeMercado(e, 'CAMERA')} className="hidden" id="mercado-camera-input" />
+                    <button
+                      type="button"
+                      onClick={() => abrirCameraDinamico(processarFotoMercado)}
+                      className="cursor-pointer"
+                    >
                       <div className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 hover:from-amber-500/30 hover:to-orange-500/30 transition-colors">
                         <Camera className="w-6 h-6 text-warning" />
                         <span className="text-sm text-warning font-medium">Camera</span>
                       </div>
-                    </label>
+                    </button>
                     <label className="cursor-pointer">
                       <input type="file" accept="image/*" onChange={(e) => handleFileChangeMercado(e, 'GALERIA')} className="hidden" />
                       <div className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-muted border-border hover:bg-accent transition-colors">
