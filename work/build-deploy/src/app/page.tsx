@@ -3435,7 +3435,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const img = new Image();
         img.onload = () => {
           try {
-            const maxDimensao = 1920;
+            const maxDimensao = 2560;
             let largura = img.width;
             let altura = img.height;
             if (largura > maxDimensao || altura > maxDimensao) {
@@ -3452,8 +3452,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             canvas.height = altura;
             const ctx = canvas.getContext('2d');
             if (ctx) {
+              ctx.imageSmoothingEnabled = true;
+              ctx.imageSmoothingQuality = 'high';
               ctx.drawImage(img, 0, 0, largura, altura);
-              const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.8);
+              const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.92);
               setCartao2FotoCapturada(imagemRedimensionada);
               setCartao2FotoProcessada(null);
               setCartao2Resultado(null);
@@ -3480,7 +3482,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const img = new Image();
         img.onload = () => {
           try {
-            const maxDimensao = 1920;
+            const maxDimensao = 2560;
             let largura = img.width;
             let altura = img.height;
             if (largura > maxDimensao || altura > maxDimensao) {
@@ -3497,8 +3499,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             canvas.height = altura;
             const ctx = canvas.getContext('2d');
             if (ctx) {
+              ctx.imageSmoothingEnabled = true;
+              ctx.imageSmoothingQuality = 'high';
               ctx.drawImage(img, 0, 0, largura, altura);
-              const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.8);
+              const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.92);
               setCartaoFotoCapturada(imagemRedimensionada);
               setCartaoFotoProcessada(null);
               setCartaoResultado(null);
@@ -3690,7 +3694,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const img = new Image();
         img.onload = () => {
           try {
-            const maxDimensao = 1920;
+            const maxDimensao = 2560;
             let largura = img.width;
             let altura = img.height;
             if (largura > maxDimensao || altura > maxDimensao) {
@@ -3707,8 +3711,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             canvas.height = altura;
             const ctx = canvas.getContext('2d');
             if (ctx) {
+              ctx.imageSmoothingEnabled = true;
+              ctx.imageSmoothingQuality = 'high';
               ctx.drawImage(img, 0, 0, largura, altura);
-              const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.8);
+              const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.92);
               setMercadoFotoCapturada(imagemRedimensionada);
               setMercadoFotoProcessada(null);
               setMercadoResultado(null);
@@ -7459,8 +7465,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           const img = imagensPorMaquinaId.get(id) || (m.codigo ? imagensPorCodigo.get(m.codigo) : undefined);
           const fotoX = padding + 10;
           const fotoY = yCard + 10;
-          const fotoW = 180;
-          const fotoH = 180;
+          const fotoW = 240;
+          const fotoH = 240;
 
           ctxPag.fillStyle = '#f0f0f0';
           ctxPag.fillRect(fotoX, fotoY, fotoW, fotoH);
@@ -7733,9 +7739,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const temCartao2_2via = segundaViaFotos.some(f => f.codigo === 'CARTAO2' || f.maquinaId === 'cartao2-canhoto');
       const temCartao2via = temCartao1_2via || temCartao2_2via;
       const temMercado2via = segundaViaFotos.some(f => f.codigo === 'MERCADO' || f.maquinaId === 'mercado-cupons');
-      if (temCartao1_2via) alturaFinal += 200 + 10;
-      if (temCartao2_2via) alturaFinal += 200 + 10;
-      if (temMercado2via) alturaFinal += 200 + 10;
+      if (temCartao1_2via) alturaFinal += 240 + 10;
+      if (temCartao2_2via) alturaFinal += 240 + 10;
+      if (temMercado2via) alturaFinal += 240 + 10;
       alturaFinal += 10 + 30; // separador
       if (temReceitasExtras || temDespesasExtras) {
         const maxItens = Math.max(temReceitasExtras ? receitasFinal.length : 0, temDespesasExtras ? despesasFinal.length : 0);
@@ -7826,10 +7832,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const cartao2Foto = segundaViaFotos.find(f => f.codigo === 'CARTAO2' || f.maquinaId === 'cartao2-canhoto');
 
         const drawCartaoCard = async (foto: { fotoBase64: string } | undefined, label: string) => {
-          const cartaoCardH = 200;
+          const cartaoCardH = 240;
           ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
           ctx.strokeRect(padding, y, A4_W - padding * 2, cartaoCardH);
-          const cfotoX = padding + 10, cfotoY = y + 10, cfotoW = 180, cfotoH = 180;
+          const cfotoX = padding + 10, cfotoY = y + 10, cfotoW = 220, cfotoH = 220;
           ctx.fillStyle = '#f0f0f0'; ctx.fillRect(cfotoX, cfotoY, cfotoW, cfotoH);
           if (foto) {
             try {
@@ -7859,10 +7865,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       // Card MERCADO (cupons) — se houver foto no GCS
       if (temMercado2via) {
         const mercadoFoto = segundaViaFotos.find(f => f.codigo === 'MERCADO' || f.maquinaId === 'mercado-cupons');
-        const mercadoCardH = 200;
+        const mercadoCardH = 240;
         ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
         ctx.strokeRect(padding, y, A4_W - padding * 2, mercadoCardH);
-        const mfotoX = padding + 10, mfotoY = y + 10, mfotoW = 180, mfotoH = 180;
+        const mfotoX = padding + 10, mfotoY = y + 10, mfotoW = 220, mfotoH = 220;
         ctx.fillStyle = '#f0f0f0'; ctx.fillRect(mfotoX, mfotoY, mfotoW, mfotoH);
         if (mercadoFoto) {
           try {
@@ -8072,10 +8078,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       let alturaFinal = padding + 40 + 30 + 30 + 30 + 10 + 30;
       alturaFinal += maquinasSalvas.length * (CARD_HEIGHT + 20);
       // Espaço para card CARTÃO 1 e 2 (se houver foto)
-      if (resumoCartaoFoto) alturaFinal += 200 + 10;
-      if (resumoCartao2Foto) alturaFinal += 200 + 10;
+      if (resumoCartaoFoto) alturaFinal += 240 + 10;
+      if (resumoCartao2Foto) alturaFinal += 240 + 10;
       // Espaço para card MERCADO (se houver foto)
-      if (resumoMercadoFoto) alturaFinal += 200 + 10;
+      if (resumoMercadoFoto) alturaFinal += 240 + 10;
       alturaFinal += 10 + 30;
       if (temReceitasExtras || temDespesasExtras) {
         const maxItens = Math.max(temReceitasExtras ? receitasFinal.length : 0, temDespesasExtras ? despesasFinal.length : 0);
@@ -8150,10 +8156,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       // Card CARTÃO 1 (canhotos) — só se houver foto
       if (resumoCartaoFoto) {
-        const cartaoCardH = 200;
+        const cartaoCardH = 240;
         ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
         ctx.strokeRect(padding, y, A4_W - padding * 2, cartaoCardH);
-        const fotoX = padding + 10, fotoY = y + 10, fotoW = 180, fotoH = 180;
+        const fotoX = padding + 10, fotoY = y + 10, fotoW = 220, fotoH = 220;
         ctx.fillStyle = '#f0f0f0'; ctx.fillRect(fotoX, fotoY, fotoW, fotoH);
         try {
           const cartaoImg = await new Promise<HTMLImageElement>((resolve) => {
@@ -8176,10 +8182,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       // Card CARTÃO 2 (canhotos) — só se houver foto
       if (resumoCartao2Foto) {
-        const cartao2CardH = 200;
+        const cartao2CardH = 240;
         ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
         ctx.strokeRect(padding, y, A4_W - padding * 2, cartao2CardH);
-        const c2fotoX = padding + 10, c2fotoY = y + 10, c2fotoW = 180, c2fotoH = 180;
+        const c2fotoX = padding + 10, c2fotoY = y + 10, c2fotoW = 220, c2fotoH = 220;
         ctx.fillStyle = '#f0f0f0'; ctx.fillRect(c2fotoX, c2fotoY, c2fotoW, c2fotoH);
         try {
           const cartao2Img = await new Promise<HTMLImageElement>((resolve) => {
@@ -8202,10 +8208,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       // Card MERCADO (cupons) — só se houver foto
       if (resumoMercadoFoto) {
-        const mercadoCardH = 200;
+        const mercadoCardH = 240;
         ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
         ctx.strokeRect(padding, y, A4_W - padding * 2, mercadoCardH);
-        const mfotoX = padding + 10, mfotoY = y + 10, mfotoW = 180, mfotoH = 180;
+        const mfotoX = padding + 10, mfotoY = y + 10, mfotoW = 220, mfotoH = 220;
         ctx.fillStyle = '#f0f0f0'; ctx.fillRect(mfotoX, mfotoY, mfotoW, mfotoH);
         try {
           const mercadoImg = await new Promise<HTMLImageElement>((resolve) => {
