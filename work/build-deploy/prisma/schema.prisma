@@ -136,6 +136,7 @@ model Cliente {
   nomeCartao2     String          @default("CARTÃO2")  // Nome do campo de cartão 2
   tCartao1        String?                               // Título do campo de TOTAL no canhoto do cartão 1 (ex: "VALOR A PAGAR", "TOTAL")
   tCartao2        String?                               // Título do campo de TOTAL no canhoto do cartão 2
+  planilhaGabarito String?                              // Base64 da planilha Excel gabarito para geração dinâmica de relatórios
   ativo           Boolean         @default(true)
   bloqueado       Boolean         @default(false)
   motivoBloqueio  String?

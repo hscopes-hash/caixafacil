@@ -39,9 +39,10 @@ import {
   ClipboardList, Printer, Camera, X, Image as ImageIcon, Layers, MessageCircle, LogIn,
   CalendarDays, ShieldAlert, FileText, Sun, Moon, DatabaseBackup, Download, Upload, HardDrive, SlidersHorizontal,
   Key, Wifi, EyeOff, CreditCard, ExternalLink, ChevronDown, ChevronUp, ChevronLeft, RotateCcw, Crown, Check, CheckCircle2, XCircle, Sparkles, Zap, Shield, Info, Loader2,
-  Receipt, Mic, MicOff, Send, Volume2, VolumeX, ShoppingCart, ShoppingBag, Maximize2, Minimize2, Monitor, User, Lock, QrCode, BookOpen, Globe, Save, HelpCircle, Landmark, MapPin, Copy, Bot, Calculator, Phone, Smartphone
+  Receipt, Mic, MicOff, Send, Volume2, VolumeX, ShoppingCart, ShoppingBag, Maximize2, Minimize2, Monitor, User, Lock, QrCode, BookOpen, Globe, Save, HelpCircle, Landmark, MapPin, Copy, Bot, Calculator, Phone, Smartphone, FileSpreadsheet,
 } from 'lucide-react';
 import { VERSION_DISPLAY, VERSION_STRING, VERSION_WITH_DATE } from '@/lib/version';
+import { gerarPlanilhaPreenchida, construirDicionario, listarCamposDisponiveis, normalizarChave, type PlanilhaData, type CampoGuia } from '@/lib/planilha-gabarito';
 import GestaoPlanosSaaS from '@/components/GestaoPlanosSaaS';
 import RelatoriosPage from '@/components/RelatoriosPage';
 import PainelFinanceiroSaaS from '@/components/PainelFinanceiroSaaS';
@@ -73,6 +74,7 @@ interface Cliente {
   nomeCartao2?: string;
   tCartao1?: string;
   tCartao2?: string;
+  planilhaGabarito?: string;
   ativo: boolean;
   bloqueado: boolean;
   motivoBloqueio?: string;
@@ -1399,6 +1401,7 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
   const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [clienteEditando, setClienteEditando] = useState<Cliente | null>(null);
+  const [guiaCamposOpen, setGuiaCamposOpen] = useState(false);
   const [formData, setFormData] = useState({
     nome: '',
     cpfCnpj: '',
@@ -1419,6 +1422,7 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
     nomeCartao2: 'CARTÃO2' as string,
     tCartao1: '' as string,
     tCartao2: '' as string,
+    planilhaGabarito: '' as string,
   });
 
   useEffect(() => {
@@ -1530,6 +1534,7 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
       nomeCartao2: 'CARTÃO2',
       tCartao1: '',
       tCartao2: '',
+      planilhaGabarito: '',
     });
     setClienteEditando(null);
   };
@@ -1556,6 +1561,7 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
       nomeCartao2: (cliente as any).nomeCartao2 || 'CARTÃO2',
       tCartao1: (cliente as any).tCartao1 || '',
       tCartao2: (cliente as any).tCartao2 || '',
+      planilhaGabarito: (cliente as any).planilhaGabarito || '',
     });
     setDialogOpen(true);
   };
@@ -1790,6 +1796,138 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
                   </div>
                 </div>
               </div>
+
+              {/* Planilha Gabarito para geração dinâmica de Excel */}
+              <div className="space-y-3 border border-border rounded-lg p-3 bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                  <span className="text-sm font-semibold">Planilha Gabarito (Excel)</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Faça upload de uma planilha <span className="font-mono">.xlsx</span> com placeholders entre colchetes
+                  (ex: <span className="font-mono">[caixainicial]</span>, <span className="font-mono">[reforco]</span>,
+                  <span className="font-mono">[jogado]</span>). O aplicativo substitui os placeholders pelos valores
+                  reais do relatório e gera uma planilha preenchida para envio junto com o relatório.
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  <label className="cursor-pointer flex-1 min-w-[200px]">
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setFormData({ ...formData, planilhaGabarito: reader.result as string });
+                          toast.success('Planilha gabarito carregada!');
+                        };
+                        reader.onerror = () => toast.error('Erro ao ler arquivo');
+                        reader.readAsDataURL(file);
+                        e.target.value = '';
+                      }}
+                    />
+                    <div className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 hover:from-emerald-500/30 hover:to-teal-500/30 transition-colors text-sm">
+                      <Upload className="w-4 h-4 text-emerald-600" />
+                      <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                        {formData.planilhaGabarito ? 'Trocar planilha' : 'Importar planilha .xlsx'}
+                      </span>
+                    </div>
+                  </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2"
+                    onClick={() => setGuiaCamposOpen(true)}
+                  >
+                    <HelpCircle className="w-4 h-4" />
+                    Ver campos disponíveis
+                  </Button>
+                  {formData.planilhaGabarito && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="flex items-center gap-2 text-destructive"
+                      onClick={() => {
+                        setFormData({ ...formData, planilhaGabarito: '' });
+                        toast.info('Planilha gabarito removida');
+                      }}
+                    >
+                      <X className="w-4 h-4" />
+                      Remover
+                    </Button>
+                  )}
+                </div>
+                {formData.planilhaGabarito && (
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" />
+                    Planilha gabarito carregada — será usada na geração de relatórios Excel deste cliente
+                  </p>
+                )}
+              </div>
+
+              {/* Modal Guia de Campos Disponíveis */}
+              <Dialog open={guiaCamposOpen} onOpenChange={setGuiaCamposOpen}>
+                <DialogContent className="bg-card border-border text-foreground max-w-2xl max-h-[85vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                      Campos disponíveis para a planilha gabarito
+                    </DialogTitle>
+                    <DialogDescription className="text-muted-foreground">
+                      Use estes placeholders entre colchetes na sua planilha. O aplicativo substitui cada
+                      placeholder pelo valor correspondente do relatório de leitura.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3 text-sm">
+                    {(['Geral', 'Totais', 'Receitas', 'Despesas', 'Máquinas'] as const).map(categoria => {
+                      const campos = listarCamposDisponiveis(
+                        (clienteEditando as any)?.maquinas?.map((m: any) => m.codigo).filter(Boolean) || []
+                      ).filter(c => c.categoria === categoria);
+                      if (campos.length === 0) return null;
+                      return (
+                        <div key={categoria} className="space-y-1.5">
+                          <p className="font-semibold text-foreground text-xs uppercase tracking-wide">{categoria}</p>
+                          <div className="border border-border rounded-lg overflow-hidden">
+                            <table className="w-full text-xs">
+                              <thead className="bg-muted">
+                                <tr>
+                                  <th className="text-left p-2 font-medium">Placeholder</th>
+                                  <th className="text-left p-2 font-medium">Descrição</th>
+                                  <th className="text-left p-2 font-medium">Exemplo</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {campos.map((c, i) => (
+                                  <tr key={i} className={i % 2 === 0 ? 'bg-card' : 'bg-muted/30'}>
+                                    <td className="p-2 font-mono text-emerald-600 dark:text-emerald-400">{c.placeholder}</td>
+                                    <td className="p-2 text-muted-foreground">{c.descricao}</td>
+                                    <td className="p-2 text-muted-foreground/70">{c.exemplo}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        <strong>Dica:</strong> Os placeholders não diferenciam maiúsculas/minúsculas e ignoram acentos.
+                        Você pode combinar texto e placeholders em uma mesma célula, ex:{" "}
+                        <span className="font-mono">Total jogado: [jogado]</span>.
+                      </p>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setGuiaCamposOpen(false)}>Fechar</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
               <DialogFooter>
                 <Button variant="outline" type="button" onClick={() => setDialogOpen(false)} disabled={saving}>Cancelar</Button>
                 <Button type="button" onClick={handleSave} className="bg-gradient-to-r from-amber-500 to-orange-600" disabled={saving}>
@@ -8482,6 +8620,132 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     }
   };
 
+  // Enviar planilha Excel preenchida via WhatsApp (a partir do gabarito do cliente)
+  const enviarPlanilhaWhatsApp = async () => {
+    if (!clienteSelecionado || maquinasSalvas.length === 0) {
+      toast.error('Nenhum dado para gerar planilha');
+      return;
+    }
+    const gabarito = (clienteSelecionado as any).planilhaGabarito;
+    if (!gabarito) {
+      toast.error('Cliente não possui planilha gabarito cadastrada');
+      return;
+    }
+
+    toast.loading('Gerando planilha Excel...', { id: 'planilha-wa-resumo' });
+
+    try {
+      // Construir dicionário de dados do relatório
+      const totaisSalvos = calcularTotaisSalvos();
+      const now = new Date();
+      const dataFmt = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+
+      // Receitas por descrição normalizada
+      const receitasDict: Record<string, number> = {};
+      receitasSalvas.forEach(r => {
+        receitasDict[normalizarChave(r.descricao)] = r.valor;
+      });
+
+      // Despesas por descrição normalizada
+      const despesasDict: Record<string, number> = {};
+      despesasSalvas.forEach(d => {
+        despesasDict[normalizarChave(d.descricao)] = d.valor;
+      });
+
+      // Modo de exibição do turno
+      const turnoDisplay = turno === 'INTEGRAL' ? '' : (turno === 'MANHA' ? 'MANHÃ' : turno);
+
+      const planilhaData: PlanilhaData = {
+        cliente: clienteSelecionado.nome,
+        data: dataFmt,
+        turno: turnoDisplay || 'INTEGRAL',
+        operador: usuarioNome,
+        modoOperacao,
+        jogado: totaisSalvos.jogado,
+        clienteParte: totaisSalvos.cliente,
+        receita: totaisSalvos.receita,
+        despesa: totaisSalvos.despesa,
+        debitoSaldo: totaisSalvos.debitoSaldo,
+        fechamento: totaisSalvos.fechamento,
+        acertoPercentual: clienteSelecionado.acertoPercentual ?? 50,
+        recebido: parseFloat(recebido?.replace(',', '.')) || 0,
+        formaPagamento: formaPagamento || '',
+        valorPago: parseFloat((valorPago || '').replace(',', '.')) || 0,
+        saldoAnterior,
+        receitas: receitasDict,
+        despesas: despesasDict,
+        maquinas: maquinasSalvas.map(m => ({
+          codigo: m.codigo,
+          tipo: m.tipo?.descricao || '',
+          entradaAnterior: m.entradaAtual || 0,
+          entradaNova: parseInt(m.novaEntrada) || m.entradaAtual || 0,
+          diferencaEntrada: m.diferencaEntrada || 0,
+          saidaAnterior: m.saidaAtual || 0,
+          saidaNova: parseInt(m.novaSaida) || m.saidaAtual || 0,
+          diferencaSaida: m.diferencaSaida || 0,
+          saldo: m.saldoMaquina || 0,
+          moeda: m.moeda,
+        })),
+      };
+
+      const dicionario = construirDicionario(planilhaData, clienteSelecionado.nomeCartao1, clienteSelecionado.nomeCartao2);
+      const blob = await gerarPlanilhaPreenchida(gabarito, dicionario);
+
+      const fileName = `planilha_${clienteSelecionado.nome.replace(/\s+/g, '_')}_${now.getTime()}.xlsx`;
+      const file = new File([blob], fileName, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+      const modo2via = modoOperacao === 'COBRANCA' ? 'COBRANÇA' : 'LEITURA';
+      const caption = `PLANILHA DE ${modo2via} - ${clienteSelecionado.nome.toUpperCase()}\nData: ${dataFmt}`;
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            title: `Planilha - ${clienteSelecionado.nome}`,
+            text: caption,
+            files: [file],
+          });
+          toast.dismiss('planilha-wa-resumo');
+          toast.success('Planilha enviada!');
+          return;
+        } catch (shareError: unknown) {
+          if (shareError instanceof Error && shareError.name === 'AbortError') {
+            toast.dismiss('planilha-wa-resumo');
+            return;
+          }
+        }
+      }
+
+      // Fallback: download + abrir WhatsApp
+      toast.dismiss('planilha-wa-resumo');
+      const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
+      const phone = clienteSelecionado.telefone?.replace(/\D/g, '') || '';
+
+      const downloadLink = document.createElement('a');
+      const planilhaUrl = URL.createObjectURL(file);
+      downloadLink.href = planilhaUrl;
+      downloadLink.download = fileName;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      setTimeout(() => URL.revokeObjectURL(planilhaUrl), 5000);
+
+      if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
+        const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
+        setTimeout(() => abrirWhatsAppLink(grupoUrl), 500);
+        toast.info('Planilha baixada! Anexe como documento no grupo do WhatsApp.');
+      } else if (phone) {
+        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 500);
+        toast.info('Planilha baixada! Anexe como documento no WhatsApp do cliente.');
+      } else {
+        toast.success('Planilha baixada! Compartilhe manualmente.');
+      }
+    } catch (error) {
+      toast.dismiss('planilha-wa-resumo');
+      console.error('Erro ao gerar/enviar planilha:', error);
+      toast.error('Erro ao gerar planilha: ' + (error instanceof Error ? error.message : 'erro desconhecido'));
+    }
+  };
+
   // Enviar relatório PDF do resumo via Telegram (igual à 2a via)
   const enviarTelegramRelatorioResumo = async () => {
     if (!clienteSelecionado || maquinasSalvas.length === 0) return;
@@ -11809,7 +12073,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               </div>
 
               {/* Botões de Ação — mesma disposição da 2a via */}
-              <DialogFooter className="flex gap-2 mt-4">
+              <DialogFooter className="flex gap-2 mt-4 flex-wrap">
                 <Button variant="outline" onClick={imprimirResumo}>
                   <Printer className="w-4 h-4 mr-2" />
                   Imprimir
@@ -11821,6 +12085,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                   <MessageCircle className="w-4 h-4 mr-2" />
                   WhatsApp (Relatório PDF)
                 </Button>
+                {(clienteSelecionado as any)?.planilhaGabarito && (
+                  <Button
+                    onClick={enviarPlanilhaWhatsApp}
+                    className="bg-gradient-to-r from-emerald-600 to-teal-700"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 mr-2" />
+                    WhatsApp (Planilha Excel)
+                  </Button>
+                )}
                 <Button
                   onClick={enviarTelegramRelatorioResumo}
                   className="bg-sky-500 hover:bg-sky-600 text-white"

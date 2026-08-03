@@ -10,6 +10,7 @@ async function ensureSchema() {
   try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "nomeCartao2" TEXT NOT NULL DEFAULT 'CARTÃO2'`); } catch {}
   try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "tCartao1" TEXT`); } catch {}
   try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "tCartao2" TEXT`); } catch {}
+  try { await db.$executeRawUnsafe(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS "planilhaGabarito" TEXT`); } catch {}
 }
 
 // Listar clientes da empresa
@@ -87,6 +88,7 @@ export async function POST(request: NextRequest) {
       nomeCartao2,
       tCartao1,
       tCartao2,
+      planilhaGabarito,
     } = body;
 
     if (!nome || !empresaId) {
@@ -144,6 +146,7 @@ export async function POST(request: NextRequest) {
         nomeCartao2: nomeCartao2 || 'CARTÃO2',
         tCartao1: tCartao1?.trim() || null,
         tCartao2: tCartao2?.trim() || null,
+        planilhaGabarito: planilhaGabarito || null,
       },
     });
 
