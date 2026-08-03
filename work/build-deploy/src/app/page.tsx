@@ -6724,6 +6724,167 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     }
   };
 
+  // Enviar planilha Excel preenchida via WhatsApp — 2a via (a partir do gabarito do cliente)
+  const enviarPlanilhaWhatsApp2aVia = async () => {
+    if (!clienteSelecionado || segundaViaDados.length === 0) {
+      toast.error('Nenhum dado de fechamento para gerar planilha');
+      return;
+    }
+    const gabarito = (clienteSelecionado as any).planilhaGabarito;
+    if (!gabarito) {
+      toast.error('Cliente não possui planilha gabarito cadastrada');
+      return;
+    }
+
+    toast.loading('Gerando planilha Excel...', { id: 'planilha-wa-2via' });
+
+    try {
+      // Pré-processar dados da 2a via (mesma lógica do PDF da 2a via)
+      const modo2via = clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANCA' : 'LEITURA';
+      const porMaquina = new Map<string, any[]>();
+      const despesaItens: { descricao: string; valor: number }[] = [];
+      const receitaItens: { descricao: string; valor: number }[] = [];
+      segundaViaDados.forEach((l: any) => {
+        const temLeitura = l.entradaNova > 0 || l.saidaNova > 0 || l.diferencaEntrada !== 0 || l.diferencaSaida !== 0;
+        if (temLeitura) {
+          if (!porMaquina.has(l.maquinaId)) porMaquina.set(l.maquinaId, []);
+          porMaquina.get(l.maquinaId)!.push(l);
+        }
+        if (l.despesa) { try { const p = JSON.parse(l.despesa); if (Array.isArray(p)) p.forEach((d: any) => { if (d.valor > 0) despesaItens.push(d); }); } catch {} }
+        if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor !== 0) receitaItens.push(r); }); } catch {} }
+      });
+      const despesasFinal = Array.from(new Map(despesaItens.map(d => [d.descricao, d])).values());
+      const receitasFinal = Array.from(new Map(receitaItens.map(r => [r.descricao, r])).values());
+      const maquinasArr = Array.from(porMaquina.entries());
+
+      // Calcular totais
+      let totalEntradas = 0;
+      let totalSaidas = 0;
+      maquinasArr.forEach(([_id, lws]) => {
+        totalEntradas += calcularValor(lws[0].moeda, lws[0].diferencaEntrada);
+        totalSaidas += calcularValor(lws[0].moeda, lws[0].diferencaSaida);
+      });
+      const totalReceitas = receitasFinal.reduce((a, r) => a + r.valor, 0);
+      const totalDespesas = despesasFinal.reduce((a, d) => a + d.valor, 0);
+      const jogado = totalEntradas - totalSaidas;
+      const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
+      const valorCliente = jogado * (acertoPct / 100);
+
+      // Fechamento (mesma lógica do PDF da 2a via)
+      const temItensExtras = totalReceitas !== 0 || totalDespesas > 0;
+      const entradaFinal = modo2via === 'COBRANCA' ? jogado : (temItensExtras ? totalReceitas : jogado);
+      const saidaFinal = temItensExtras ? totalDespesas : 0;
+      const fechamentoFinal = temItensExtras ? saidaFinal - entradaFinal : entradaFinal;
+
+      // Receitas e despesas por descrição normalizada
+      const receitasDict: Record<string, number> = {};
+      receitasFinal.forEach(r => {
+        receitasDict[normalizarChave(r.descricao)] = r.valor;
+      });
+      const despesasDict: Record<string, number> = {};
+      despesasFinal.forEach(d => {
+        despesasDict[normalizarChave(d.descricao)] = d.valor;
+      });
+
+      // Operadores
+      const operadoresSet = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => normalizarOperador(l.usuario)));
+      const operadorStr = operadoresSet.size > 0 ? Array.from(operadoresSet).join(', ') : '';
+
+      // Turno
+      const turno2via = segundaViaDados.find((l: any) => l.turno)?.turno;
+      const turnoDisplay = turno2via ? (turno2via === 'MANHA' ? 'MANHÃ' : turno2via === 'INTEGRAL' ? '' : turno2via) : '';
+
+      const planilhaData: PlanilhaData = {
+        cliente: clienteSelecionado.nome,
+        data: segundaViaSelecionada?.data || '',
+        turno: turnoDisplay || 'INTEGRAL',
+        operador: operadorStr || usuarioNome,
+        modoOperacao: modo2via,
+        jogado,
+        clienteParte: valorCliente,
+        receita: totalReceitas,
+        despesa: totalDespesas,
+        debitoSaldo: 0, // 2a via não tem débitos vencidos no momento do fechamento histórico
+        fechamento: fechamentoFinal,
+        acertoPercentual: acertoPct,
+        recebido: 0, // 2a via não tem dados de recebimento (já foi registrado no fechamento)
+        formaPagamento: '',
+        valorPago: 0,
+        saldoAnterior: 0,
+        receitas: receitasDict,
+        despesas: despesasDict,
+        maquinas: maquinasArr.map(([_id, lws]) => ({
+          codigo: lws[0].maquina?.codigo || '',
+          tipo: lws[0].maquina?.tipo?.descricao || '',
+          entradaAnterior: lws[0].entradaAnterior || 0,
+          entradaNova: lws[0].entradaNova || 0,
+          diferencaEntrada: lws[0].diferencaEntrada || 0,
+          saidaAnterior: lws[0].saidaAnterior || 0,
+          saidaNova: lws[0].saidaNova || 0,
+          diferencaSaida: lws[0].diferencaSaida || 0,
+          saldo: (lws[0].diferencaEntrada || 0) - (lws[0].diferencaSaida || 0),
+          moeda: lws[0].moeda || 'M001',
+        })),
+      };
+
+      const dicionario = construirDicionario(planilhaData, clienteSelecionado.nomeCartao1, clienteSelecionado.nomeCartao2);
+      const blob = await gerarPlanilhaPreenchida(gabarito, dicionario);
+
+      const now = new Date();
+      const fileName = `planilha_${clienteSelecionado.nome.replace(/\s+/g, '_')}_${now.getTime()}.xlsx`;
+      const file = new File([blob], fileName, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+      const caption = `PLANILHA DE ${modo2via} - ${clienteSelecionado.nome.toUpperCase()}\nData: ${segundaViaSelecionada?.data || ''}${turnoDisplay ? ` — Turno: ${turnoDisplay}` : ''}`;
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            title: `Planilha - ${clienteSelecionado.nome}`,
+            text: caption,
+            files: [file],
+          });
+          toast.dismiss('planilha-wa-2via');
+          toast.success('Planilha enviada!');
+          return;
+        } catch (shareError: unknown) {
+          if (shareError instanceof Error && shareError.name === 'AbortError') {
+            toast.dismiss('planilha-wa-2via');
+            return;
+          }
+        }
+      }
+
+      // Fallback: download + abrir WhatsApp
+      toast.dismiss('planilha-wa-2via');
+      const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
+      const phone = clienteSelecionado.telefone?.replace(/\D/g, '') || '';
+
+      const downloadLink = document.createElement('a');
+      const planilhaUrl = URL.createObjectURL(file);
+      downloadLink.href = planilhaUrl;
+      downloadLink.download = fileName;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      setTimeout(() => URL.revokeObjectURL(planilhaUrl), 5000);
+
+      if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
+        const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
+        setTimeout(() => abrirWhatsAppLink(grupoUrl), 500);
+        toast.info('Planilha baixada! Anexe como documento no grupo do WhatsApp.');
+      } else if (phone) {
+        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 500);
+        toast.info('Planilha baixada! Anexe como documento no WhatsApp do cliente.');
+      } else {
+        toast.success('Planilha baixada! Compartilhe manualmente.');
+      }
+    } catch (error) {
+      toast.dismiss('planilha-wa-2via');
+      console.error('Erro ao gerar/enviar planilha 2a via:', error);
+      toast.error('Erro ao gerar planilha: ' + (error instanceof Error ? error.message : 'erro desconhecido'));
+    }
+  };
+
   // Comprimir imagem via canvas (reduz tamanho para envio via WhatsApp)
   const comprimirImagem = (blob: Blob, maxPx = 1200, qualidade = 0.7): Promise<Blob> => {
     return new Promise((resolve) => {
@@ -11853,7 +12014,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     </div>
                   )}
 
-                  <DialogFooter className="flex gap-2 mt-4">
+                  <DialogFooter className="flex gap-2 mt-4 flex-wrap">
                     <Button variant="outline" onClick={() => window.print()}>
                       <Printer className="w-4 h-4 mr-2" />
                       Imprimir
@@ -11865,6 +12026,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       <MessageCircle className="w-4 h-4 mr-2" />
                       {segundaViaModo === 'RELATORIO' ? 'WhatsApp (Relatório PDF)' : 'WhatsApp (Somente Extrato)'}
                     </Button>
+                    {(clienteSelecionado as any)?.planilhaGabarito && (
+                      <Button
+                        onClick={enviarPlanilhaWhatsApp2aVia}
+                        className="bg-gradient-to-r from-emerald-600 to-teal-700"
+                      >
+                        <FileSpreadsheet className="w-4 h-4 mr-2" />
+                        WhatsApp (Planilha Excel)
+                      </Button>
+                    )}
                     <Button
                       onClick={enviarTelegram2aVia}
                       className="bg-sky-500 hover:bg-sky-600 text-white"
