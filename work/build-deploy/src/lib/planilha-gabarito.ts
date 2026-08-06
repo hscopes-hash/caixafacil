@@ -30,6 +30,8 @@ export interface PlanilhaData {
   debitoSaldo: number;
   fechamento: number;
   acertoPercentual: number;
+  leituraAtual: number;   // Valor da LEITURA atual = jogado × (100 - acertoPct)/100 (parte do sistema)
+  leituraAnterior: number; // LEITURA anterior acumulada (saldo anterior)
 
   // Pagamento
   recebido: number;
@@ -113,6 +115,8 @@ export function listarCamposDisponiveis(codigosMaquinas: string[] = []): CampoGu
     // Totais
     { placeholder: '[jogado]', descricao: 'Total jogado (entradas - saídas das máquinas)', exemplo: '1500.00', categoria: 'Totais' },
     { placeholder: '[cliente_parte]', descricao: 'Parte do cliente (jogado × acerto%)', exemplo: '750.00', categoria: 'Totais' },
+    { placeholder: '[leituraatual]', descricao: 'LEITURA atual — parte do sistema (jogado × (100 - acerto%))', exemplo: '750.00', categoria: 'Totais' },
+    { placeholder: '[leituraanterior]', descricao: 'LEITURA anterior acumulada (saldo anterior)', exemplo: '320.00', categoria: 'Totais' },
     { placeholder: '[receita]', descricao: 'Total de receitas extras', exemplo: '200.00', categoria: 'Totais' },
     { placeholder: '[despesa]', descricao: 'Total de despesas', exemplo: '350.00', categoria: 'Totais' },
     { placeholder: '[debito_saldo]', descricao: 'Saldo de débitos vencidos', exemplo: '100.00', categoria: 'Totais' },
@@ -143,9 +147,13 @@ export function listarCamposDisponiveis(codigosMaquinas: string[] = []): CampoGu
   codigosMaquinas.forEach(codigo => {
     const key = normalizarChave(codigo);
     campos.push(
-      { placeholder: `[${key}_entrada]`, descricao: `Entrada da máquina ${codigo}`, exemplo: '1234', categoria: 'Máquinas' },
-      { placeholder: `[${key}_saida]`, descricao: `Saída da máquina ${codigo}`, exemplo: '567', categoria: 'Máquinas' },
-      { placeholder: `[${key}_saldo]`, descricao: `Saldo da máquina ${codigo}`, exemplo: '667.00', categoria: 'Máquinas' },
+      { placeholder: `[${key}_entrada_anterior]`, descricao: `Entrada anterior da máquina ${codigo}`, exemplo: '10000', categoria: 'Máquinas' },
+      { placeholder: `[${key}_entrada_nova]`, descricao: `Entrada nova (atual) da máquina ${codigo}`, exemplo: '11234', categoria: 'Máquinas' },
+      { placeholder: `[${key}_entrada]`, descricao: `Diferença de entrada da máquina ${codigo} (nova - anterior)`, exemplo: '1234', categoria: 'Máquinas' },
+      { placeholder: `[${key}_saida_anterior]`, descricao: `Saída anterior da máquina ${codigo}`, exemplo: '5000', categoria: 'Máquinas' },
+      { placeholder: `[${key}_saida_nova]`, descricao: `Saída nova (atual) da máquina ${codigo}`, exemplo: '5567', categoria: 'Máquinas' },
+      { placeholder: `[${key}_saida]`, descricao: `Diferença de saída da máquina ${codigo} (nova - anterior)`, exemplo: '567', categoria: 'Máquinas' },
+      { placeholder: `[${key}_saldo]`, descricao: `Saldo da máquina ${codigo} (entrada - saída)`, exemplo: '667.00', categoria: 'Máquinas' },
     );
   });
 
@@ -184,6 +192,8 @@ export function construirDicionario(data: PlanilhaData, nomeCartao1?: string, no
   // Totais
   dict['jogado'] = data.jogado;
   dict['cliente_parte'] = data.clienteParte;
+  dict['leituraatual'] = data.leituraAtual;
+  dict['leituraanterior'] = data.leituraAnterior;
   dict['receita'] = data.receita;
   dict['despesa'] = data.despesa;
   dict['debito_saldo'] = data.debitoSaldo;
@@ -217,11 +227,15 @@ export function construirDicionario(data: PlanilhaData, nomeCartao1?: string, no
     if (key2 && !(key2 in dict)) dict[key2] = data.despesas[normalizarChave(nomeCartao2)] ?? 0;
   }
 
-  // Máquinas (por código)
+  // Máquinas (por código) — placeholders expandidos
   data.maquinas.forEach(m => {
     const key = normalizarChave(m.codigo);
     if (key) {
+      dict[`${key}_entrada_anterior`] = m.entradaAnterior;
+      dict[`${key}_entrada_nova`] = m.entradaNova;
       dict[`${key}_entrada`] = m.diferencaEntrada;
+      dict[`${key}_saida_anterior`] = m.saidaAnterior;
+      dict[`${key}_saida_nova`] = m.saidaNova;
       dict[`${key}_saida`] = m.diferencaSaida;
       dict[`${key}_saldo`] = m.saldo;
     }

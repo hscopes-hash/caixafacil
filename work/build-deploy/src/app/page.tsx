@@ -6807,6 +6807,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         debitoSaldo: 0, // 2a via não tem débitos vencidos no momento do fechamento histórico
         fechamento: fechamentoFinal,
         acertoPercentual: acertoPct,
+        leituraAtual: jogado * ((100 - acertoPct) / 100),
+        leituraAnterior: 0, // 2a via não tem saldo anterior (já foi registrado no fechamento)
         recebido: 0, // 2a via não tem dados de recebimento (já foi registrado no fechamento)
         formaPagamento: '',
         valorPago: 0,
@@ -8829,6 +8831,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         debitoSaldo: totaisSalvos.debitoSaldo,
         fechamento: totaisSalvos.fechamento,
         acertoPercentual: clienteSelecionado.acertoPercentual ?? 50,
+        leituraAtual: totaisSalvos.jogado * ((100 - (clienteSelecionado.acertoPercentual ?? 50)) / 100),
+        leituraAnterior: saldoAnterior,
         recebido: parseFloat(recebido?.replace(',', '.')) || 0,
         formaPagamento: formaPagamento || '',
         valorPago: parseFloat((valorPago || '').replace(',', '.')) || 0,
