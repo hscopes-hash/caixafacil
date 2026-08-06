@@ -1869,65 +1869,6 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
                 )}
               </div>
 
-              {/* Modal Guia de Campos Disponíveis */}
-              <Dialog open={guiaCamposOpen} onOpenChange={setGuiaCamposOpen}>
-                <DialogContent className="bg-card border-border text-foreground max-w-2xl max-h-[85vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                      <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
-                      Campos disponíveis para a planilha gabarito
-                    </DialogTitle>
-                    <DialogDescription className="text-muted-foreground">
-                      Use estes placeholders entre colchetes na sua planilha. O aplicativo substitui cada
-                      placeholder pelo valor correspondente do relatório de leitura.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-3 text-sm">
-                    {(['Geral', 'Totais', 'Receitas', 'Despesas', 'Máquinas'] as const).map(categoria => {
-                      const campos = listarCamposDisponiveis(
-                        (clienteEditando as any)?.maquinas?.map((m: any) => m.codigo).filter(Boolean) || []
-                      ).filter(c => c.categoria === categoria);
-                      if (campos.length === 0) return null;
-                      return (
-                        <div key={categoria} className="space-y-1.5">
-                          <p className="font-semibold text-foreground text-xs uppercase tracking-wide">{categoria}</p>
-                          <div className="border border-border rounded-lg overflow-hidden">
-                            <table className="w-full text-xs">
-                              <thead className="bg-muted">
-                                <tr>
-                                  <th className="text-left p-2 font-medium">Placeholder</th>
-                                  <th className="text-left p-2 font-medium">Descrição</th>
-                                  <th className="text-left p-2 font-medium">Exemplo</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {campos.map((c, i) => (
-                                  <tr key={i} className={i % 2 === 0 ? 'bg-card' : 'bg-muted/30'}>
-                                    <td className="p-2 font-mono text-emerald-600 dark:text-emerald-400">{c.placeholder}</td>
-                                    <td className="p-2 text-muted-foreground">{c.descricao}</td>
-                                    <td className="p-2 text-muted-foreground/70">{c.exemplo}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                      <p className="text-xs text-amber-700 dark:text-amber-400">
-                        <strong>Dica:</strong> Os placeholders não diferenciam maiúsculas/minúsculas e ignoram acentos.
-                        Você pode combinar texto e placeholders em uma mesma célula, ex:{" "}
-                        <span className="font-mono">Total jogado: [jogado]</span>.
-                      </p>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setGuiaCamposOpen(false)}>Fechar</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-
               <DialogFooter>
                 <Button variant="outline" type="button" onClick={() => setDialogOpen(false)} disabled={saving}>Cancelar</Button>
                 <Button type="button" onClick={handleSave} className="bg-gradient-to-r from-amber-500 to-orange-600" disabled={saving}>
@@ -1937,6 +1878,74 @@ function ClientesPage({ empresaId, isAdmin, isSupervisor }: { empresaId: string;
             </DialogContent>
           </Dialog>
         )}
+
+        {/* Modal Guia de Campos Disponíveis — fora do dialog de edição para evitar conflito de portals */}
+        <Dialog open={guiaCamposOpen} onOpenChange={setGuiaCamposOpen}>
+          <DialogContent className="bg-card border-border text-foreground max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                Campos disponíveis para a planilha gabarito
+              </DialogTitle>
+              <DialogDescription className="text-muted-foreground">
+                Use estes placeholders entre colchetes na sua planilha. O aplicativo substitui cada
+                placeholder pelo valor correspondente do relatório de leitura.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 text-sm">
+              {(['Geral', 'Totais', 'Receitas', 'Despesas', 'Máquinas'] as const).map(categoria => {
+                const campos = listarCamposDisponiveis(
+                  (clienteEditando as any)?.maquinas?.map((m: any) => m.codigo).filter(Boolean) || []
+                ).filter(c => c.categoria === categoria);
+                if (campos.length === 0) return null;
+                return (
+                  <div key={categoria} className="space-y-1.5">
+                    <p className="font-semibold text-foreground text-xs uppercase tracking-wide">{categoria}</p>
+                    <div className="border border-border rounded-lg overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead className="bg-muted">
+                          <tr>
+                            <th className="text-left p-2 font-medium">Placeholder</th>
+                            <th className="text-left p-2 font-medium">Descrição</th>
+                            <th className="text-left p-2 font-medium">Exemplo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {campos.map((c, i) => (
+                            <tr key={i} className={i % 2 === 0 ? 'bg-card' : 'bg-muted/30'}>
+                              <td className="p-2 font-mono text-emerald-600 dark:text-emerald-400">{c.placeholder}</td>
+                              <td className="p-2 text-muted-foreground">{c.descricao}</td>
+                              <td className="p-2 text-muted-foreground/70">{c.exemplo}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+              {!(clienteEditando as any)?.maquinas?.length && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    <strong>Atenção:</strong> Os placeholders de máquinas (categoria Máquinas) só aparecem
+                    após o cliente ter máquinas cadastradas. Salve o cliente primeiro, cadastre as máquinas
+                    e depois volte para ver os placeholders específicos de cada máquina.
+                  </p>
+                </div>
+              )}
+              <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  <strong>Dica:</strong> Os placeholders não diferenciam maiúsculas/minúsculas e ignoram acentos.
+                  Você pode combinar texto e placeholders em uma mesma célula, ex:{" "}
+                  <span className="font-mono">Total jogado: [jogado]</span>.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setGuiaCamposOpen(false)}>Fechar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {loading ? (
