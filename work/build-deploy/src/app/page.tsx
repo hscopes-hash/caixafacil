@@ -11920,41 +11920,50 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                               })}
                             </div>
 
-                            {/* Card CARTÃO 1 (canhotos) — só se houver foto */}
-                            {resumoCartaoFoto && (
-                              <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
-                                <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
-                                  <img src={resumoCartaoFoto} alt="Canhotos" className="w-full h-full object-contain" />
+                            {/* Card CARTÃO 1 (canhotos) — busca foto do GCS da 2a via */}
+                            {(() => {
+                              const cartao1Foto2via = segundaViaFotos.find(f => f.codigo === 'CARTAO1' || f.maquinaId === 'cartao1-canhoto');
+                              return cartao1Foto2via ? (
+                                <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
+                                  <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
+                                    <img src={cartao1Foto2via.fotoBase64} alt="Canhotos" className="w-full h-full object-contain" />
+                                  </div>
+                                  <div className="flex-1 text-sm flex items-center">
+                                    <p className="text-base font-bold">{clienteSelecionado?.nomeCartao1 || 'CARTÃO1'} — Canhotos</p>
+                                  </div>
                                 </div>
-                                <div className="flex-1 text-sm flex items-center">
-                                  <p className="text-base font-bold">{resumoCartaoNome1} — Canhotos</p>
-                                </div>
-                              </div>
-                            )}
+                              ) : null;
+                            })()}
 
-                            {/* Card CARTÃO 2 (canhotos) — só se houver foto */}
-                            {resumoCartao2Foto && (
-                              <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
-                                <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
-                                  <img src={resumoCartao2Foto} alt="Canhotos" className="w-full h-full object-contain" />
+                            {/* Card CARTÃO 2 (canhotos) — busca foto do GCS da 2a via */}
+                            {(() => {
+                              const cartao2Foto2via = segundaViaFotos.find(f => f.codigo === 'CARTAO2' || f.maquinaId === 'cartao2-canhoto');
+                              return cartao2Foto2via ? (
+                                <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
+                                  <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
+                                    <img src={cartao2Foto2via.fotoBase64} alt="Canhotos" className="w-full h-full object-contain" />
+                                  </div>
+                                  <div className="flex-1 text-sm flex items-center">
+                                    <p className="text-base font-bold">{clienteSelecionado?.nomeCartao2 || 'CARTÃO2'} — Canhotos</p>
+                                  </div>
                                 </div>
-                                <div className="flex-1 text-sm flex items-center">
-                                  <p className="text-base font-bold">{resumoCartaoNome2} — Canhotos</p>
-                                </div>
-                              </div>
-                            )}
+                              ) : null;
+                            })()}
 
-                            {/* Card MERCADO (cupons) — só se houver foto */}
-                            {resumoMercadoFoto && (
-                              <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
-                                <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
-                                  <img src={resumoMercadoFoto} alt="Cupons" className="w-full h-full object-contain" />
+                            {/* Card MERCADO (cupons) — busca foto do GCS da 2a via */}
+                            {(() => {
+                              const mercadoFoto2via = segundaViaFotos.find(f => f.codigo === 'MERCADO' || f.maquinaId === 'mercado-cupons');
+                              return mercadoFoto2via ? (
+                                <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
+                                  <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
+                                    <img src={mercadoFoto2via.fotoBase64} alt="Cupons" className="w-full h-full object-contain" />
+                                  </div>
+                                  <div className="flex-1 text-sm flex items-center">
+                                    <p className="text-base font-bold">MERCADO — Cupons Fiscais</p>
+                                  </div>
                                 </div>
-                                <div className="flex-1 text-sm flex items-center">
-                                  <p className="text-base font-bold">MERCADO — Cupons Fiscais</p>
-                                </div>
-                              </div>
-                            )}
+                              ) : null;
+                            })()}
 
                             {/* Receitas/Despesas extras — lado a lado com moldura */}
                             {modo2via !== 'COBRANCA' && (receitasFinal.length > 0 || despesasFinal.length > 0) && (
