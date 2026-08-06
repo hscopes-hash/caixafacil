@@ -55,7 +55,7 @@ export interface PlanilhaData {
     saidaAnterior: number;
     saidaNova: number;
     diferencaSaida: number;
-    saldo: number;
+    saldo: number;      // Movimento em valor monetário (entrada - saída × moeda)
     moeda: string;
   }>;
 }
@@ -153,7 +153,8 @@ export function listarCamposDisponiveis(codigosMaquinas: string[] = []): CampoGu
       { placeholder: `[${key}_saida_anterior]`, descricao: `Saída anterior da máquina ${codigo}`, exemplo: '5000', categoria: 'Máquinas' },
       { placeholder: `[${key}_saida_nova]`, descricao: `Saída nova (atual) da máquina ${codigo}`, exemplo: '5567', categoria: 'Máquinas' },
       { placeholder: `[${key}_saida]`, descricao: `Diferença de saída da máquina ${codigo} (nova - anterior)`, exemplo: '567', categoria: 'Máquinas' },
-      { placeholder: `[${key}_saldo]`, descricao: `Saldo da máquina ${codigo} (entrada - saída)`, exemplo: '667.00', categoria: 'Máquinas' },
+      { placeholder: `[${key}_movimento]`, descricao: `Movimento da máquina ${codigo} (valor em R$ = entrada - saída × moeda)`, exemplo: '667.00', categoria: 'Máquinas' },
+      { placeholder: `[${key}_saldo]`, descricao: `Saldo da máquina ${codigo} (igual ao movimento, em R$)`, exemplo: '667.00', categoria: 'Máquinas' },
     );
   });
 
@@ -237,6 +238,7 @@ export function construirDicionario(data: PlanilhaData, nomeCartao1?: string, no
       dict[`${key}_saida_anterior`] = m.saidaAnterior;
       dict[`${key}_saida_nova`] = m.saidaNova;
       dict[`${key}_saida`] = m.diferencaSaida;
+      dict[`${key}_movimento`] = m.saldo; // movimento = saldo (valor em R$)
       dict[`${key}_saldo`] = m.saldo;
     }
   });

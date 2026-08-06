@@ -6824,7 +6824,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           saidaAnterior: lws[0].saidaAnterior || 0,
           saidaNova: lws[0].saidaNova || 0,
           diferencaSaida: lws[0].diferencaSaida || 0,
-          saldo: (lws[0].diferencaEntrada || 0) - (lws[0].diferencaSaida || 0),
+          saldo: lws[0].saldo || 0, // saldo armazenado no banco (valor em R$ = movimento)
           moeda: lws[0].moeda || 'M001',
         })),
       };
