@@ -158,6 +158,23 @@ export function listarCamposDisponiveis(codigosMaquinas: string[] = []): CampoGu
     );
   });
 
+  // Campos indexados (genéricos) — [maquina1_codigo], [maquina1_entrada], etc.
+  // Permitem usar o mesmo gabarito para qualquer cliente, independentemente dos códigos das máquinas.
+  // A numeração segue a ordem das máquinas no relatório (1, 2, 3, ...).
+  for (let i = 1; i <= 30; i++) {
+    campos.push(
+      { placeholder: `[maquina${i}_codigo]`, descricao: `Código/nome da ${i}ª máquina`, exemplo: i === 1 ? 'B3' : i === 2 ? 'TURBO M.' : 'M001', categoria: 'Máquinas' },
+      { placeholder: `[maquina${i}_entrada_anterior]`, descricao: `Entrada anterior da ${i}ª máquina`, exemplo: '10000', categoria: 'Máquinas' },
+      { placeholder: `[maquina${i}_entrada_nova]`, descricao: `Entrada nova (atual) da ${i}ª máquina`, exemplo: '11234', categoria: 'Máquinas' },
+      { placeholder: `[maquina${i}_entrada]`, descricao: `Diferença de entrada da ${i}ª máquina`, exemplo: '1234', categoria: 'Máquinas' },
+      { placeholder: `[maquina${i}_saida_anterior]`, descricao: `Saída anterior da ${i}ª máquina`, exemplo: '5000', categoria: 'Máquinas' },
+      { placeholder: `[maquina${i}_saida_nova]`, descricao: `Saída nova (atual) da ${i}ª máquina`, exemplo: '5567', categoria: 'Máquinas' },
+      { placeholder: `[maquina${i}_saida]`, descricao: `Diferença de saída da ${i}ª máquina`, exemplo: '567', categoria: 'Máquinas' },
+      { placeholder: `[maquina${i}_movimento]`, descricao: `Movimento da ${i}ª máquina (valor em R$)`, exemplo: '667.00', categoria: 'Máquinas' },
+      { placeholder: `[maquina${i}_saldo]`, descricao: `Saldo da ${i}ª máquina (em R$)`, exemplo: '667.00', categoria: 'Máquinas' },
+    );
+  }
+
   return campos;
 }
 
@@ -228,8 +245,14 @@ export function construirDicionario(data: PlanilhaData, nomeCartao1?: string, no
     if (key2 && !(key2 in dict)) dict[key2] = data.despesas[normalizarChave(nomeCartao2)] ?? 0;
   }
 
-  // Máquinas (por código) — placeholders expandidos
-  data.maquinas.forEach(m => {
+  // Máquinas — dois modos de placeholder:
+  // 1. Por código: [b3_entrada], [turbo_m_saida], etc. (específico da máquina)
+  // 2. Indexado (genérico): [maquina1_codigo], [maquina1_entrada], etc.
+  //    — permite usar o mesmo gabarito para qualquer cliente
+  data.maquinas.forEach((m, index) => {
+    const num = index + 1; // 1-based
+
+    // 1. Por código (normalizado)
     const key = normalizarChave(m.codigo);
     if (key) {
       dict[`${key}_entrada_anterior`] = m.entradaAnterior;
@@ -238,9 +261,22 @@ export function construirDicionario(data: PlanilhaData, nomeCartao1?: string, no
       dict[`${key}_saida_anterior`] = m.saidaAnterior;
       dict[`${key}_saida_nova`] = m.saidaNova;
       dict[`${key}_saida`] = m.diferencaSaida;
-      dict[`${key}_movimento`] = m.saldo; // movimento = saldo (valor em R$)
+      dict[`${key}_movimento`] = m.saldo;
       dict[`${key}_saldo`] = m.saldo;
     }
+
+    // 2. Indexado (genérico) — [maquina1_codigo], [maquina1_entrada], etc.
+    dict[`maquina${num}_codigo`] = m.codigo;
+    dict[`maquina${num}_tipo`] = m.tipo;
+    dict[`maquina${num}_entrada_anterior`] = m.entradaAnterior;
+    dict[`maquina${num}_entrada_nova`] = m.entradaNova;
+    dict[`maquina${num}_entrada`] = m.diferencaEntrada;
+    dict[`maquina${num}_saida_anterior`] = m.saidaAnterior;
+    dict[`maquina${num}_saida_nova`] = m.saidaNova;
+    dict[`maquina${num}_saida`] = m.diferencaSaida;
+    dict[`maquina${num}_movimento`] = m.saldo;
+    dict[`maquina${num}_saldo`] = m.saldo;
+    dict[`maquina${num}_moeda`] = m.moeda;
   });
 
   return dict;
