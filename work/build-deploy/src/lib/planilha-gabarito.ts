@@ -164,6 +164,7 @@ export function listarCamposDisponiveis(codigosMaquinas: string[] = []): CampoGu
   for (let i = 1; i <= 30; i++) {
     campos.push(
       { placeholder: `[maquina${i}_codigo]`, descricao: `Código/nome da ${i}ª máquina`, exemplo: i === 1 ? 'B3' : i === 2 ? 'TURBO M.' : 'M001', categoria: 'Máquinas' },
+      { placeholder: `[maquina${i}_numero]`, descricao: `Número sequencial da ${i}ª máquina`, exemplo: String(i), categoria: 'Máquinas' },
       { placeholder: `[maquina${i}_entrada_anterior]`, descricao: `Entrada anterior da ${i}ª máquina`, exemplo: '10000', categoria: 'Máquinas' },
       { placeholder: `[maquina${i}_entrada_nova]`, descricao: `Entrada nova (atual) da ${i}ª máquina`, exemplo: '11234', categoria: 'Máquinas' },
       { placeholder: `[maquina${i}_entrada]`, descricao: `Diferença de entrada da ${i}ª máquina`, exemplo: '1234', categoria: 'Máquinas' },
@@ -267,6 +268,7 @@ export function construirDicionario(data: PlanilhaData, nomeCartao1?: string, no
 
     // 2. Indexado (genérico) — [maquina1_codigo], [maquina1_entrada], etc.
     dict[`maquina${num}_codigo`] = m.codigo;
+    dict[`maquina${num}_numero`] = num; // número sequencial da máquina (1, 2, 3, ...)
     dict[`maquina${num}_tipo`] = m.tipo;
     dict[`maquina${num}_entrada_anterior`] = m.entradaAnterior;
     dict[`maquina${num}_entrada_nova`] = m.entradaNova;
