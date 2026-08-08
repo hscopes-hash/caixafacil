@@ -11,6 +11,17 @@
 import * as XLSX from 'xlsx';
 
 // ============================================
+// MOEDA — multiplicadores
+// ============================================
+// Mapeia código de moeda → valor do multiplicador (R$ por crédito)
+const MOEDA_MULT: Record<string, number> = {
+  M001: 0.01,
+  M005: 0.05,
+  M010: 0.10,
+  M025: 0.25,
+};
+
+// ============================================
 // TIPOS
 // ============================================
 
@@ -165,6 +176,7 @@ export function listarCamposDisponiveis(codigosMaquinas: string[] = []): CampoGu
     campos.push(
       { placeholder: `[maquina${i}_codigo]`, descricao: `Código/nome da ${i}ª máquina`, exemplo: i === 1 ? 'B3' : i === 2 ? 'TURBO M.' : 'M001', categoria: 'Máquinas' },
       { placeholder: `[maquina${i}_numero]`, descricao: `Número sequencial da ${i}ª máquina`, exemplo: String(i), categoria: 'Máquinas' },
+      { placeholder: `[maquina${i}_multiplicador]`, descricao: `Multiplicador da moeda da ${i}ª máquina (0.01, 0.05, 0.10, 0.25)`, exemplo: '0.25', categoria: 'Máquinas' },
       { placeholder: `[maquina${i}_entrada_anterior]`, descricao: `Entrada anterior da ${i}ª máquina`, exemplo: '10000', categoria: 'Máquinas' },
       { placeholder: `[maquina${i}_entrada_nova]`, descricao: `Entrada nova (atual) da ${i}ª máquina`, exemplo: '11234', categoria: 'Máquinas' },
       { placeholder: `[maquina${i}_entrada]`, descricao: `Diferença de entrada da ${i}ª máquina`, exemplo: '1234', categoria: 'Máquinas' },
@@ -278,7 +290,8 @@ export function construirDicionario(data: PlanilhaData, nomeCartao1?: string, no
     dict[`maquina${num}_saida`] = m.diferencaSaida;
     dict[`maquina${num}_movimento`] = m.saldo;
     dict[`maquina${num}_saldo`] = m.saldo;
-    dict[`maquina${num}_moeda`] = m.moeda;
+    dict[`maquina${num}_moeda`] = m.moeda; // código da moeda: M001, M005, M010, M025
+    dict[`maquina${num}_multiplicador`] = MOEDA_MULT[m.moeda] ?? 0.01; // valor do multiplicador (0.01, 0.05, 0.10, 0.25)
   });
 
   return dict;
