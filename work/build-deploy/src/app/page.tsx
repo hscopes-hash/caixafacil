@@ -5193,6 +5193,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               codigosMaquinas,
               modelosMap,
               empresaId: empresa?.id,
+              agressivo: true, // mesmo pipeline da foto individual (deskew + JPEG 90)
             }),
           });
         } finally {
@@ -5565,6 +5566,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             codigosMaquinas,
             modelosMap,
             empresaId: currentEmpresa?.id,
+            agressivo: true, // mesmo pipeline da foto individual (deskew + JPEG 90)
           }),
         });
       } finally {
