@@ -166,6 +166,7 @@ model TipoMaquina {
   ativo            Boolean  @default(true)
   classe           Int      @default(0) // 0=primária, 1=secundária
   complementoPrompt String? // Instrução adicional para o prompt de OCR
+  ocrAgressivo     Boolean  @default(false) // Se true, usa pipeline agressivo (deskew + JPEG 90) no OCR
   empresaId        String
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

@@ -95,7 +95,7 @@ Responda APENAS com JSON:
       jsonMode: true,
       agressivo: agressivo === true, // foto individual ativa deskew + pipeline agressivo
     });
-    const content = result.content;
+    let content = result.content;
 
     // Parse da resposta
     let resultado = extractJSON(content).parsed;
@@ -131,6 +131,31 @@ Responda APENAS com JSON:
     const codigoEncontrado = codigosMaquinas.find(
       (c: string) => c.toUpperCase() === codigoIdentificado
     );
+
+    // === TWO-PASS: se a máquina identificada tem ocrAgressivo e a primeira passagem
+    // não foi agressiva, reprocessa com pipeline agressivo (deskew + JPEG 90) ===
+    const codigoFinalParaChecagem = codigoEncontrado || codigoIdentificado || codigoLido;
+    const infoMaquinaParaChecagem = codigoFinalParaChecagem ? mapaModelos[codigoFinalParaChecagem] : null;
+
+    if (
+      infoMaquinaParaChecagem?.ocrAgressivo === true &&
+      agressivo !== true && // só reprocessa se a primeira passagem não foi agressiva
+      etiquetaLegivel &&
+      codigoEncontrado
+    ) {
+      console.log(`[PROCESSAR-LOTE-FOTO] OCR Agressivo ativado para máquina ${codigoFinalParaChecagem} — reprocessando com deskew + JPEG 90`);
+      const result2 = await callAI(prompt, imagem, model, {
+        temperature: 0.05,
+        maxTokens: 4096,
+        jsonMode: true,
+        agressivo: true, // segunda passagem com pipeline agressivo
+      });
+      content = result2.content;
+      const resultado2 = extractJSON(content).parsed;
+      if (resultado2) {
+        resultado = resultado2; // usa o resultado mais preciso da segunda passagem
+      }
+    }
 
     const sanitizarValor = (valor: any): number | null => {
       if (valor === null || valor === undefined || valor === 'null') return null;

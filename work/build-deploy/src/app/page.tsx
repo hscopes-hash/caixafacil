@@ -89,6 +89,7 @@ interface TipoMaquina {
   nomeSaida: string;
   ativo: boolean;
   classe: number; // 0=primária, 1=secundária
+  ocrAgressivo?: boolean;
   _count?: { maquinas: number };
 }
 
@@ -4919,12 +4920,13 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       // — prompt estruturado (identifica máquina + lê valores) e temperature 0.05
       const token = useAuthStore.getState().token;
       const codigosMaquinas = maquinas.map(m => m.codigo);
-      const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string; complementoPrompt?: string }> = {};
+      const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string; complementoPrompt?: string; ocrAgressivo?: boolean }> = {};
       maquinas.forEach(m => {
         modelosMap[m.codigo] = {
           nomeEntrada: m.tipo?.nomeEntrada || 'E',
           nomeSaida: m.tipo?.nomeSaida || 'S',
           complementoPrompt: (m.tipo as any)?.complementoPrompt || undefined,
+          ocrAgressivo: (m.tipo as any)?.ocrAgressivo === true,
         };
       });
 
@@ -5147,7 +5149,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     try {
     // Preparar lista de códigos de máquinas e mapa de nomes E/S
     const codigosMaquinas = maquinas.map(m => m.codigo);
-    const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string; complementoPrompt?: string }> = {};
+    const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string; complementoPrompt?: string; ocrAgressivo?: boolean }> = {};
     maquinas.forEach(m => {
       modelosMap[m.codigo] = {
         nomeEntrada: m.tipo?.nomeEntrada || 'E',
@@ -5193,7 +5195,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               codigosMaquinas,
               modelosMap,
               empresaId: empresa?.id,
-              agressivo: true, // mesmo pipeline da foto individual (deskew + JPEG 90)
             }),
           });
         } finally {
@@ -5528,7 +5529,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     }
 
     const codigosMaquinas = currentMaquinas.map(m => m.codigo);
-    const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string; complementoPrompt?: string }> = {};
+    const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string; complementoPrompt?: string; ocrAgressivo?: boolean }> = {};
     currentMaquinas.forEach(m => {
       modelosMap[m.codigo] = {
         nomeEntrada: m.tipo?.nomeEntrada || 'E',
@@ -5566,7 +5567,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             codigosMaquinas,
             modelosMap,
             empresaId: currentEmpresa?.id,
-            agressivo: true, // mesmo pipeline da foto individual (deskew + JPEG 90)
           }),
         });
       } finally {
@@ -12459,6 +12459,7 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
     nomeSaida: 'S',
     classe: 0,
     complementoPrompt: '',
+    ocrAgressivo: false,
   });
 
   useEffect(() => {
@@ -12544,6 +12545,7 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
       nomeSaida: 'S',
       classe: 0,
       complementoPrompt: '',
+      ocrAgressivo: false,
     });
     setTipoEditando(null);
   };
@@ -12556,6 +12558,7 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
       nomeSaida: tipo.nomeSaida || 'S',
       classe: tipo.classe ?? 0,
       complementoPrompt: (tipo as any).complementoPrompt || '',
+      ocrAgressivo: (tipo as any).ocrAgressivo === true,
     });
     setDialogOpen(true);
   };
@@ -12640,6 +12643,19 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
                   rows={2}
                 />
                 <p className="text-xs text-muted-foreground">Instrução extra enviada à IA Vision ao ler este tipo de máquina. Deixe vazio se não precisar.</p>
+              </div>
+              <div className="flex items-center justify-between p-3 border border-border rounded-lg bg-muted/30">
+                <div>
+                  <Label className="text-sm font-semibold">OCR Agressivo</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Ativa pipeline com deskew (corrige inclinação) + JPEG 90 (qualidade superior). Mais lento mas mais preciso.
+                    Marque apenas para tipos de máquina com problemas de leitura (ex: display que confunde 0 com 8).
+                  </p>
+                </div>
+                <Switch
+                  checked={formData.ocrAgressivo}
+                  onCheckedChange={(checked) => setFormData({ ...formData, ocrAgressivo: checked })}
+                />
               </div>
             </div>
             <DialogFooter>
