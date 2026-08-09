@@ -4938,7 +4938,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           codigosMaquinas,
           modelosMap,
           empresaId: empresa?.id,
-          agressivo: true, // foto individual ativa deskew (threshold 2°)
+          agressivo: (maquinaFoto.tipo as any)?.ocrAgressivo === true, // deskew + JPEG 90 só para máquinas com OCR Agressivo
         }),
       });
 
@@ -5155,8 +5155,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         nomeEntrada: m.tipo?.nomeEntrada || 'E',
         nomeSaida: m.tipo?.nomeSaida || 'S',
         complementoPrompt: (m.tipo as any)?.complementoPrompt || undefined,
+        ocrAgressivo: (m.tipo as any)?.ocrAgressivo === true,
       };
     });
+    // Se qualquer máquina do cliente tem OCR Agressivo, ativa o pipeline agressivo
+    // (a foto pode ser de qualquer uma das máquinas — não sabemos qual até a IA identificar)
+    const temOcrAgressivo = Object.values(modelosMap).some(m => m.ocrAgressivo === true);
 
     // Snapshot das máquinas no momento do processamento
     let maquinasSnapshot = [...maquinas];
@@ -5195,6 +5199,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               codigosMaquinas,
               modelosMap,
               empresaId: empresa?.id,
+              agressivo: temOcrAgressivo, // deskew + JPEG 90 se alguma máquina tem OCR Agressivo
             }),
           });
         } finally {
@@ -5535,8 +5540,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         nomeEntrada: m.tipo?.nomeEntrada || 'E',
         nomeSaida: m.tipo?.nomeSaida || 'S',
         complementoPrompt: (m.tipo as any)?.complementoPrompt || undefined,
+        ocrAgressivo: (m.tipo as any)?.ocrAgressivo === true,
       };
     });
+    // Se qualquer máquina do cliente tem OCR Agressivo, ativa o pipeline agressivo
+    const temOcrAgressivoBg = Object.values(modelosMap).some(m => m.ocrAgressivo === true);
     let maquinasSnapshot = [...currentMaquinas];
 
     console.log(`[Lote] Processando foto ${fotoId} (endpoint unificado)...`);
@@ -5567,6 +5575,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             codigosMaquinas,
             modelosMap,
             empresaId: currentEmpresa?.id,
+            agressivo: temOcrAgressivoBg, // deskew + JPEG 90 se alguma máquina tem OCR Agressivo
           }),
         });
       } finally {
