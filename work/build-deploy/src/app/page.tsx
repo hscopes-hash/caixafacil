@@ -5107,9 +5107,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const url = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => {
-        // Lote: 800px + JPEG 0.7 — otimizado para volume (30+ fotos)
-        // Reduz memória de ~15MB para ~4MB com 30 fotos
-        const maxDim = 800;
+        // 1280px + JPEG 0.85 — mesma qualidade da foto individual
+        // (800px/0.7 causava erro de OCR: confundia 0 com 8)
+        const maxDim = 1280;
         let w = img.width, h = img.height;
         if (w > maxDim || h > maxDim) {
           if (w > h) { h = Math.round((h / w) * maxDim); w = maxDim; }
@@ -5119,8 +5119,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         canvas.width = w; canvas.height = h;
         const ctx = canvas.getContext('2d');
         if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(img, 0, 0, w, h);
-          const base64 = canvas.toDataURL('image/jpeg', 0.7);
+          const base64 = canvas.toDataURL('image/jpeg', 0.85);
           // Limpar canvas da memória imediatamente
           canvas.width = 0;
           canvas.height = 0;
