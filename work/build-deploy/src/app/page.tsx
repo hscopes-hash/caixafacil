@@ -4153,7 +4153,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [debitosVencidosSalvos, setDebitosVencidosSalvos] = useState<number>(0);
   // Estados para Lançamento de Lote
   const [loteModalOpen, setLoteModalOpen] = useState(false);
-  const [fotosLote, setFotosLote] = useState<{ id: string; imagem: string; status: 'pendente' | 'processando' | 'concluido' | 'erro'; origem?: 'CÂMERA' | 'GALERIA' | 'LOTE'; resultado?: { codigoMaquina: string; codigoReconhecido: boolean; entrada?: number | null; saida?: number | null; confianca: number; observacoes: string; confiancaOCR?: number }; erro?: string; tempoMs?: number; fotoProcessadaThumb?: string }[]>([]);
+  const [fotosLote, setFotosLote] = useState<{ id: string; imagem: string; status: 'pendente' | 'processando' | 'concluido' | 'erro'; origem?: 'CÂMERA' | 'GALERIA' | 'LOTE'; resultado?: { codigoMaquina: string; codigoReconhecido: boolean; entrada?: number | null; saida?: number | null; confianca: number; observacoes: string; confiancaOCR?: number }; erro?: string; tempoMs?: number; fotoProcessadaThumb?: string; altaPrecisao?: boolean }[]>([]);
   const [processandoLote, setProcessandoLote] = useState(false);
   const [loteProgresso, setLoteProgresso] = useState(0);
   const loteIdCounter = useRef(0);
@@ -4938,7 +4938,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           codigosMaquinas,
           modelosMap,
           empresaId: empresa?.id,
-          agressivo: (maquinaFoto.tipo as any)?.ocrAgressivo === true, // deskew + JPEG 90 só para máquinas com OCR Agressivo
+          agressivo: true, // sempre usa pipeline agressivo (deskew + JPEG 90)
         }),
       });
 
@@ -5158,10 +5158,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         ocrAgressivo: (m.tipo as any)?.ocrAgressivo === true,
       };
     });
-    // Se qualquer máquina do cliente tem OCR Agressivo, ativa o pipeline agressivo
-    // (a foto pode ser de qualquer uma das máquinas — não sabemos qual até a IA identificar)
-    const temOcrAgressivo = Object.values(modelosMap).some(m => m.ocrAgressivo === true);
-
     // Snapshot das máquinas no momento do processamento
     let maquinasSnapshot = [...maquinas];
 
@@ -5199,18 +5195,58 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               codigosMaquinas,
               modelosMap,
               empresaId: empresa?.id,
-              agressivo: temOcrAgressivo, // deskew + JPEG 90 se alguma máquina tem OCR Agressivo
+              agressivo: false, // lote usa modo rápido primeiro — reprocessa se máquina tiver OCR Agressivo
             }),
           });
         } finally {
           clearTimeout(timeoutId);
         }
 
-        const data = await res.json();
+        let data = await res.json();
         const tempoGasto = Date.now() - tempoInicio;
 
         if (!res.ok) {
           throw new Error(data.error || 'Erro ao processar foto');
+        }
+
+        // === REPROCESSAMENTO EM ALTA PRECISÃO ===
+        // Se a máquina identificada tem OCR Agressivo, refaz a foto com pipeline agressivo (deskew + JPEG 90)
+        if (data.codigoReconhecido && data.codigoMaquina) {
+          const maquinaIdentificada = maquinasSnapshot.find(m => m.codigo.toUpperCase() === data.codigoMaquina.toUpperCase());
+          if (maquinaIdentificada && (maquinaIdentificada.tipo as any)?.ocrAgressivo === true) {
+            console.log(`[Lote] Máquina ${data.codigoMaquina} tem OCR Agressivo — reprocessando em alta precisão...`);
+            // Marcar visualmente como alta precisão
+            setFotosLote(prev => prev.map((f, idx) =>
+              idx === i ? { ...f, altaPrecisao: true } : f
+            ));
+            try {
+              const controllerAP = new AbortController();
+              const timeoutAP = setTimeout(() => controllerAP.abort(), 60000);
+              const resAP = await fetch('/api/leituras/processar-lote-foto', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${useAuthStore.getState().token}` },
+                signal: controllerAP.signal,
+                body: JSON.stringify({
+                  imagem: fotoCorrigida,
+                  codigosMaquinas,
+                  modelosMap,
+                  empresaId: empresa?.id,
+                  agressivo: true, // pipeline agressivo (deskew + JPEG 90)
+                }),
+              });
+              clearTimeout(timeoutAP);
+              if (resAP.ok) {
+                const dataAP = await resAP.json();
+                if (dataAP.codigoReconhecido) {
+                  // Sobrescreve resultado com valores da alta precisão
+                  data = dataAP;
+                  console.log(`[Lote] Alta precisão concluída para ${data.codigoMaquina}: E=${dataAP.entrada} S=${dataAP.saida}`);
+                }
+              }
+            } catch (errAP) {
+              console.warn(`[Lote] Alta precisão falhou, mantendo resultado rápido:`, errAP);
+            }
+          }
         }
 
         if (data.codigoReconhecido) {
@@ -5543,8 +5579,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         ocrAgressivo: (m.tipo as any)?.ocrAgressivo === true,
       };
     });
-    // Se qualquer máquina do cliente tem OCR Agressivo, ativa o pipeline agressivo
-    const temOcrAgressivoBg = Object.values(modelosMap).some(m => m.ocrAgressivo === true);
     let maquinasSnapshot = [...currentMaquinas];
 
     console.log(`[Lote] Processando foto ${fotoId} (endpoint unificado)...`);
@@ -5575,7 +5609,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             codigosMaquinas,
             modelosMap,
             empresaId: currentEmpresa?.id,
-            agressivo: temOcrAgressivoBg, // deskew + JPEG 90 se alguma máquina tem OCR Agressivo
+            agressivo: false, // lote usa modo rápido primeiro — reprocessa se máquina tiver OCR Agressivo
           }),
         });
       } finally {
@@ -5593,6 +5627,46 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       }
 
       console.log(`[Lote] Foto ${fotoId} processada: ${data.codigoMaquina} (reconhecido: ${data.codigoReconhecido})`);
+
+      // === REPROCESSAMENTO EM ALTA PRECISÃO ===
+      // Se a máquina identificada tem OCR Agressivo, refaz a foto com pipeline agressivo (deskew + JPEG 90)
+      if (data.codigoReconhecido && data.codigoMaquina) {
+        const maquinaIdentificada = maquinasSnapshot.find(m => m.codigo.toUpperCase() === data.codigoMaquina.toUpperCase());
+        if (maquinaIdentificada && (maquinaIdentificada.tipo as any)?.ocrAgressivo === true) {
+          console.log(`[Lote BG] Máquina ${data.codigoMaquina} tem OCR Agressivo — reprocessando em alta precisão...`);
+          // Marcar visualmente como alta precisão
+          setFotosLote(prev => prev.map(f =>
+            f.id === fotoId ? { ...f, altaPrecisao: true } : f
+          ));
+          try {
+            const controllerAP = new AbortController();
+            const timeoutAP = setTimeout(() => controllerAP.abort(), 60000);
+            const resAP = await fetch('/api/leituras/processar-lote-foto', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${useAuthStore.getState().token}` },
+              signal: controllerAP.signal,
+              body: JSON.stringify({
+                imagem: fotoCorrigidaBg,
+                codigosMaquinas,
+                modelosMap,
+                empresaId: currentEmpresa?.id,
+                agressivo: true, // pipeline agressivo (deskew + JPEG 90)
+              }),
+            });
+            clearTimeout(timeoutAP);
+            if (resAP.ok) {
+              const dataAP = await resAP.json();
+              if (dataAP.codigoReconhecido) {
+                // Sobrescreve resultado com valores da alta precisão
+                data = dataAP;
+                console.log(`[Lote BG] Alta precisão concluída para ${data.codigoMaquina}: E=${dataAP.entrada} S=${dataAP.saida}`);
+              }
+            }
+          } catch (errAP) {
+            console.warn(`[Lote BG] Alta precisão falhou, mantendo resultado rápido:`, errAP);
+          }
+        }
+      }
 
       if (data.codigoReconhecido) {
         // ⚠️ Gerar foto com tarja para thumbnail do card do lote
@@ -10539,16 +10613,16 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         <div
                           key={foto.id}
                           className={`flex items-center gap-3 p-2 rounded-lg border ${
-                            foto.status === 'concluido' ? 'bg-success-bg border-success/30' :
+                            foto.status === 'concluido' ? (foto.altaPrecisao ? 'bg-amber-500/10 border-amber-500/40' : 'bg-success-bg border-success/30') :
                             foto.status === 'erro' ? 'bg-danger-bg border-danger/30' :
-                            foto.status === 'processando' ? 'bg-amber-500/10 border-amber-500/30' :
+                            foto.status === 'processando' ? (foto.altaPrecisao ? 'bg-amber-500/15 border-amber-500/50' : 'bg-amber-500/10 border-amber-500/30') :
                             'bg-muted border-border'
                           }`}
                         >
                           {/* Thumbnail ou ícone conforme status — economiza memória */}
                           {foto.status === 'concluido' ? (
-                            <div className="w-14 h-14 flex items-center justify-center rounded border border-success/30 bg-success/10 flex-shrink-0">
-                              <CheckCircle className="w-7 h-7 text-success" />
+                            <div className={`w-14 h-14 flex items-center justify-center rounded border flex-shrink-0 ${foto.altaPrecisao ? 'border-amber-500/40 bg-amber-500/10' : 'border-success/30 bg-success/10'}`}>
+                              <CheckCircle className={`w-7 h-7 ${foto.altaPrecisao ? 'text-amber-500' : 'text-success'}`} />
                             </div>
                           ) : foto.status === 'erro' ? (
                             <div className="w-14 h-14 flex items-center justify-center rounded border border-danger/30 bg-danger/10 flex-shrink-0">
@@ -10567,7 +10641,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                           )}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between">
-                              <p className="text-sm font-medium text-foreground">Foto {idx + 1}</p>
+                              <p className="text-sm font-medium text-foreground">
+                                Foto {idx + 1}
+                                {foto.altaPrecisao && (
+                                  <span className="ml-2 text-xs text-amber-500 font-semibold">⚡ Alta Precisão</span>
+                                )}
+                              </p>
                               {foto.tempoMs !== undefined && (foto.status === 'concluido' || foto.status === 'erro') && (
                                 <span className="text-xs text-muted-foreground ml-2 shrink-0">{(foto.tempoMs / 1000).toFixed(1)}s</span>
                               )}
@@ -10576,11 +10655,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                               <p className="text-xs text-muted-foreground">Aguardando processamento...</p>
                             )}
                             {foto.status === 'processando' && (
-                              <p className="text-xs text-amber-400">Processando...</p>
+                              <p className="text-xs text-amber-400">{foto.altaPrecisao ? 'Reprocessando em alta precisão...' : 'Processando...'}</p>
                             )}
                             {foto.status === 'concluido' && foto.resultado && (
                               <div className="text-xs space-y-0.5">
-                                <p className={foto.resultado.codigoReconhecido ? 'text-success' : 'text-warning'}>
+                                <p className={foto.resultado.codigoReconhecido ? (foto.altaPrecisao ? 'text-amber-500' : 'text-success') : 'text-warning'}>
                                   Maq: {foto.resultado.codigoMaquina} {!foto.resultado.codigoReconhecido && '(nao encontrada)'}
                                 </p>
                                 <p className="text-muted-foreground">
@@ -10613,7 +10692,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                             </Button>
                           )}
                           {foto.status === 'concluido' && (
-                            <CheckCircle className="w-4 h-4 text-success flex-shrink-0" />
+                            <CheckCircle className={`w-4 h-4 flex-shrink-0 ${foto.altaPrecisao ? 'text-amber-500' : 'text-success'}`} />
                           )}
                           {foto.status === 'erro' && (
                             <Button
