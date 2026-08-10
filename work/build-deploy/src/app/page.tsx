@@ -4274,6 +4274,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const res = await fetch(`/api/maquinas?empresaId=${empresaId}&clienteId=${clienteId}`);
       const data = await res.json();
 
+      // Proteção: se a API retornar erro, não tentar fazer .map()
+      if (!res.ok || !Array.isArray(data)) {
+        console.error('[loadMaquinasCliente] Erro da API:', data);
+        throw new Error(data?.error || 'Erro ao carregar máquinas do servidor');
+      }
+
       // Tentar restaurar dados do localStorage
       const modo = modoForcado || modoOperacao;
       let savedData: any = null;

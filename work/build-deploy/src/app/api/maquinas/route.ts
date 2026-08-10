@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { enforcePlan } from '@/lib/plan-enforcement';
 
-// Garantir que os enums existem (auto-migração)
+// Garantir que os enums e colunas existem (auto-migração)
 async function ensureEnums() {
   try { await db.$executeRawUnsafe(`CREATE TYPE "StatusMaquina" AS ENUM ('ATIVA', 'INATIVA', 'MANUTENCAO', 'VENDIDA')`); } catch (e) { /* já existe */ }
   try { await db.$executeRawUnsafe(`CREATE TYPE "TipoMoeda" AS ENUM ('M001', 'M005', 'M010', 'M025')`); } catch (e) { /* já existe */ }
+  // Garantir coluna ocrAgressivo em tipos_maquina (adicionada em v2.46.0.730)
+  try { await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS "ocrAgressivo" BOOLEAN NOT NULL DEFAULT false`); } catch (e) { /* já existe */ }
 }
 
 // Listar máquinas
