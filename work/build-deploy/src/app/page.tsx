@@ -5167,13 +5167,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     try {
     // Preparar lista de códigos de máquinas e mapa de nomes E/S
     const codigosMaquinas = maquinas.map(m => m.codigo);
-    const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string; complementoPrompt?: string; ocrAgressivo?: boolean }> = {};
+    const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string; complementoPrompt?: string; ocrAgressivo?: boolean; criterioAnalise?: string; mensagemAlerta?: string }> = {};
     maquinas.forEach(m => {
       modelosMap[m.codigo] = {
         nomeEntrada: m.tipo?.nomeEntrada || 'E',
         nomeSaida: m.tipo?.nomeSaida || 'S',
         complementoPrompt: (m.tipo as any)?.complementoPrompt || undefined,
         ocrAgressivo: (m.tipo as any)?.ocrAgressivo === true,
+        criterioAnalise: (m.tipo as any)?.criterioAnalise || undefined,
+        mensagemAlerta: (m.tipo as any)?.mensagemAlerta || undefined,
       };
     });
     // Snapshot das máquinas no momento do processamento
@@ -5596,13 +5598,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     }
 
     const codigosMaquinas = currentMaquinas.map(m => m.codigo);
-    const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string; complementoPrompt?: string; ocrAgressivo?: boolean }> = {};
+    const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string; complementoPrompt?: string; ocrAgressivo?: boolean; criterioAnalise?: string; mensagemAlerta?: string }> = {};
     currentMaquinas.forEach(m => {
       modelosMap[m.codigo] = {
         nomeEntrada: m.tipo?.nomeEntrada || 'E',
         nomeSaida: m.tipo?.nomeSaida || 'S',
         complementoPrompt: (m.tipo as any)?.complementoPrompt || undefined,
         ocrAgressivo: (m.tipo as any)?.ocrAgressivo === true,
+        criterioAnalise: (m.tipo as any)?.criterioAnalise || undefined,
+        mensagemAlerta: (m.tipo as any)?.mensagemAlerta || undefined,
       };
     });
     let maquinasSnapshot = [...currentMaquinas];
