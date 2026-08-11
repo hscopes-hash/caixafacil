@@ -90,6 +90,8 @@ interface TipoMaquina {
   ativo: boolean;
   classe: number; // 0=primária, 1=secundária
   ocrAgressivo?: boolean;
+  criterioAnalise?: string;
+  mensagemAlerta?: string;
   _count?: { maquinas: number };
 }
 
@@ -4153,7 +4155,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [debitosVencidosSalvos, setDebitosVencidosSalvos] = useState<number>(0);
   // Estados para Lançamento de Lote
   const [loteModalOpen, setLoteModalOpen] = useState(false);
-  const [fotosLote, setFotosLote] = useState<{ id: string; imagem: string; status: 'pendente' | 'processando' | 'concluido' | 'erro'; origem?: 'CÂMERA' | 'GALERIA' | 'LOTE'; resultado?: { codigoMaquina: string; codigoReconhecido: boolean; entrada?: number | null; saida?: number | null; confianca: number; observacoes: string; confiancaOCR?: number }; erro?: string; tempoMs?: number; fotoProcessadaThumb?: string; altaPrecisao?: boolean }[]>([]);
+  const [fotosLote, setFotosLote] = useState<{ id: string; imagem: string; status: 'pendente' | 'processando' | 'concluido' | 'erro'; origem?: 'CÂMERA' | 'GALERIA' | 'LOTE'; resultado?: { codigoMaquina: string; codigoReconhecido: boolean; entrada?: number | null; saida?: number | null; confianca: number; observacoes: string; confiancaOCR?: number; alertaDefeito?: boolean; mensagemAlerta?: string }; erro?: string; tempoMs?: number; fotoProcessadaThumb?: string; altaPrecisao?: boolean; alertaDefeito?: boolean; mensagemAlerta?: string }[]>([]);
   const [processandoLote, setProcessandoLote] = useState(false);
   const [loteProgresso, setLoteProgresso] = useState(0);
   const loteIdCounter = useRef(0);
@@ -4926,13 +4928,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       // — prompt estruturado (identifica máquina + lê valores) e temperature 0.05
       const token = useAuthStore.getState().token;
       const codigosMaquinas = maquinas.map(m => m.codigo);
-      const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string; complementoPrompt?: string; ocrAgressivo?: boolean }> = {};
+      const modelosMap: Record<string, { nomeEntrada: string; nomeSaida: string; complementoPrompt?: string; ocrAgressivo?: boolean; criterioAnalise?: string; mensagemAlerta?: string }> = {};
       maquinas.forEach(m => {
         modelosMap[m.codigo] = {
           nomeEntrada: m.tipo?.nomeEntrada || 'E',
           nomeSaida: m.tipo?.nomeSaida || 'S',
           complementoPrompt: (m.tipo as any)?.complementoPrompt || undefined,
           ocrAgressivo: (m.tipo as any)?.ocrAgressivo === true,
+          criterioAnalise: (m.tipo as any)?.criterioAnalise || undefined,
+          mensagemAlerta: (m.tipo as any)?.mensagemAlerta || undefined,
         };
       });
 
@@ -4971,7 +4975,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           data.entrada,
           data.saida,
           fotoOrigem,
-          data.codigoMaquina || null
+          data.codigoMaquina || null,
+          data.alertaDefeito === true,
+          data.mensagemAlerta || undefined
         );
         setFotoCapturada(fotoComTarja);
         // ⚠️ Armazena em ref para evitar race condition com estado assíncrono
@@ -5023,6 +5029,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         } else {
           toast.success(`Leitura extraída com ${data.confianca || 0}% de confiança`);
         }
+      }
+      // Alerta de defeito detectado
+      if (data.alertaDefeito === true && data.mensagemAlerta) {
+        toast.error(`⚠ ${data.mensagemAlerta}`, { duration: 8000 });
       }
       console.log('leituraExtraida definido com sucesso');
 
@@ -5270,7 +5280,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               data.entrada ?? null,
               data.saida ?? null,
               foto.origem || 'LOTE',
-              data.codigoMaquina || null
+              data.codigoMaquina || null,
+              data.alertaDefeito === true,
+              data.mensagemAlerta || undefined
             );
           } catch (err) {
             console.warn(`[Lote] Falha ao gerar tarja para thumbnail:`, err);
@@ -5284,6 +5296,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               status: 'concluido',
               tempoMs: tempoGasto,
               fotoProcessadaThumb: fotoComTarjaThumbSync,
+              alertaDefeito: data.alertaDefeito === true,
+              mensagemAlerta: data.mensagemAlerta || '',
               resultado: {
                 codigoMaquina: data.codigoMaquina,
                 codigoReconhecido: true,
@@ -5292,6 +5306,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 confianca: data.confianca,
                 confiancaOCR: data.confiancaOCR || data.confianca,
                 observacoes: data.observacoes || '',
+                alertaDefeito: data.alertaDefeito === true,
+                mensagemAlerta: data.mensagemAlerta || '',
               },
             } : f
           ));
@@ -5466,7 +5482,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             r.entrada ?? null,
             r.saida ?? null,
             foto.origem || 'LOTE',
-            r.codigoMaquina || null
+            r.codigoMaquina || null,
+            foto.alertaDefeito === true || r.alertaDefeito === true,
+            foto.mensagemAlerta || r.mensagemAlerta || undefined
           );
           // Converter para File
           const response = await fetch(fotoComTarja);
@@ -5689,7 +5707,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             data.entrada ?? null,
             data.saida ?? null,
             'LOTE',
-            data.codigoMaquina || null
+            data.codigoMaquina || null,
+            data.alertaDefeito === true,
+            data.mensagemAlerta || undefined
           );
         } catch (err) {
           console.warn(`[Lote BG] Falha ao gerar tarja para thumbnail:`, err);
@@ -5701,7 +5721,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             ...f,
             status: 'concluido' as const,
             tempoMs: Date.now() - tempoInicioBg,
-            fotoProcessadaThumb: fotoComTarjaThumb, // thumbnail com tarja para o card
+            fotoProcessadaThumb: fotoComTarjaThumb,
+            alertaDefeito: data.alertaDefeito === true,
+            mensagemAlerta: data.mensagemAlerta || '',
             resultado: {
               codigoMaquina: data.codigoMaquina,
               codigoReconhecido: true,
@@ -5710,6 +5732,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
               confianca: data.confianca,
               confiancaOCR: data.confiancaOCR || data.confianca,
               observacoes: data.observacoes || '',
+              alertaDefeito: data.alertaDefeito === true,
+              mensagemAlerta: data.mensagemAlerta || '',
             },
           } : f
         ));
@@ -6046,7 +6070,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     entrada: number | null,
     saida: number | null,
     origem: 'CÂMERA' | 'GALERIA' | 'LOTE' | null = null,
-    numeroMaquina?: string | null
+    numeroMaquina?: string | null,
+    alertaDefeito?: boolean,
+    mensagemAlerta?: string
   ): Promise<string> => {
     return new Promise((resolve, reject) => {
       // Timeout de segurança (10 segundos)
@@ -6084,21 +6110,38 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           // Para 720px → 22px | Para 1200px → 37px | Para 1920px → 44px(cap)
           const tamanhoFonteBase = Math.max(20, Math.min(44, Math.round(larguraOriginal / 30)));
           const alturaTarja = Math.round(tamanhoFonteBase * 3.0);
-          
-          // Nova altura total = imagem + tarja
-          canvas.width = larguraOriginal;
-          canvas.height = alturaOriginal + alturaTarja;
 
-          // Desenhar a imagem original (redimensionada se necessário)
-          if (img.width !== larguraOriginal || img.height !== alturaOriginal) {
-            ctx.drawImage(img, 0, 0, larguraOriginal, alturaOriginal);
-          } else {
-            ctx.drawImage(img, 0, 0);
+          // Altura da faixa de alerta (no topo) se houver defeito
+          const temAlerta = alertaDefeito === true && mensagemAlerta;
+          const alturaAlerta = temAlerta ? Math.round(tamanhoFonteBase * 1.8) : 0;
+
+          // Nova altura total = alerta + imagem + tarja
+          canvas.width = larguraOriginal;
+          canvas.height = alturaAlerta + alturaOriginal + alturaTarja;
+
+          // Desenhar faixa de alerta no topo (se houver)
+          if (temAlerta) {
+            ctx.fillStyle = '#dc2626'; // vermelho
+            ctx.fillRect(0, 0, larguraOriginal, alturaAlerta);
+            ctx.fillStyle = '#ffffff'; // texto branco
+            ctx.textBaseline = 'middle';
+            ctx.textAlign = 'center';
+            const tamFonteAlerta = Math.max(14, Math.min(tamanhoFonteBase, Math.round((larguraOriginal - 24) / (mensagemAlerta!.length * 0.55))));
+            ctx.font = `bold ${tamFonteAlerta}px Arial, sans-serif`;
+            ctx.fillText(`⚠ ${mensagemAlerta}`, larguraOriginal / 2, alturaAlerta / 2);
           }
 
-          // Desenhar tarja vermelha
+          // Desenhar a imagem original (redimensionada se necessário) — deslocada pelo alerta
+          const offsetY = alturaAlerta;
+          if (img.width !== larguraOriginal || img.height !== alturaOriginal) {
+            ctx.drawImage(img, 0, offsetY, larguraOriginal, alturaOriginal);
+          } else {
+            ctx.drawImage(img, 0, offsetY);
+          }
+
+          // Desenhar tarja vermelha (deslocada pelo alerta)
           ctx.fillStyle = '#dc2626'; // vermelho-600
-          ctx.fillRect(0, alturaOriginal, larguraOriginal, alturaTarja);
+          ctx.fillRect(0, offsetY + alturaOriginal, larguraOriginal, alturaTarja);
 
           // Configurar texto
           ctx.textBaseline = 'middle';
@@ -6110,7 +6153,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
           // Posições verticais das linhas (centralizadas na tarja)
           const espacamentoEntreLinhas = Math.round(tamanhoFonte * 1.5);
-          const inicioTarja = alturaOriginal + alturaTarja / 2;
+          const inicioTarja = offsetY + alturaOriginal + alturaTarja / 2;
           const linha1Y = inicioTarja - espacamentoEntreLinhas / 2;
           const linha2Y = inicioTarja + espacamentoEntreLinhas / 2;
 
@@ -10621,7 +10664,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         <div
                           key={foto.id}
                           className={`flex items-center gap-3 p-2 rounded-lg border ${
-                            foto.status === 'concluido' ? (foto.altaPrecisao ? 'bg-amber-500/10 border-amber-500/40' : 'bg-success-bg border-success/30') :
+                            foto.status === 'concluido' ? (
+                              foto.alertaDefeito ? 'bg-red-500/10 border-red-500/50' :
+                              foto.altaPrecisao ? 'bg-amber-500/10 border-amber-500/40' :
+                              'bg-success-bg border-success/30'
+                            ) :
                             foto.status === 'erro' ? 'bg-danger-bg border-danger/30' :
                             foto.status === 'processando' ? (foto.altaPrecisao ? 'bg-amber-500/15 border-amber-500/50' : 'bg-amber-500/10 border-amber-500/30') :
                             'bg-muted border-border'
@@ -10629,8 +10676,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         >
                           {/* Thumbnail ou ícone conforme status — economiza memória */}
                           {foto.status === 'concluido' ? (
-                            <div className={`w-14 h-14 flex items-center justify-center rounded border flex-shrink-0 ${foto.altaPrecisao ? 'border-amber-500/40 bg-amber-500/10' : 'border-success/30 bg-success/10'}`}>
-                              <CheckCircle className={`w-7 h-7 ${foto.altaPrecisao ? 'text-amber-500' : 'text-success'}`} />
+                            <div className={`w-14 h-14 flex items-center justify-center rounded border flex-shrink-0 ${
+                              foto.alertaDefeito ? 'border-red-500/50 bg-red-500/10' :
+                              foto.altaPrecisao ? 'border-amber-500/40 bg-amber-500/10' :
+                              'border-success/30 bg-success/10'
+                            }`}>
+                              {foto.alertaDefeito
+                                ? <AlertTriangle className="w-7 h-7 text-red-500" />
+                                : <CheckCircle className={`w-7 h-7 ${foto.altaPrecisao ? 'text-amber-500' : 'text-success'}`} />
+                              }
                             </div>
                           ) : foto.status === 'erro' ? (
                             <div className="w-14 h-14 flex items-center justify-center rounded border border-danger/30 bg-danger/10 flex-shrink-0">
@@ -10651,7 +10705,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                             <div className="flex items-center justify-between">
                               <p className="text-sm font-medium text-foreground">
                                 Foto {idx + 1}
-                                {foto.altaPrecisao && (
+                                {foto.alertaDefeito && (
+                                  <span className="ml-2 text-xs text-red-500 font-semibold">⚠ Alerta de Defeito</span>
+                                )}
+                                {foto.altaPrecisao && !foto.alertaDefeito && (
                                   <span className="ml-2 text-xs text-amber-500 font-semibold">⚡ Alta Precisão</span>
                                 )}
                               </p>
@@ -10667,12 +10724,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                             )}
                             {foto.status === 'concluido' && foto.resultado && (
                               <div className="text-xs space-y-0.5">
-                                <p className={foto.resultado.codigoReconhecido ? (foto.altaPrecisao ? 'text-amber-500' : 'text-success') : 'text-warning'}>
+                                <p className={foto.resultado.codigoReconhecido ? (foto.alertaDefeito ? 'text-red-500' : foto.altaPrecisao ? 'text-amber-500' : 'text-success') : 'text-warning'}>
                                   Maq: {foto.resultado.codigoMaquina} {!foto.resultado.codigoReconhecido && '(nao encontrada)'}
                                 </p>
                                 <p className="text-muted-foreground">
                                   E: {foto.resultado.entrada ?? '-'} / S: {foto.resultado.saida ?? '-'} ({foto.resultado.confianca}%)
                                 </p>
+                                {foto.alertaDefeito && foto.mensagemAlerta && (
+                                  <p className="text-red-500 font-semibold break-words">⚠ {foto.mensagemAlerta}</p>
+                                )}
                               </div>
                             )}
                             {foto.status === 'erro' && (
@@ -10700,7 +10760,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                             </Button>
                           )}
                           {foto.status === 'concluido' && (
-                            <CheckCircle className={`w-4 h-4 flex-shrink-0 ${foto.altaPrecisao ? 'text-amber-500' : 'text-success'}`} />
+                            foto.alertaDefeito
+                              ? <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                              : <CheckCircle className={`w-4 h-4 flex-shrink-0 ${foto.altaPrecisao ? 'text-amber-500' : 'text-success'}`} />
                           )}
                           {foto.status === 'erro' && (
                             <Button
@@ -12556,6 +12618,8 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
     classe: 0,
     complementoPrompt: '',
     ocrAgressivo: false,
+    criterioAnalise: '',
+    mensagemAlerta: '',
   });
 
   useEffect(() => {
@@ -12642,6 +12706,8 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
       classe: 0,
       complementoPrompt: '',
       ocrAgressivo: false,
+      criterioAnalise: '',
+      mensagemAlerta: '',
     });
     setTipoEditando(null);
   };
@@ -12655,6 +12721,8 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
       classe: tipo.classe ?? 0,
       complementoPrompt: (tipo as any).complementoPrompt || '',
       ocrAgressivo: (tipo as any).ocrAgressivo === true,
+      criterioAnalise: (tipo as any).criterioAnalise || '',
+      mensagemAlerta: (tipo as any).mensagemAlerta || '',
     });
     setDialogOpen(true);
   };
@@ -12752,6 +12820,40 @@ function TiposMaquinaPage({ empresaId, isAdmin }: { empresaId: string; isAdmin: 
                   checked={formData.ocrAgressivo}
                   onCheckedChange={(checked) => setFormData({ ...formData, ocrAgressivo: checked })}
                 />
+              </div>
+
+              {/* Alerta de Defeito */}
+              <div className="space-y-3 border border-red-500/30 rounded-lg p-3 bg-red-500/5">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-500" />
+                  <span className="text-sm font-semibold text-red-600 dark:text-red-400">Alerta de Defeito</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Configure um critério de análise que a IA vai verificar ao processar a foto. Se confirmado,
+                  a mensagem de alerta aparece em destaque na tarja vermelha da foto e no card do lote.
+                </p>
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium">Critério de Análise</Label>
+                  <Textarea
+                    value={formData.criterioAnalise}
+                    onChange={(e) => setFormData({ ...formData, criterioAnalise: e.target.value })}
+                    placeholder="Ex: verificar se o display mostra mensagem de erro ou código de falha"
+                    className="bg-muted border-border text-sm"
+                    rows={2}
+                  />
+                  <p className="text-[10px] text-muted-foreground">Instrução enviada à IA para verificar se há defeito. Deixe vazio se não precisar.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium">Mensagem de Alerta</Label>
+                  <Input
+                    value={formData.mensagemAlerta}
+                    onChange={(e) => setFormData({ ...formData, mensagemAlerta: e.target.value })}
+                    placeholder="Ex: MÁQUINA APRESENTANDO DEFEITO — VERIFICAR!"
+                    className="bg-muted border-border text-sm"
+                    maxLength={100}
+                  />
+                  <p className="text-[10px] text-muted-foreground">Mensagem exibida em destaque quando o critério for confirmado pela IA.</p>
+                </div>
               </div>
             </div>
             <DialogFooter>

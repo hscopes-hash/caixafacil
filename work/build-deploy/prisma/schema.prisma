@@ -167,6 +167,8 @@ model TipoMaquina {
   classe           Int      @default(0) // 0=primária, 1=secundária
   complementoPrompt String? // Instrução adicional para o prompt de OCR
   ocrAgressivo     Boolean  @default(false) // Se true, usa pipeline agressivo (deskew + JPEG 90) no OCR
+  criterioAnalise  String?  // Critério de análise de defeito enviado à IA (ex: "verificar se o display mostra erro")
+  mensagemAlerta   String?  // Mensagem exibida quando o critério é confirmado pela IA
   empresaId        String
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

@@ -13,6 +13,12 @@ async function ensureSchema() {
     await db.$executeRawUnsafe(`
       ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS "ocrAgressivo" BOOLEAN NOT NULL DEFAULT false
     `);
+    await db.$executeRawUnsafe(`
+      ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS "criterioAnalise" TEXT
+    `);
+    await db.$executeRawUnsafe(`
+      ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS "mensagemAlerta" TEXT
+    `);
   } catch (e) { /* ignorar */ }
   // Remover colunas de câmera/ROI (obsoletas)
   try { await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina DROP COLUMN IF EXISTS "imagemReferencia"`); } catch (e) { /* ignorar */ }
@@ -69,7 +75,7 @@ export async function POST(request: NextRequest) {
     await ensureSchema();
 
     const body = await request.json();
-    const { descricao, nomeEntrada, nomeSaida, empresaId, classe, complementoPrompt, ocrAgressivo } = body;
+    const { descricao, nomeEntrada, nomeSaida, empresaId, classe, complementoPrompt, ocrAgressivo, criterioAnalise, mensagemAlerta } = body;
 
     if (!descricao || !empresaId) {
       return NextResponse.json(
@@ -99,6 +105,8 @@ export async function POST(request: NextRequest) {
         classe: classe ?? 0,
         complementoPrompt: complementoPrompt || null,
         ocrAgressivo: ocrAgressivo === true,
+        criterioAnalise: criterioAnalise || null,
+        mensagemAlerta: mensagemAlerta || null,
       },
     });
 

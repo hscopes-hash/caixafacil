@@ -5,6 +5,8 @@ import { db } from '@/lib/db';
 async function ensureSchema() {
   try { await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS classe INTEGER DEFAULT 0`); } catch (e) { /* ignorar */ }
   try { await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS "ocrAgressivo" BOOLEAN NOT NULL DEFAULT false`); } catch (e) { /* ignorar */ }
+  try { await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS "criterioAnalise" TEXT`); } catch (e) { /* ignorar */ }
+  try { await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina ADD COLUMN IF NOT EXISTS "mensagemAlerta" TEXT`); } catch (e) { /* ignorar */ }
   try { await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina DROP COLUMN IF EXISTS "imagemReferencia"`); } catch (e) { /* ignorar */ }
   try { await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina DROP COLUMN IF EXISTS "roiEntrada"`); } catch (e) { /* ignorar */ }
   try { await db.$executeRawUnsafe(`ALTER TABLE tipos_maquina DROP COLUMN IF EXISTS "roiSaida"`); } catch (e) { /* ignorar */ }
@@ -53,7 +55,7 @@ export async function PUT(
     await ensureSchema();
     const { id } = await params;
     const body = await request.json();
-    const { descricao, nomeEntrada, nomeSaida, ativo, classe, complementoPrompt, ocrAgressivo } = body;
+    const { descricao, nomeEntrada, nomeSaida, ativo, classe, complementoPrompt, ocrAgressivo, criterioAnalise, mensagemAlerta } = body;
 
     const tipo = await db.tipoMaquina.update({
       where: { id },
@@ -65,6 +67,8 @@ export async function PUT(
         classe: classe ?? 0,
         complementoPrompt: complementoPrompt || null,
         ocrAgressivo: ocrAgressivo === true,
+        criterioAnalise: criterioAnalise || null,
+        mensagemAlerta: mensagemAlerta || null,
       },
     });
 

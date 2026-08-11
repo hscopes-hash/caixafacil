@@ -54,7 +54,8 @@ Se a máquina foi identificada, localize no display os textos de ENTRADA e SAÍD
 ${codigosMaquinas.map((c: string) => {
   const info = mapaModelos[c];
   const compl = info?.complementoPrompt ? ` (instrução especial: ${info.complementoPrompt})` : '';
-  return `  - Código "${c}": rótulo entrada="${info?.nomeEntrada || 'E'}", rótulo saída="${info?.nomeSaida || 'S'}"${compl}`;
+  const criterio = info?.criterioAnalise ? ` [ALERTA: ${info.criterioAnalise}]` : '';
+  return `  - Código "${c}": rótulo entrada="${info?.nomeEntrada || 'E'}", rótulo saída="${info?.nomeSaida || 'S'}"${compl}${criterio}`;
 }).join('\n')}
 
 ⚠️ POSIÇÃO ESPACIAL DOS RÓTULOS — MUITO IMPORTANTE:
@@ -86,8 +87,13 @@ PROCEDIMENTO (faça em silêncio, não inclua no JSON):
 Para cada rótulo encontrado, leia os dígitos numéricos que aparecem ao lado/abaixo dele.
 Retorne APENAS dígitos, sem pontos e sem vírgulas. Se o display mostrar 1.234,56 retorne 123456 (ignore os separadores . e ,). Retorne o valor COMPLETO incluindo todos os dígitos visíveis (mantenha zeros à esquerda). Se ilegível, retorne null.
 
+TAREFA 3 — VERIFICAR ALERTA DE DEFEITO:
+Se a máquina identificada tiver um critério de alerta (marcado como [ALERTA: ...] na lista acima), verifique se o critério é confirmado na foto. Por exemplo, se o critério diz "verificar se o display mostra erro", analise se há alguma mensagem de erro ou código de falha visível no display.
+- Se o critérito NÃO for confirmado, retorne alertaDefeito como false.
+- Se o critério FOR confirmado, retorne alertaDefeito como true e descreva o que encontrou em observacoes.
+
 Responda APENAS com JSON:
-{"etiquetaLegivel": true_ou_false, "codigoMaquina": "CODIGO_OU_VAZIO", "codigoLido": "CODIGO_OU_VAZIO", "confianca": 0_A_100, "entrada": "digitos_ou_null", "saida": "digitos_ou_null", "observacoes": "texto"}`;
+{"etiquetaLegivel": true_ou_false, "codigoMaquina": "CODIGO_OU_VAZIO", "codigoLido": "CODIGO_OU_VAZIO", "confianca": 0_A_100, "entrada": "digitos_ou_null", "saida": "digitos_ou_null", "alertaDefeito": false, "observacoes": "texto"}`;
 
     const result = await callAI(prompt, imagem, model, {
       temperature: 0.05,
@@ -113,6 +119,7 @@ Responda APENAS com JSON:
           confianca: 50,
           entrada: entradaMatch ? parseInt(entradaMatch[1], 10) : null,
           saida: saidaMatch ? parseInt(saidaMatch[1], 10) : null,
+          alertaDefeito: false,
           observacoes: 'Extraido por regex (JSON invalido)',
         };
       } else {
@@ -191,6 +198,10 @@ Responda APENAS com JSON:
       saida,
       confiancaOCR: typeof resultado.confianca === 'number' ? resultado.confianca : 0,
       observacoes: resultado.observacoes || '',
+      alertaDefeito: resultado.alertaDefeito === true,
+      mensagemAlerta: (infoMaquina?.criterioAnalise && resultado.alertaDefeito === true)
+        ? (infoMaquina as any)?.mensagemAlerta || 'ALERTA DE DEFEITO DETECTADO'
+        : '',
       model,
     });
   } catch (error) {
