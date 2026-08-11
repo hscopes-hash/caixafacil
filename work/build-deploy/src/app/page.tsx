@@ -6111,36 +6111,48 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           const tamanhoFonteBase = Math.max(20, Math.min(44, Math.round(larguraOriginal / 30)));
           const alturaTarja = Math.round(tamanhoFonteBase * 3.0);
 
-          // Altura da faixa de alerta (abaixo da foto, acima da tarja) se houver defeito
+          // Altura da faixa de alerta (dobro do tamanho anterior, fonte no dobro)
           const temAlerta = alertaDefeito === true && mensagemAlerta;
-          const alturaAlerta = temAlerta ? Math.round(tamanhoFonteBase * 1.8) : 0;
+          const alturaAlerta = temAlerta ? Math.round(tamanhoFonteBase * 3.6) : 0; // dobro de 1.8
 
-          // Nova altura total = imagem + alerta + tarja
+          // Nova altura total = alerta (topo) + imagem + alerta (baixo) + tarja
           canvas.width = larguraOriginal;
-          canvas.height = alturaOriginal + alturaAlerta + alturaTarja;
+          canvas.height = alturaAlerta + alturaOriginal + alturaAlerta + alturaTarja;
 
-          // Desenhar a imagem original (redimensionada se necessário) — no topo, sem offset
-          if (img.width !== larguraOriginal || img.height !== alturaOriginal) {
-            ctx.drawImage(img, 0, 0, larguraOriginal, alturaOriginal);
-          } else {
-            ctx.drawImage(img, 0, 0);
-          }
-
-          // Desenhar faixa de alerta ABAIXO da foto, ACIMA da tarja (se houver)
-          const offsetYAlerta = alturaOriginal; // posição Y onde o alerta começa
-          if (temAlerta) {
+          // Função helper para desenhar uma faixa de alerta em uma posição Y
+          const desenharFaixaAlerta = (posY: number) => {
             ctx.fillStyle = '#dc2626'; // vermelho
-            ctx.fillRect(0, offsetYAlerta, larguraOriginal, alturaAlerta);
+            ctx.fillRect(0, posY, larguraOriginal, alturaAlerta);
             ctx.fillStyle = '#ffffff'; // texto branco
             ctx.textBaseline = 'middle';
             ctx.textAlign = 'center';
-            const tamFonteAlerta = Math.max(14, Math.min(tamanhoFonteBase, Math.round((larguraOriginal - 24) / (mensagemAlerta!.length * 0.55))));
+            // Fonte no dobro: base * 2 (limitado pela largura da imagem)
+            const tamFonteAlerta = Math.max(28, Math.min(tamanhoFonteBase * 2, Math.round((larguraOriginal - 24) / (mensagemAlerta!.length * 0.55))));
             ctx.font = `bold ${tamFonteAlerta}px Arial, sans-serif`;
-            ctx.fillText(`⚠ ${mensagemAlerta}`, larguraOriginal / 2, offsetYAlerta + alturaAlerta / 2);
+            ctx.fillText(`⚠ ${mensagemAlerta}`, larguraOriginal / 2, posY + alturaAlerta / 2);
+          };
+
+          // Desenhar faixa de alerta no TOPO (se houver)
+          if (temAlerta) {
+            desenharFaixaAlerta(0);
           }
 
-          // Desenhar tarja vermelha (abaixo do alerta)
-          const offsetYTarja = alturaOriginal + alturaAlerta;
+          // Desenhar a imagem original (redimensionada se necessário) — deslocada pelo alerta do topo
+          const offsetYImg = alturaAlerta;
+          if (img.width !== larguraOriginal || img.height !== alturaOriginal) {
+            ctx.drawImage(img, 0, offsetYImg, larguraOriginal, alturaOriginal);
+          } else {
+            ctx.drawImage(img, 0, offsetYImg);
+          }
+
+          // Desenhar faixa de alerta ABAIXO da foto, ACIMA da tarja (se houver)
+          const offsetYAlerta = offsetYImg + alturaOriginal;
+          if (temAlerta) {
+            desenharFaixaAlerta(offsetYAlerta);
+          }
+
+          // Desenhar tarja vermelha (abaixo do alerta inferior)
+          const offsetYTarja = offsetYAlerta + alturaAlerta;
           ctx.fillStyle = '#dc2626'; // vermelho-600
           ctx.fillRect(0, offsetYTarja, larguraOriginal, alturaTarja);
 
