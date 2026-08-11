@@ -6111,37 +6111,38 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           const tamanhoFonteBase = Math.max(20, Math.min(44, Math.round(larguraOriginal / 30)));
           const alturaTarja = Math.round(tamanhoFonteBase * 3.0);
 
-          // Altura da faixa de alerta (no topo) se houver defeito
+          // Altura da faixa de alerta (abaixo da foto, acima da tarja) se houver defeito
           const temAlerta = alertaDefeito === true && mensagemAlerta;
           const alturaAlerta = temAlerta ? Math.round(tamanhoFonteBase * 1.8) : 0;
 
-          // Nova altura total = alerta + imagem + tarja
+          // Nova altura total = imagem + alerta + tarja
           canvas.width = larguraOriginal;
-          canvas.height = alturaAlerta + alturaOriginal + alturaTarja;
+          canvas.height = alturaOriginal + alturaAlerta + alturaTarja;
 
-          // Desenhar faixa de alerta no topo (se houver)
+          // Desenhar a imagem original (redimensionada se necessário) — no topo, sem offset
+          if (img.width !== larguraOriginal || img.height !== alturaOriginal) {
+            ctx.drawImage(img, 0, 0, larguraOriginal, alturaOriginal);
+          } else {
+            ctx.drawImage(img, 0, 0);
+          }
+
+          // Desenhar faixa de alerta ABAIXO da foto, ACIMA da tarja (se houver)
+          const offsetYAlerta = alturaOriginal; // posição Y onde o alerta começa
           if (temAlerta) {
             ctx.fillStyle = '#dc2626'; // vermelho
-            ctx.fillRect(0, 0, larguraOriginal, alturaAlerta);
+            ctx.fillRect(0, offsetYAlerta, larguraOriginal, alturaAlerta);
             ctx.fillStyle = '#ffffff'; // texto branco
             ctx.textBaseline = 'middle';
             ctx.textAlign = 'center';
             const tamFonteAlerta = Math.max(14, Math.min(tamanhoFonteBase, Math.round((larguraOriginal - 24) / (mensagemAlerta!.length * 0.55))));
             ctx.font = `bold ${tamFonteAlerta}px Arial, sans-serif`;
-            ctx.fillText(`⚠ ${mensagemAlerta}`, larguraOriginal / 2, alturaAlerta / 2);
+            ctx.fillText(`⚠ ${mensagemAlerta}`, larguraOriginal / 2, offsetYAlerta + alturaAlerta / 2);
           }
 
-          // Desenhar a imagem original (redimensionada se necessário) — deslocada pelo alerta
-          const offsetY = alturaAlerta;
-          if (img.width !== larguraOriginal || img.height !== alturaOriginal) {
-            ctx.drawImage(img, 0, offsetY, larguraOriginal, alturaOriginal);
-          } else {
-            ctx.drawImage(img, 0, offsetY);
-          }
-
-          // Desenhar tarja vermelha (deslocada pelo alerta)
+          // Desenhar tarja vermelha (abaixo do alerta)
+          const offsetYTarja = alturaOriginal + alturaAlerta;
           ctx.fillStyle = '#dc2626'; // vermelho-600
-          ctx.fillRect(0, offsetY + alturaOriginal, larguraOriginal, alturaTarja);
+          ctx.fillRect(0, offsetYTarja, larguraOriginal, alturaTarja);
 
           // Configurar texto
           ctx.textBaseline = 'middle';
@@ -6153,7 +6154,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
           // Posições verticais das linhas (centralizadas na tarja)
           const espacamentoEntreLinhas = Math.round(tamanhoFonte * 1.5);
-          const inicioTarja = offsetY + alturaOriginal + alturaTarja / 2;
+          const inicioTarja = offsetYTarja + alturaTarja / 2;
           const linha1Y = inicioTarja - espacamentoEntreLinhas / 2;
           const linha2Y = inicioTarja + espacamentoEntreLinhas / 2;
 
