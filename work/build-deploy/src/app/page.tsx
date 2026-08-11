@@ -10677,8 +10677,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                         <div
                           key={foto.id}
                           className={`flex items-center gap-3 p-2 rounded-lg border ${
+                            foto.status === 'concluido' && foto.alertaDefeito ? 'bg-red-500/20 border-red-500' :
                             foto.status === 'concluido' ? (
-                              foto.alertaDefeito ? 'bg-red-500/10 border-red-500/50' :
                               foto.altaPrecisao ? 'bg-amber-500/10 border-amber-500/40' :
                               'bg-success-bg border-success/30'
                             ) :
@@ -10690,7 +10690,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                           {/* Thumbnail ou ícone conforme status — economiza memória */}
                           {foto.status === 'concluido' ? (
                             <div className={`w-14 h-14 flex items-center justify-center rounded border flex-shrink-0 ${
-                              foto.alertaDefeito ? 'border-red-500/50 bg-red-500/10' :
+                              foto.alertaDefeito ? 'border-red-500 bg-red-500/20' :
                               foto.altaPrecisao ? 'border-amber-500/40 bg-amber-500/10' :
                               'border-success/30 bg-success/10'
                             }`}>
