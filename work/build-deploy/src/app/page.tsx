@@ -10723,7 +10723,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                               <p className="text-sm font-medium text-foreground">
                                 Foto {idx + 1}
                                 {foto.alertaDefeito && (
-                                  <span className="ml-2 text-xs text-red-500 font-semibold">⚠ Alerta de Defeito</span>
+                                  <span className="ml-2 text-xs text-red-500">⚠ Alerta de Defeito</span>
                                 )}
                                 {foto.altaPrecisao && !foto.alertaDefeito && (
                                   <span className="ml-2 text-xs text-amber-500 font-semibold">⚡ Alta Precisão</span>
@@ -10748,7 +10748,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                                   E: {foto.resultado.entrada ?? '-'} / S: {foto.resultado.saida ?? '-'} ({foto.resultado.confianca}%)
                                 </p>
                                 {foto.alertaDefeito && foto.mensagemAlerta && (
-                                  <p className="text-red-500 font-semibold break-words">⚠ {foto.mensagemAlerta}</p>
+                                  <p className="text-red-500 break-words">⚠ {foto.mensagemAlerta}</p>
                                 )}
                               </div>
                             )}
