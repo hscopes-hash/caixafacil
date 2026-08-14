@@ -122,8 +122,9 @@ async function getGcsAccessToken(): Promise<string> {
     return _gcsTokenCache.token;
   }
 
+  // Se já existe uma requisição em andamento, aguarda ela
   if (_gcsTokenFetching) {
-    return _gcsTokenFetching as Promise<string>;
+    return _gcsTokenFetching;
   }
 
   _gcsTokenFetching = (async () => {
@@ -170,6 +171,7 @@ async function getGcsAccessToken(): Promise<string> {
 
 async function gcsUpload(bucket: string, objectName: string, data: Buffer): Promise<void> {
   const token = await getGcsAccessToken();
+  console.log(`[GCS-UPLOAD] Iniciando upload: ${objectName} (${(data.length / 1024).toFixed(0)}KB)`);
   const res = await fetch(
     `https://storage.googleapis.com/upload/storage/v1/b/${bucket}/o?uploadType=media&name=${encodeURIComponent(objectName)}`,
     {
@@ -179,12 +181,15 @@ async function gcsUpload(bucket: string, objectName: string, data: Buffer): Prom
         'Content-Type': 'application/octet-stream',
       },
       body: data,
+      signal: AbortSignal.timeout(30000), // 30s timeout
     }
   );
   if (!res.ok) {
     const text = await res.text();
+    console.error(`[GCS-UPLOAD] Falhou (${res.status}): ${text.substring(0, 500)}`);
     throw new Error(`GCS upload falhou (${res.status}): ${text}`);
   }
+  console.log(`[GCS-UPLOAD] Sucesso: ${objectName}`);
 }
 
 async function gcsDownload(bucket: string, objectName: string): Promise<Buffer> {
@@ -324,6 +329,9 @@ export async function uploadFotosLeitura(
 
   // Criptografar
   const encrypted = encrypt(compressed, key);
+
+  // Log de tamanhos para diagnóstico
+  console.log(`[GCS-FOTOS] ${fotos.length} fotos | JSON: ${(jsonBuf.length / 1024 / 1024).toFixed(1)}MB | Comprimido: ${(compressed.length / 1024 / 1024).toFixed(1)}MB | Criptografado: ${(encrypted.length / 1024 / 1024).toFixed(1)}MB`);
 
   // Caminho GCS
   const objectName = `${PREFIX}/${empresaId}/${ym}/${batchId}.enc`;
