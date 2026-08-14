@@ -7000,7 +7000,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       const caption = `PLANILHA DE ${modo2via} - ${clienteSelecionado.nome.toUpperCase()}\nData: ${segundaViaSelecionada?.data || ''}${turnoDisplay ? ` — Turno: ${turnoDisplay}` : ''}`;
 
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      // Tentar navigator.share (funciona em alguns navegadores mobile)
+      const canShare2 = !!(navigator.share && navigator.canShare);
+      const canShareFiles2 = canShare2 && (() => {
+        try { return navigator.canShare({ files: [file] }); } catch { return false; }
+      })();
+
+      console.log(`[Planilha 2a via] navigator.share=${!!navigator.share} canShare=${canShare2} canShareFiles=${canShareFiles2} fileSize=${file.size}`);
+
+      if (canShareFiles2) {
         try {
           await navigator.share({
             title: `Planilha - ${clienteSelecionado.nome}`,
@@ -7015,6 +7023,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             toast.dismiss('planilha-wa-2via');
             return;
           }
+          console.warn('[Planilha 2a via] navigator.share falhou, tentando fallback:', shareError);
         }
       }
 
@@ -7034,11 +7043,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
         const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
-        setTimeout(() => abrirWhatsAppLink(grupoUrl), 500);
-        toast.info('Planilha baixada! Anexe como documento no grupo do WhatsApp.');
+        setTimeout(() => abrirWhatsAppLink(grupoUrl), 800);
+        toast.info('Planilha baixada! Anexe como documento no grupo do WhatsApp.', { duration: 6000 });
       } else if (phone) {
-        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 500);
-        toast.info('Planilha baixada! Anexe como documento no WhatsApp do cliente.');
+        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 800);
+        toast.info('Planilha baixada! Anexe como documento no WhatsApp do cliente.', { duration: 6000 });
       } else {
         toast.success('Planilha baixada! Compartilhe manualmente.');
       }
@@ -7528,6 +7537,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       try {
         const token = useAuthStore.getState().token;
         console.log(`[salvarLeituras] Enviando ${fotosParaUpload.length} fotos ao GCS...`);
+        // Log do tamanho total
+        const totalSize = JSON.stringify({ fotos: fotosParaUpload }).length;
+        console.log(`[salvarLeituras] Tamanho total do payload: ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
         const fotoRes = await fetch('/api/leituras/upload-fotos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -7543,12 +7555,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           console.log(`[salvarLeituras] Fotos salvas no GCS: ${fotoGcsPath} (${fotoData.fotosSalvas} fotos)`);
         } else {
           const errText = await fotoRes.text().catch(() => '');
-          console.error('[salvarLeituras] Falha ao enviar fotos ao GCS. Status:', fotoRes.status, 'Resposta:', errText.substring(0, 300));
-          toast.error('Falha ao salvar fotos no servidor. Leituras serão salvas sem fotos.');
+          console.error('[salvarLeituras] Falha ao enviar fotos ao GCS. Status:', fotoRes.status, 'Resposta:', errText.substring(0, 500));
+          // Não mostrar toast de erro se for apenas fotos — leituras ainda são salvas
+          console.warn('[salvarLeituras] Leituras serão salvas sem fotos.');
         }
       } catch (err) {
         console.error('[salvarLeituras] Erro ao enviar fotos ao GCS:', err);
-        toast.error('Erro ao enviar fotos: ' + (err instanceof Error ? err.message : 'erro desconhecido'));
+        // Não mostrar toast de erro se for apenas fotos — leituras ainda são salvas
+        console.warn('[salvarLeituras] Leituras serão salvas sem fotos.');
         // Continua salvando leitura mesmo sem fotos
       }
     } else {
@@ -9024,7 +9038,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const modo2via = modoOperacao === 'COBRANCA' ? 'COBRANÇA' : 'LEITURA';
       const caption = `PLANILHA DE ${modo2via} - ${clienteSelecionado.nome.toUpperCase()}\nData: ${dataFmt}`;
 
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      // Tentar navigator.share (funciona em alguns navegadores mobile)
+      const canShare = !!(navigator.share && navigator.canShare);
+      const canShareFiles = canShare && (() => {
+        try { return navigator.canShare({ files: [file] }); } catch { return false; }
+      })();
+
+      console.log(`[Planilha] navigator.share=${!!navigator.share} canShare=${canShare} canShareFiles=${canShareFiles} fileType=${file.type} fileSize=${file.size}`);
+
+      if (canShareFiles) {
         try {
           await navigator.share({
             title: `Planilha - ${clienteSelecionado.nome}`,
@@ -9039,14 +9061,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             toast.dismiss('planilha-wa-resumo');
             return;
           }
+          console.warn('[Planilha] navigator.share falhou, tentando fallback:', shareError);
         }
       }
 
-      // Fallback: download + abrir WhatsApp
+      // Fallback: tentar navigator.share sem files (só texto) + download
+      // Alguns navegadores não suportam compartilhar .xlsx mas suportam texto
       toast.dismiss('planilha-wa-resumo');
-      const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
-      const phone = clienteSelecionado.telefone?.replace(/\D/g, '') || '';
 
+      // Download do arquivo
       const downloadLink = document.createElement('a');
       const planilhaUrl = URL.createObjectURL(file);
       downloadLink.href = planilhaUrl;
@@ -9056,13 +9079,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       document.body.removeChild(downloadLink);
       setTimeout(() => URL.revokeObjectURL(planilhaUrl), 5000);
 
+      // Abrir WhatsApp automaticamente
+      const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
+      const phone = clienteSelecionado.telefone?.replace(/\D/g, '') || '';
+
       if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
         const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
-        setTimeout(() => abrirWhatsAppLink(grupoUrl), 500);
-        toast.info('Planilha baixada! Anexe como documento no grupo do WhatsApp.');
+        setTimeout(() => abrirWhatsAppLink(grupoUrl), 800);
+        toast.info('Planilha baixada! Anexe como documento no grupo do WhatsApp.', { duration: 6000 });
       } else if (phone) {
-        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 500);
-        toast.info('Planilha baixada! Anexe como documento no WhatsApp do cliente.');
+        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 800);
+        toast.info('Planilha baixada! Anexe como documento no WhatsApp do cliente.', { duration: 6000 });
       } else {
         toast.success('Planilha baixada! Compartilhe manualmente.');
       }
@@ -9390,6 +9417,20 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setMercadoFotoProcessada(null);
     setMercadoFotoCapturada(null);
     setMercadoResultado(null);
+    // ⚠️ Reiniciar tela de leitura — limpar cliente e todos os campos
+    // Obriga o operador a selecionar novamente o cliente se quiser continuar
+    setClienteSelecionado(null);
+    setMaquinas([]);
+    setRecebido('');
+    setSaldoAnterior(0);
+    setTurno('INTEGRAL');
+    setFormaPagamento(null);
+    setValorPago('');
+    resetReceitas();
+    resetDespesas();
+    limparMaquinasProcessadas();
+    limparDigitacaoLS();
+    setExtratoVisivel(false);
   };
 
   const totais = calcularTotais();
