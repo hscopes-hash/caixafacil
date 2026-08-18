@@ -6845,7 +6845,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             files: [file],
           });
           toast.dismiss('relatorio-wa-2via');
-          toast.success('PDF do relatório enviado!');
+          toast.success('PDF do relatório enviado!', { duration: 5000 });
           return;
         } catch (shareError: unknown) {
           if (shareError instanceof Error && shareError.name === 'AbortError') {
@@ -6872,12 +6872,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
         const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
         setTimeout(() => abrirWhatsAppLink(grupoUrl), 500);
-        toast.info('PDF baixado! Anexe como documento no grupo do WhatsApp.');
+        toast.info('PDF baixado! Anexe como documento no grupo do WhatsApp.', { duration: 5000 });
       } else if (phone) {
         setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 500);
-        toast.info('PDF baixado! Anexe como documento no WhatsApp do cliente.');
+        toast.info('PDF baixado! Anexe como documento no WhatsApp do cliente.', { duration: 5000 });
       } else {
-        toast.success('PDF baixado! Compartilhe manualmente.');
+        toast.success('PDF baixado! Compartilhe manualmente.', { duration: 5000 });
       }
     } catch (error) {
       toast.dismiss('relatorio-wa-2via');
@@ -7016,7 +7016,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             files: [file],
           });
           toast.dismiss('planilha-wa-2via');
-          toast.success('Planilha enviada!');
+          toast.success('Planilha enviada!', { duration: 5000 });
           return;
         } catch (shareError: unknown) {
           if (shareError instanceof Error && shareError.name === 'AbortError') {
@@ -7044,12 +7044,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
         const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
         setTimeout(() => abrirWhatsAppLink(grupoUrl), 800);
-        toast.info('Planilha baixada! Anexe como documento no grupo do WhatsApp.', { duration: 6000 });
+        toast.info('Planilha baixada! Anexe como documento no grupo do WhatsApp.', { duration: 5000 });
       } else if (phone) {
         setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 800);
-        toast.info('Planilha baixada! Anexe como documento no WhatsApp do cliente.', { duration: 6000 });
+        toast.info('Planilha baixada! Anexe como documento no WhatsApp do cliente.', { duration: 5000 });
       } else {
-        toast.success('Planilha baixada! Compartilhe manualmente.');
+        toast.success('Planilha baixada! Compartilhe manualmente.', { duration: 5000 });
       }
     } catch (error) {
       toast.dismiss('planilha-wa-2via');
@@ -7128,7 +7128,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         const data = await parseJsonSafe(res);
         toast.dismiss('telegram-2via');
         if (res.ok && data.success) {
-          toast.success('PDF do relatório enviado!');
+          toast.success('PDF do relatório enviado!', { duration: 5000 });
         } else {
           toast.error(data.errorDetail || data.error || 'Erro ao enviar PDF', { duration: 10000 });
         }
@@ -7239,7 +7239,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       toast.dismiss('fotos-2via');
 
       if (fotosProcessadas.length === 0) {
-        toast.info('Nenhuma foto disponível para este fechamento.');
+        toast.info('Nenhuma foto disponível para este fechamento.', { duration: 5000 });
         return;
       }
 
@@ -7249,7 +7249,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         };
         (shareData as ShareData & { files: File[] }).files = fotosProcessadas;
         await navigator.share(shareData);
-        toast.success('Fotos enviadas!');
+        toast.success('Fotos enviadas!', { duration: 5000 });
       } else {
         toast.error('Seu navegador não suporta compartilhar arquivos. Tente pelo Chrome/Edge.');
       }
@@ -7271,7 +7271,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     const temAlgo = maquinas.some(m => m.novaEntrada || m.novaSaida) || receitasItens.some(d => (parseFloat(d.valor?.replace(',', '.') || '0')) !== 0) || despesasItens.some(d => (parseFloat(d.valor?.replace(',', '.') || '0')) > 0) || !!cartaoFotoProcessada || !!cartao2FotoProcessada || !!mercadoFotoProcessada;
     if (!temAlgo) return;
     try {
-      const dados = {
+      // ⚠️ Fotos processadas em base64 podem ser muito grandes (500KB-1MB cada)
+      // e o localStorage tem limite de 5-10MB em navegadores mobile.
+      // Estratégia: salvar SEM fotos primeiro (campos de texto são pequenos).
+      // Tentar salvar COM fotos; se falhar (QuotaExceededError), salvar sem fotos.
+      const dadosSemFotos = {
         maquinas: maquinas.map(m => ({
           id: m.id,
           novaEntrada: m.novaEntrada,
@@ -7279,7 +7283,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           diferencaEntrada: m.diferencaEntrada,
           diferencaSaida: m.diferencaSaida,
           saldoMaquina: m.saldoMaquina,
-          fotoProcessada: m.fotoProcessada,
+          fotoProcessada: null, // não salvar fotos grandes no LS
         })),
         receitasItens,
         despesasItens,
@@ -7289,13 +7293,56 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         valorPago,
         saldoAnterior,
         turno,
+        cartaoFotoProcessada: null,
+        cartao2FotoProcessada: null,
+        mercadoFotoProcessada: null,
+      };
+
+      // Tentar salvar COM fotos primeiro
+      const dadosComFotos = {
+        ...dadosSemFotos,
+        maquinas: maquinas.map(m => ({
+          id: m.id,
+          novaEntrada: m.novaEntrada,
+          novaSaida: m.novaSaida,
+          diferencaEntrada: m.diferencaEntrada,
+          diferencaSaida: m.diferencaSaida,
+          saldoMaquina: m.saldoMaquina,
+          fotoProcessada: m.fotoProcessada,
+        })),
         cartaoFotoProcessada,
         cartao2FotoProcessada,
         mercadoFotoProcessada,
       };
-      localStorage.setItem(LS_KEY(modoOperacao, clienteSelecionado.id), JSON.stringify(dados));
-    } catch {
-      // localStorage cheio ou indisponivel — silencioso
+
+      try {
+        localStorage.setItem(LS_KEY(modoOperacao, clienteSelecionado.id), JSON.stringify(dadosComFotos));
+      } catch (quotaErr) {
+        // localStorage cheio — limpar entradas antigas de outros clientes e tentar de novo
+        console.warn('[salvarDigitacaoLS] localStorage cheio, limpando dados antigos...');
+        try {
+          // Limpar todas as outras chaves cf-digitacao-* exceto a atual
+          const currentKey = LS_KEY(modoOperacao, clienteSelecionado.id);
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('cf-digitacao-') && key !== currentKey) {
+              localStorage.removeItem(key);
+              console.log(`[salvarDigitacaoLS] Removido: ${key}`);
+            }
+          }
+          // Tentar de novo COM fotos
+          localStorage.setItem(currentKey, JSON.stringify(dadosComFotos));
+          console.log('[salvarDigitacaoLS] Salvo COM fotos após limpeza');
+        } catch (quotaErr2) {
+          // Ainda cheio — salvar SEM fotos (pelo menos os campos de texto)
+          console.warn('[salvarDigitacaoLS] localStorage ainda cheio, salvando SEM fotos');
+          localStorage.setItem(LS_KEY(modoOperacao, clienteSelecionado.id), JSON.stringify(dadosSemFotos));
+          console.log('[salvarDigitacaoLS] Salvo SEM fotos (campos de texto apenas)');
+        }
+      }
+    } catch (err) {
+      // localStorage indisponível (modo privado, etc.)
+      console.warn('[salvarDigitacaoLS] localStorage indisponível:', err);
     }
   }, [clienteSelecionado, maquinas, receitasItens, despesasItens, modoOperacao, recebido, formaPagamento, valorPago, saldoAnterior, cartaoFotoProcessada, cartao2FotoProcessada, mercadoFotoProcessada]);
 
@@ -8919,7 +8966,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             files: [file],
           });
           toast.dismiss('relatorio-wa-resumo');
-          toast.success('PDF do relatório enviado!');
+          toast.success('PDF do relatório enviado!', { duration: 5000 });
           return;
         } catch (shareError: unknown) {
           if (shareError instanceof Error && shareError.name === 'AbortError') {
@@ -8945,12 +8992,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
         const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
         setTimeout(() => abrirWhatsAppLink(grupoUrl), 500);
-        toast.info('PDF baixado! Anexe como documento no grupo do WhatsApp.');
+        toast.info('PDF baixado! Anexe como documento no grupo do WhatsApp.', { duration: 5000 });
       } else if (phone) {
         setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 500);
-        toast.info('PDF baixado! Anexe como documento no WhatsApp do cliente.');
+        toast.info('PDF baixado! Anexe como documento no WhatsApp do cliente.', { duration: 5000 });
       } else {
-        toast.success('PDF baixado! Compartilhe manualmente.');
+        toast.success('PDF baixado! Compartilhe manualmente.', { duration: 5000 });
       }
     } catch (error) {
       toast.dismiss('relatorio-wa-resumo');
@@ -9054,7 +9101,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             files: [file],
           });
           toast.dismiss('planilha-wa-resumo');
-          toast.success('Planilha enviada!');
+          toast.success('Planilha enviada!', { duration: 5000 });
           return;
         } catch (shareError: unknown) {
           if (shareError instanceof Error && shareError.name === 'AbortError') {
@@ -9086,12 +9133,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
         const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
         setTimeout(() => abrirWhatsAppLink(grupoUrl), 800);
-        toast.info('Planilha baixada! Anexe como documento no grupo do WhatsApp.', { duration: 6000 });
+        toast.info('Planilha baixada! Anexe como documento no grupo do WhatsApp.', { duration: 5000 });
       } else if (phone) {
         setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 800);
-        toast.info('Planilha baixada! Anexe como documento no WhatsApp do cliente.', { duration: 6000 });
+        toast.info('Planilha baixada! Anexe como documento no WhatsApp do cliente.', { duration: 5000 });
       } else {
-        toast.success('Planilha baixada! Compartilhe manualmente.');
+        toast.success('Planilha baixada! Compartilhe manualmente.', { duration: 5000 });
       }
     } catch (error) {
       toast.dismiss('planilha-wa-resumo');
@@ -9138,7 +9185,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const data = await res.json().catch(() => ({ success: false, error: 'Resposta inválida' }));
       toast.dismiss('telegram-resumo-rel');
       if (res.ok && data.success) {
-        toast.success('PDF do relatório enviado!');
+        toast.success('PDF do relatório enviado!', { duration: 5000 });
         setResumoTelegramEnviado(true);
       } else {
         toast.error(data.errorDetail || data.error || 'Erro ao enviar PDF', { duration: 10000 });
@@ -9227,9 +9274,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       // Link de grupo: copiar texto e abrir o grupo
       try {
         await navigator.clipboard.writeText(mensagem);
-        toast.success('Extrato copiado! O grupo abrirá. Cole a mensagem.');
+        toast.success('Extrato copiado! O grupo abrirá. Cole a mensagem.', { duration: 5000 });
       } catch {
-        toast.info('O grupo abrirá. Envie o extrato manualmente.');
+        toast.info('O grupo abrirá. Envie o extrato manualmente.', { duration: 5000 });
       }
       setTimeout(() => abrirWhatsAppLink(whatsappOriginal), 500);
     } else if (whatsappOriginal) {
@@ -9237,9 +9284,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const grupoUrl = `https://chat.whatsapp.com/${whatsappOriginal}`;
       try {
         await navigator.clipboard.writeText(mensagem);
-        toast.success('Extrato copiado! O grupo abrirá. Cole a mensagem.');
+        toast.success('Extrato copiado! O grupo abrirá. Cole a mensagem.', { duration: 5000 });
       } catch {
-        toast.info('O grupo abrirá. Envie o extrato manualmente.');
+        toast.info('O grupo abrirá. Envie o extrato manualmente.', { duration: 5000 });
       }
       setTimeout(() => abrirWhatsAppLink(grupoUrl), 500);
     } else {
