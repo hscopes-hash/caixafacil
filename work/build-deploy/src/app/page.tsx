@@ -17685,8 +17685,36 @@ export default function App() {
   const swipeHandlers = useSwipeNavigation({
     tabs: tabOrder,
     activeTab,
-    onTabChange: setActiveTab,
-    onEdgeSwipeRight: () => setMenuOpen(true),
+    onTabChange: (tab) => {
+      // Bloquear troca de aba por swipe se estiver na tela de leituras com cliente selecionado
+      if (activeTab === 'leituras' && tab !== 'leituras') {
+        // Verificar se há dados digitados
+        const temDados = clienteSelecionado && (
+          maquinas.some(m => m.novaEntrada || m.novaSaida) ||
+          receitasItens.some(d => parseFloat(d.valor?.replace(',', '.') || '0') !== 0) ||
+          despesasItens.some(d => parseFloat(d.valor?.replace(',', '.') || '0') > 0) ||
+          !!cartaoFotoProcessada || !!cartao2FotoProcessada || !!mercadoFotoProcessada
+        );
+        if (temDados) {
+          toast.warning('Use o botão Sair para trocar de tela. Dados não salvos serão perdidos.', { duration: 3000 });
+          return; // bloqueia a troca
+        }
+      }
+      setActiveTab(tab);
+    },
+    onEdgeSwipeRight: () => {
+      // Bloquear edge-swipe (abrir menu) se estiver na tela de leituras com cliente selecionado
+      if (activeTab === 'leituras' && clienteSelecionado) {
+        const temDados = maquinas.some(m => m.novaEntrada || m.novaSaida) ||
+          receitasItens.some(d => parseFloat(d.valor?.replace(',', '.') || '0') !== 0) ||
+          despesasItens.some(d => parseFloat(d.valor?.replace(',', '.') || '0') > 0);
+        if (temDados) {
+          toast.warning('Use o botão Sair para abrir o menu.', { duration: 3000 });
+          return;
+        }
+      }
+      setMenuOpen(true);
+    },
   });
 
   // PWA: entrar em tela cheia automaticamente ao abrir pelo app instalado
@@ -17899,7 +17927,7 @@ export default function App() {
   }
 
   return (
-    <div className={`safe-area-top ${activeTab === 'chat-ia' || activeTab === 'grua' ? 'h-[100dvh] overflow-hidden' : 'min-h-screen'} bg-background flex flex-col`}>
+    <div className={`safe-area-top ${activeTab === 'chat-ia' || activeTab === 'grua' ? 'h-[100dvh] overflow-hidden' : 'min-h-screen'} bg-background flex flex-col`} style={{ overscrollBehavior: activeTab === 'leituras' ? 'contain' : 'auto' }}>
       <PWAInstallBanner />
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur border-b border-border">

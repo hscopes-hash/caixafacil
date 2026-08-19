@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 export type NivelAcesso = 'ADMINISTRADOR' | 'SUPERVISOR' | 'OPERADOR';
 
@@ -68,31 +69,46 @@ interface AuthState {
   updatePreferencias: (preferencias: Partial<PreferenciasUsuario>) => void;
 }
 
-export const useAuthStore = create<AuthState>()((set) => ({
-  usuario: null,
-  empresa: null,
-  token: null,
-  isAuthenticated: false,
-  preferencias: null,
-  login: (usuario, empresa, token, preferencias = null) =>
-    set({ usuario, empresa, token, isAuthenticated: true, preferencias }),
-  logout: () =>
-    set({ usuario: null, empresa: null, token: null, isAuthenticated: false, preferencias: null }),
-  updateUsuario: (usuarioData) =>
-    set((state) => ({
-      usuario: state.usuario ? { ...state.usuario, ...usuarioData } : null,
-    })),
-  updateEmpresa: (empresaData) =>
-    set((state) => ({
-      empresa: state.empresa ? { ...state.empresa, ...empresaData } : null,
-    })),
-  updatePreferencias: (preferenciasData) =>
-    set((state) => ({
-      preferencias: state.preferencias
-        ? { ...state.preferencias, ...preferenciasData }
-        : { uiScale: 1.0, ...preferenciasData },
-    })),
-}));
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      usuario: null,
+      empresa: null,
+      token: null,
+      isAuthenticated: false,
+      preferencias: null,
+      login: (usuario, empresa, token, preferencias = null) =>
+        set({ usuario, empresa, token, isAuthenticated: true, preferencias }),
+      logout: () =>
+        set({ usuario: null, empresa: null, token: null, isAuthenticated: false, preferencias: null }),
+      updateUsuario: (usuarioData) =>
+        set((state) => ({
+          usuario: state.usuario ? { ...state.usuario, ...usuarioData } : null,
+        })),
+      updateEmpresa: (empresaData) =>
+        set((state) => ({
+          empresa: state.empresa ? { ...state.empresa, ...empresaData } : null,
+        })),
+      updatePreferencias: (preferenciasData) =>
+        set((state) => ({
+          preferencias: state.preferencias
+            ? { ...state.preferencias, ...preferenciasData }
+            : { uiScale: 1.0, ...preferenciasData },
+        })),
+    }),
+    {
+      name: 'caixafacil-auth',
+      storage: createJSONStorage(() => sessionStorage),
+      partialize: (state) => ({
+        usuario: state.usuario,
+        empresa: state.empresa,
+        token: state.token,
+        isAuthenticated: state.isAuthenticated,
+        preferencias: state.preferencias,
+      }),
+    }
+  )
+);
 
 // Limpar sessao persistida de versoes anteriores (auth-storage no localStorage)
 if (typeof window !== 'undefined') {
