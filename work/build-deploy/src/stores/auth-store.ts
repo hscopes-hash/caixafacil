@@ -98,7 +98,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'caixafacil-auth',
-      storage: createJSONStorage(() => sessionStorage),
+      storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         usuario: state.usuario,
         empresa: state.empresa,

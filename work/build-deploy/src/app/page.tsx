@@ -3325,7 +3325,25 @@ function ReceberPage({ empresaId }: { empresaId: string }) {
 function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteMode }: { empresaId: string; isSupervisor: boolean; usuarioId: string; usuarioNome: string; ajusteMode?: boolean }) {
   const { empresa } = useAuthStore();
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
+  const [clienteSelecionado, setClienteSelecionadoState] = useState<Cliente | null>(() => {
+    try {
+      const saved = localStorage.getItem('caixafacil-cliente-selecionado');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return null;
+  });
+
+  // Wrapper que salva no localStorage
+  const setClienteSelecionado = useCallback((cliente: Cliente | null) => {
+    setClienteSelecionadoState(cliente);
+    try {
+      if (cliente) {
+        localStorage.setItem('caixafacil-cliente-selecionado', JSON.stringify(cliente));
+      } else {
+        localStorage.removeItem('caixafacil-cliente-selecionado');
+      }
+    } catch {}
+  }, []);
   const [maquinas, setMaquinas] = useState<MaquinaLeitura[]>([]);
   const [maquinasAlteradas, setMaquinasAlteradas] = useState<Map<string, MaquinaLeitura>>(new Map());
   // ⚠️ Estado SEPARADO para rastrear máquinas processadas no lote.
@@ -17666,7 +17684,18 @@ export default function App() {
     };
   }, [isAuthenticated, requestWakeLock]);
 
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTabState] = useState(() => {
+    try {
+      const saved = localStorage.getItem('caixafacil-active-tab');
+      return saved || 'dashboard';
+    } catch { return 'dashboard'; }
+  });
+
+  // Wrapper que salva no localStorage sempre que muda
+  const setActiveTab = useCallback((tab: string) => {
+    setActiveTabState(tab);
+    try { localStorage.setItem('caixafacil-active-tab', tab); } catch {}
+  }, []);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [assinaturaPlanoNome, setAssinaturaPlanoNome] = useState<string | null>(null);
