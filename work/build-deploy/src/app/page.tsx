@@ -7552,87 +7552,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     }
 
     setSaving(true);
-    // Coletar fotos processadas das máquinas preenchidas
-    const fotosParaUpload = maquinasPreenchidas
-      .filter(m => m.fotoProcessada)
-      .map(m => ({
-        maquinaId: m.id,
-        codigo: m.codigo || '',
-        fotoBase64: m.fotoProcessada as string,
-      }));
 
-    // Adicionar foto do canhoto de cartão (se houver) ao upload
-    if (cartaoFotoProcessada) {
-      fotosParaUpload.push({
-        maquinaId: 'cartao1-canhoto',
-        codigo: 'CARTAO1',
-        fotoBase64: cartaoFotoProcessada,
-      });
-      console.log('[salvarLeituras] Foto do canhoto de cartão 1 adicionada ao upload');
-    }
-    // Adicionar foto do canhoto de cartão 2 (se houver) ao upload
-    if (cartao2FotoProcessada) {
-      fotosParaUpload.push({
-        maquinaId: 'cartao2-canhoto',
-        codigo: 'CARTAO2',
-        fotoBase64: cartao2FotoProcessada,
-      });
-      console.log('[salvarLeituras] Foto do canhoto de cartão 2 adicionada ao upload');
-    }
-    // Adicionar foto dos cupons fiscais do mercado (se houver) ao upload
-    if (mercadoFotoProcessada) {
-      fotosParaUpload.push({
-        maquinaId: 'mercado-cupons',
-        codigo: 'MERCADO',
-        fotoBase64: mercadoFotoProcessada,
-      });
-      console.log('[salvarLeituras] Foto dos cupons do mercado adicionada ao upload');
-    }
-
-    console.log(`[salvarLeituras] Máquinas preenchidas: ${maquinasPreenchidas.length}`);
-    console.log(`[salvarLeituras] Máquinas com fotoProcessada: ${fotosParaUpload.length}`);
-    maquinasPreenchidas.forEach(m => {
-      console.log(`[salvarLeituras] Máquina ${m.codigo}: fotoProcessada=${m.fotoProcessada ? 'SIM (' + m.fotoProcessada.length + ' chars)' : 'NÃO'}`);
-    });
-
-    let fotoGcsPath: string | null = null;
-
-    // Upload das fotos ao GCS (criptografado) — antes de salvar leitura
-    if (fotosParaUpload.length > 0) {
-      try {
-        const token = useAuthStore.getState().token;
-        console.log(`[salvarLeituras] Enviando ${fotosParaUpload.length} fotos ao GCS...`);
-        // Log do tamanho total
-        const totalSize = JSON.stringify({ fotos: fotosParaUpload }).length;
-        console.log(`[salvarLeituras] Tamanho total do payload: ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
-        const fotoRes = await fetch('/api/leituras/upload-fotos', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({
-            fotos: fotosParaUpload,
-            empresaId: empresaId,
-            clienteId: clienteSelecionado.id,
-          }),
-        });
-        if (fotoRes.ok) {
-          const fotoData = await fotoRes.json();
-          fotoGcsPath = fotoData.gcsPath;
-          console.log(`[salvarLeituras] Fotos salvas no GCS: ${fotoGcsPath} (${fotoData.fotosSalvas} fotos)`);
-        } else {
-          const errText = await fotoRes.text().catch(() => '');
-          console.error('[salvarLeituras] Falha ao enviar fotos ao GCS. Status:', fotoRes.status, 'Resposta:', errText.substring(0, 500));
-          // Não mostrar toast de erro se for apenas fotos — leituras ainda são salvas
-          console.warn('[salvarLeituras] Leituras serão salvas sem fotos.');
-        }
-      } catch (err) {
-        console.error('[salvarLeituras] Erro ao enviar fotos ao GCS:', err);
-        // Não mostrar toast de erro se for apenas fotos — leituras ainda são salvas
-        console.warn('[salvarLeituras] Leituras serão salvas sem fotos.');
-        // Continua salvando leitura mesmo sem fotos
-      }
-    } else {
-      console.log('[salvarLeituras] Nenhuma foto para upload (máquinas preenchidas sem fotoProcessada)');
-    }
+    // ⚠️ Upload de fotos individuais ao GCS DESATIVADO (v2.46.0.749)
+    // Agora salvamos apenas o PDF do relatório (upload feito após salvar leituras)
+    // As fotos individuais não são mais necessárias — o PDF já contém tudo
+    const fotoGcsPath: string | null = null;
+    console.log('[salvarLeituras] Upload de fotos individuais desativado — PDF será salvo após salvar leituras');
 
     try {
       // Preparar dados para a API
