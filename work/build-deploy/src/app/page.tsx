@@ -6474,43 +6474,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       setSegundaViaDados(filtradas);
       setSegundaViaExtratoOpen(true);
 
-      // Pré-carregar fotos do GCS (para exibir miniaturas no modo RELATÓRIO)
-      // Apenas se houver leituras com fotoGcsPath
-      const gcsPathsUnicosPre = new Set<string>();
-      filtradas.forEach((l: any) => {
-        if (l.fotoGcsPath) gcsPathsUnicosPre.add(l.fotoGcsPath);
-      });
-      if (gcsPathsUnicosPre.size > 0) {
-        setSegundaViaFotos([]); // limpa anterior
-        const token = useAuthStore.getState().token;
-        const fotosColetadas: Array<{ maquinaId: string; codigo: string; fotoBase64: string }> = [];
-        for (const gcsPath of gcsPathsUnicosPre) {
-          try {
-            const fotoRes = await fetch(`/api/leituras/download-fotos?gcsPath=${encodeURIComponent(gcsPath)}`, { headers: { 'Authorization': `Bearer ${token}` } });
-            if (fotoRes.ok) {
-              const fotoData = await fotoRes.json();
-              if (fotoData.fotos && Array.isArray(fotoData.fotos)) {
-                fotoData.fotos.forEach((f: any) => {
-                  if (f.fotoBase64) {
-                    const dataUrl = f.fotoBase64.startsWith('data:')
-                      ? f.fotoBase64
-                      : `data:image/jpeg;base64,${f.fotoBase64}`;
-                    fotosColetadas.push({
-                      maquinaId: f.maquinaId || '',
-                      codigo: f.codigo || '',
-                      fotoBase64: dataUrl,
-                    });
-                  }
-                });
-              }
-            }
-          } catch (e) { console.warn('Erro ao pré-carregar fotos 2a via:', e); }
-        }
-        setSegundaViaFotos(fotosColetadas);
-        console.log('[2a via] Fotos pré-carregadas para relatório:', fotosColetadas.length);
-      } else {
-        setSegundaViaFotos([]);
-      }
+      // Fotos individuais do GCS não são mais usadas — apenas PDF
+      setSegundaViaFotos([]);
     } catch (err: any) {
       toast.error(err.message || 'Erro ao carregar fechamento');
     } finally {
@@ -6549,8 +6514,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     const operadoresSet = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => normalizarOperador(l.usuario)));
     const opList = Array.from(operadoresSet);
     if (opList.length > 0) texto += `Operador: ${opList.join(', ')}\n`;
-    const qtdFotos2via = segundaViaDados.filter((l: any) => l.fotoGcsPath).length;
-    if (qtdFotos2via > 0) texto += `Fotos: ${qtdFotos2via} leitura${qtdFotos2via === 1 ? '' : 's'} com registro\n`;
     texto += `_____________\n`;
 
     let totalEntradas = 0;
@@ -7154,30 +7117,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         // === MODO EXTRATO: enviar imagem do extrato + fotos das máquinas ===
         const extratoImagem = await gerarExtratoImagemSegundaVia();
 
-        // Buscar fotos do GCS
-        const fotos: string[] = [];
-        const gcsPathsUnicos = new Set<string>();
-        segundaViaDados.forEach((l: any) => { if (l.fotoGcsPath) gcsPathsUnicos.add(l.fotoGcsPath); });
-        const token = useAuthStore.getState().token;
-        for (const gcsPath of gcsPathsUnicos) {
-          try {
-            const fotoRes = await fetch(`/api/leituras/download-fotos?gcsPath=${encodeURIComponent(gcsPath)}`, { headers: { 'Authorization': `Bearer ${token}` } });
-            if (fotoRes.ok) {
-              const fotoData = await fotoRes.json();
-              if (fotoData.fotos && Array.isArray(fotoData.fotos)) {
-                fotoData.fotos.forEach((f: any) => {
-                  if (f.fotoBase64) {
-                    fotos.push(f.fotoBase64.startsWith('data:') ? f.fotoBase64 : `data:image/jpeg;base64,${f.fotoBase64}`);
-                  }
-                });
-              }
-            }
-          } catch (e) { console.warn('Erro ao buscar fotos 2a via:', e); }
-        }
-
+        // Fotos individuais do GCS não são mais usadas — apenas extrato + PDF
         const fotosEnvio: string[] = [];
         if (extratoImagem) fotosEnvio.push(extratoImagem);
-        fotosEnvio.push(...fotos);
 
         const res = await fetch('/api/telegram/send', {
           method: 'POST',
@@ -7206,76 +7148,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     }
   };
 
-  // 2a via: enviar SOMENTE as fotos via Web Share (sem texto)
+  // 2a via: enviar fotos foi desativado — agora usamos PDF
   const enviarFotos2aVia = async () => {
-    try {
-      toast.loading('Preparando fotos...', { id: 'fotos-2via' });
-      const fotosProcessadas: File[] = [];
-      const gcsPath = segundaViaDados.find((l: any) => l.fotoGcsPath)?.fotoGcsPath;
-      if (gcsPath) {
-        try {
-          const token = useAuthStore.getState().token;
-          const fotoRes = await fetch(`/api/leituras/download-fotos?gcsPath=${encodeURIComponent(gcsPath)}`, {
-            headers: { 'Authorization': `Bearer ${token}` },
-          });
-          if (fotoRes.ok) {
-            const fotoData = await fotoRes.json();
-            if (fotoData.fotos && Array.isArray(fotoData.fotos)) {
-              for (const f of fotoData.fotos) {
-                try {
-                  const b64 = f.fotoBase64 || '';
-                  let blob: Blob;
-                  if (b64.startsWith('data:')) {
-                    const [header, data] = b64.split(',');
-                    const mime = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
-                    const binary = atob(data);
-                    const arr = new Uint8Array(binary.length);
-                    for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
-                    blob = new Blob([arr], { type: mime });
-                  } else {
-                    const binary = atob(b64);
-                    const arr = new Uint8Array(binary.length);
-                    for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
-                    blob = new Blob([arr], { type: 'image/jpeg' });
-                  }
-                  // Comprimir para envio (1200px max, 70% qualidade)
-                  const comprimida = await comprimirImagem(blob, 1200, 0.7);
-                  fotosProcessadas.push(new File([comprimida], `leitura_2via_${f.codigo}_${Date.now()}.jpg`, { type: 'image/jpeg' }));
-                } catch (err) {
-                  console.error(`Erro ao processar foto da máquina ${f.codigo}:`, err);
-                }
-              }
-            }
-          }
-        } catch (err) {
-          console.error('Erro ao baixar fotos do GCS:', err);
-          toast.error('Erro ao baixar fotos do servidor.', { id: 'fotos-2via' });
-          return;
-        }
-      }
-
-      toast.dismiss('fotos-2via');
-
-      if (fotosProcessadas.length === 0) {
-        toast.info('Nenhuma foto disponível para este fechamento.', { duration: 5000 });
-        return;
-      }
-
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: fotosProcessadas })) {
-        const shareData: ShareData = {
-          title: `Fotos Leitura - ${clienteSelecionado?.nome}`,
-        };
-        (shareData as ShareData & { files: File[] }).files = fotosProcessadas;
-        await navigator.share(shareData);
-        toast.success('Fotos enviadas!', { duration: 5000 });
-      } else {
-        toast.error('Seu navegador não suporta compartilhar arquivos. Tente pelo Chrome/Edge.');
-      }
-    } catch (shareError: unknown) {
-      if (shareError instanceof Error && shareError.name === 'AbortError') return;
-      console.error('Erro ao enviar fotos 2a via:', shareError);
-      toast.error('Erro ao enviar fotos. Tente novamente.');
-    }
+    toast.info('Use o botão "Ver PDF" para visualizar o relatório.', { duration: 5000 });
   };
 
   // =============================================
@@ -11839,7 +11714,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       <span className="font-medium">{f.data}</span>
                       {isUltimo && <span className="ml-2 text-[10px] text-red-500 font-bold">ÚLTIMO</span>}
                       {f.operadores && <p className="text-xs opacity-60 mt-0.5">{f.operadores}</p>}
-                      {f.qtdFotos > 0 && <p className="text-xs opacity-60">{f.qtdFotos} foto{f.qtdFotos === 1 ? '' : 's'}</p>}
                       {f.qtdPdfs > 0 && <p className="text-xs text-emerald-500">📄 PDF disponível</p>}
                     </button>
                     );
@@ -11916,7 +11790,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       >
                         <span className="font-medium">{f.data}</span>
                         {f.operadores && <p className="text-xs opacity-60 mt-0.5">{f.operadores}</p>}
-                        {f.qtdFotos > 0 && <p className="text-xs opacity-60">{f.qtdFotos} foto{f.qtdFotos === 1 ? '' : 's'}</p>}
                         {f.qtdPdfs > 0 && <p className="text-xs text-emerald-500">📄 PDF</p>}
                       </button>
                       {f.qtdPdfs > 0 && (
@@ -12021,13 +11894,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                     <p>Data: {segundaViaSelecionada?.data}{(() => { const t = segundaViaDados.find((l: any) => l.turno)?.turno; return t ? ` — Turno: ${t === 'MANHA' ? 'MANHÃ' : t}` : ''; })()}</p>
                     {(() => {
                       const operadores = new Set(segundaViaDados.filter(l => l.usuario?.nome).map(l => normalizarOperador(l.usuario)));
-                      const qtdFotos = segundaViaDados.filter(l => l.fotoGcsPath).length;
                       const opTexto = Array.from(operadores).join(', ');
                       return opTexto ? <p>Operador: {opTexto}</p> : null;
                     })()}
                     {(() => {
-                      const qtdFotos = segundaViaDados.filter(l => l.fotoGcsPath).length;
-                      return qtdFotos > 0 ? <p>Fotos: {qtdFotos} leitura{qtdFotos === 1 ? '' : 's'} com registro</p> : null;
                     })()}
                     <p className="border-b border-black my-2">_____________</p>
 
