@@ -3430,7 +3430,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [excluirLeituraLoading, setExcluirLeituraLoading] = useState(false);
   const [excluirLeituraSelecionada, setExcluirLeituraSelecionada] = useState<{ data: string; dataISO: string } | null>(null);
   const [excluirLeituraConfirmOpen, setExcluirLeituraConfirmOpen] = useState(false);
-  const [fechamentosAnteriores, setFechamentosAnteriores] = useState<{ data: string; dataISO: string; operadores: string; qtdFotos: number }[]>([]);
+  const [fechamentosAnteriores, setFechamentosAnteriores] = useState<{ data: string; dataISO: string; operadores: string; qtdFotos: number; qtdPdfs: number }[]>([]);
   const [segundaViaLoading, setSegundaViaLoading] = useState(false);
   const [segundaViaSelecionada, setSegundaViaSelecionada] = useState<{ data: string; dataISO: string } | null>(null);
   const [segundaViaDados, setSegundaViaDados] = useState<any[]>([]);
@@ -6374,7 +6374,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     try {
       const res = await fetch(`/api/leituras/fechamentos-anteriores?clienteId=${clienteSelecionado.id}`);
       if (!res.ok) throw new Error('Erro ao buscar fechamentos');
-      const fechamentos: { data: string; dataISO: string; operadores: string; qtdFotos: number }[] = await res.json();
+      const fechamentos: { data: string; dataISO: string; operadores: string; qtdFotos: number; qtdPdfs: number }[] = await res.json();
       setFechamentosAnteriores(fechamentos);
     } catch (err: any) {
       toast.error(err.message || 'Erro ao buscar fechamentos');
@@ -6395,7 +6395,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     try {
       const res = await fetch(`/api/leituras/fechamentos-anteriores?clienteId=${clienteSelecionado.id}`);
       if (!res.ok) throw new Error('Erro ao buscar fechamentos');
-      const fechamentos: { data: string; dataISO: string; operadores: string; qtdFotos: number }[] = await res.json();
+      const fechamentos: { data: string; dataISO: string; operadores: string; qtdFotos: number; qtdPdfs: number }[] = await res.json();
       setFechamentosAnteriores(fechamentos);
     } catch (err: any) {
       toast.error(err.message || 'Erro ao buscar fechamentos');
@@ -7713,6 +7713,63 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       setDebitosVencidosSalvos(debitosVencidos);
       setResumoModalOpen(true);
       setResumoTelegramEnviado(false);
+
+      // === Gerar PDF do relatório e fazer upload para GCS ===
+      // Faz em background — não bloqueia o resumo
+      (async () => {
+        try {
+          console.log('[salvarLeituras] Gerando PDF do relatório para upload...');
+          const pdfBlob = await gerarRelatorioPdfResumo();
+          if (!pdfBlob) {
+            console.warn('[salvarLeituras] Falha ao gerar PDF — leitura salva sem PDF');
+            return;
+          }
+
+          // Converter Blob para base64
+          const reader = new FileReader();
+          reader.onloadend = async () => {
+            try {
+              const pdfBase64 = reader.result as string;
+              console.log(`[salvarLeituras] PDF gerado (${(pdfBlob.size / 1024).toFixed(0)}KB), enviando ao GCS...`);
+
+              const uploadRes = await fetch('/api/leituras/upload-pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${useAuthStore.getState().token}` },
+                body: JSON.stringify({
+                  pdfBase64,
+                  empresaId: empresaId,
+                  clienteId: clienteSelecionado.id,
+                  dataLeitura: new Date().toISOString(),
+                }),
+              });
+
+              if (uploadRes.ok) {
+                const uploadData = await uploadRes.json();
+                console.log(`[salvarLeituras] PDF salvo no GCS: ${uploadData.gcsPath}`);
+
+                // Atualizar a leitura com o caminho do PDF
+                await fetch('/api/leituras', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    clienteId: clienteSelecionado.id,
+                    dataISO: new Date().toISOString(),
+                    pdfGcsPath: uploadData.gcsPath,
+                  }),
+                });
+                console.log('[salvarLeituras] Leitura atualizada com pdfGcsPath');
+              } else {
+                console.warn('[salvarLeituras] Falha ao enviar PDF ao GCS');
+              }
+            } catch (err) {
+              console.warn('[salvarLeituras] Erro ao processar upload do PDF:', err);
+            }
+          };
+          reader.readAsDataURL(pdfBlob);
+        } catch (err) {
+          console.warn('[salvarLeituras] Erro ao gerar PDF para upload:', err);
+        }
+      })();
 
       // Marcar débitos vencidos como pagos
       if (debitosVencidos > 0) {
@@ -11858,6 +11915,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                       {isUltimo && <span className="ml-2 text-[10px] text-red-500 font-bold">ÚLTIMO</span>}
                       {f.operadores && <p className="text-xs opacity-60 mt-0.5">{f.operadores}</p>}
                       {f.qtdFotos > 0 && <p className="text-xs opacity-60">{f.qtdFotos} foto{f.qtdFotos === 1 ? '' : 's'}</p>}
+                      {f.qtdPdfs > 0 && <p className="text-xs text-emerald-500">📄 PDF disponível</p>}
                     </button>
                     );
                   })}
@@ -11922,19 +11980,61 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground mb-2">Selecione um fechamento:</p>
                   {fechamentosAnteriores.map((f) => (
-                    <button
-                      key={f.dataISO}
-                      onClick={() => selecionarSegundaVia(f)}
-                      className={`w-full text-left px-3 py-2.5 rounded-lg border transition-colors text-sm ${
-                        segundaViaSelecionada?.dataISO === f.dataISO
-                          ? 'border-amber-500/50 bg-amber-500/10 text-amber-500'
-                          : 'border-border hover:bg-muted/50 text-foreground'
-                      }`}
-                    >
-                      <span className="font-medium">{f.data}</span>
-                      {f.operadores && <p className="text-xs opacity-60 mt-0.5">{f.operadores}</p>}
-                      {f.qtdFotos > 0 && <p className="text-xs opacity-60">{f.qtdFotos} foto{f.qtdFotos === 1 ? '' : 's'}</p>}
-                    </button>
+                    <div key={f.dataISO} className="flex gap-1">
+                      <button
+                        onClick={() => selecionarSegundaVia(f)}
+                        className={`flex-1 text-left px-3 py-2.5 rounded-lg border transition-colors text-sm ${
+                          segundaViaSelecionada?.dataISO === f.dataISO
+                            ? 'border-amber-500/50 bg-amber-500/10 text-amber-500'
+                            : 'border-border hover:bg-muted/50 text-foreground'
+                        }`}
+                      >
+                        <span className="font-medium">{f.data}</span>
+                        {f.operadores && <p className="text-xs opacity-60 mt-0.5">{f.operadores}</p>}
+                        {f.qtdFotos > 0 && <p className="text-xs opacity-60">{f.qtdFotos} foto{f.qtdFotos === 1 ? '' : 's'}</p>}
+                        {f.qtdPdfs > 0 && <p className="text-xs text-emerald-500">📄 PDF</p>}
+                      </button>
+                      {f.qtdPdfs > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 shrink-0 text-emerald-500"
+                          title="Ver PDF do relatório"
+                          onClick={async () => {
+                            try {
+                              toast.loading('Baixando PDF...', { id: 'ver-pdf' });
+                              // Buscar o pdfGcsPath da primeira leitura desse fechamento
+                              const res = await fetch(`/api/leituras?clienteId=${clienteSelecionado?.id}&dataISO=${encodeURIComponent(f.dataISO)}`);
+                              const leituras = await res.json();
+                              const leituraComPdf = leituras.find((l: any) => l.pdfGcsPath);
+                              if (!leituraComPdf) {
+                                toast.dismiss('ver-pdf');
+                                toast.error('PDF não encontrado para este fechamento');
+                                return;
+                              }
+                              const pdfRes = await fetch(`/api/leituras/download-pdf?gcsPath=${encodeURIComponent(leituraComPdf.pdfGcsPath)}`);
+                              if (!pdfRes.ok) {
+                                toast.dismiss('ver-pdf');
+                                toast.error('Erro ao baixar PDF');
+                                return;
+                              }
+                              const pdfData = await pdfRes.json();
+                              toast.dismiss('ver-pdf');
+                              // Abrir PDF em nova aba
+                              const blob = await (await fetch(pdfData.pdfBase64)).blob();
+                              const url = URL.createObjectURL(blob);
+                              window.open(url, '_blank');
+                              setTimeout(() => URL.revokeObjectURL(url), 30000);
+                            } catch (err) {
+                              toast.dismiss('ver-pdf');
+                              toast.error('Erro ao visualizar PDF');
+                            }
+                          }}
+                        >
+                          <FileText className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}

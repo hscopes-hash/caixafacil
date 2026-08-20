@@ -116,7 +116,7 @@ async function getGcsAccessTokenFromSA(): Promise<string | null> {
  * 1) Prioriza SA JSON (GOOGLE_APPLICATION_CREDENTIALS_JSON) — funciona no Vercel
  * 2) Fallback: metadata server (Cloud Run / GCE)
  */
-async function getGcsAccessToken(): Promise<string> {
+export async function getGcsAccessToken(): Promise<string> {
   // Cache token por 55 min (token OAuth2 dura 1h)
   if (_gcsTokenCache && Date.now() < _gcsTokenCache.expiresAt) {
     return _gcsTokenCache.token;

@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 // Garantir coluna turno
 async function ensureSchema() {
   try { await db.$executeRawUnsafe(`ALTER TABLE leituras ADD COLUMN IF NOT EXISTS turno TEXT`); } catch {}
+  try { await db.$executeRawUnsafe(`ALTER TABLE leituras ADD COLUMN IF NOT EXISTS "pdfGcsPath" TEXT`); } catch {}
 }
 
 // Listar leituras
@@ -14,6 +15,7 @@ export async function GET(request: NextRequest) {
     const maquinaId = searchParams.get('maquinaId');
     const dataInicio = searchParams.get('dataInicio');
     const dataFim = searchParams.get('dataFim');
+    const dataISO = searchParams.get('dataISO');
 
     const where: Record<string, unknown> = {};
 
@@ -25,7 +27,15 @@ export async function GET(request: NextRequest) {
       where.maquinaId = maquinaId;
     }
 
-    if (dataInicio || dataFim) {
+    if (dataISO) {
+      // Buscar por data específica (±1 minuto de tolerância)
+      const d = new Date(dataISO);
+      const inicio = new Date(d);
+      inicio.setMinutes(inicio.getMinutes() - 1);
+      const fim = new Date(d);
+      fim.setMinutes(fim.getMinutes() + 1);
+      where.dataLeitura = { gte: inicio, lte: fim };
+    } else if (dataInicio || dataFim) {
       where.dataLeitura = {};
       if (dataInicio) {
         where.dataLeitura = { ...where.dataLeitura, gte: new Date(dataInicio) };
@@ -86,7 +96,7 @@ export async function POST(request: NextRequest) {
   try {
     await ensureSchema();
     const body = await request.json();
-    const { leituras, clienteId, usuarioId, despesa, valorDespesa, receita, valorReceita, caixa, valorCaixa, fotoGcsPath, turno } = body;
+    const { leituras, clienteId, usuarioId, despesa, valorDespesa, receita, valorReceita, caixa, valorCaixa, fotoGcsPath, pdfGcsPath, turno } = body;
 
     console.log('[LEITURAS POST] Recebido:', {
       qtdLeituras: leituras?.length || 0,
@@ -159,6 +169,7 @@ export async function POST(request: NextRequest) {
             valorCaixa: valorReceita || null,
             // Fotos criptografadas no GCS (compartilhado por batch)
             fotoGcsPath: fotoGcsPath || null,
+            pdfGcsPath: pdfGcsPath || null,
             turno: turno || null,
           },
         });
@@ -223,6 +234,45 @@ export async function POST(request: NextRequest) {
 // ============================================
 // DELETE — Excluir leituras de um fechamento e restaurar valores anteriores
 // das máquinas. Só permite excluir o ÚLTIMO fechamento do cliente.
+// ============================================
+// PUT — Atualizar leituras com pdfGcsPath (após upload do PDF)
+// ============================================
+export async function PUT(request: NextRequest) {
+  try {
+    await ensureSchema();
+    const body = await request.json();
+    const { clienteId, dataISO, pdfGcsPath } = body;
+
+    if (!clienteId || !dataISO || !pdfGcsPath) {
+      return NextResponse.json(
+        { error: 'clienteId, dataISO e pdfGcsPath são obrigatórios' },
+        { status: 400 }
+      );
+    }
+
+    // Atualizar todas as leituras do cliente naquele timestamp
+    const dataInicio = new Date(dataISO);
+    dataInicio.setMinutes(dataInicio.getMinutes() - 1);
+    const dataFim = new Date(dataISO);
+    dataFim.setMinutes(dataFim.getMinutes() + 1);
+
+    const result = await db.$executeRawUnsafe(`
+      UPDATE leituras SET "pdfGcsPath" = $1
+      WHERE "clienteId" = $2 AND "dataLeitura" BETWEEN $3 AND $4
+    `, pdfGcsPath, clienteId, dataInicio, dataFim);
+
+    console.log(`[LEITURAS PUT] ${result} leitura(s) atualizadas com pdfGcsPath=${pdfGcsPath}`);
+
+    return NextResponse.json({ success: true, updated: result });
+  } catch (error) {
+    console.error('[LEITURAS PUT] Erro:', error);
+    return NextResponse.json(
+      { error: 'Erro ao atualizar leituras' },
+      { status: 500 }
+    );
+  }
+}
+
 // ============================================
 export async function DELETE(request: NextRequest) {
   try {

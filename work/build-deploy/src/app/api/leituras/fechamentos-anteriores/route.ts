@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
         DATE_TRUNC('minute', "dataLeitura") as data_trunc,
         COUNT(*) as qtd_leituras,
         COUNT(CASE WHEN "fotoGcsPath" IS NOT NULL THEN 1 END) as qtd_fotos,
+        COUNT(CASE WHEN "pdfGcsPath" IS NOT NULL THEN 1 END) as qtd_pdfs,
         STRING_AGG(DISTINCT CASE WHEN u.email = ${SUPER_ADMIN_EMAIL_SQL} THEN 'Super Admin' ELSE u.nome END, ', ') as operadores
       FROM leituras l
       LEFT JOIN usuarios u ON u.id = l."usuarioId"
