@@ -6474,6 +6474,38 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       setSegundaViaDados(filtradas);
       setSegundaViaExtratoOpen(true);
 
+      // ⚠️ NOVO: buscar o PDF salvo no GCS em vez de gerar um novo
+      const leituraComPdf = filtradas.find((l: any) => l.pdfGcsPath);
+      if (leituraComPdf?.pdfGcsPath) {
+        console.log('[2a via] PDF encontrado no GCS, baixando...');
+        try {
+          const pdfRes = await fetch(`/api/leituras/download-pdf?gcsPath=${encodeURIComponent(leituraComPdf.pdfGcsPath)}`);
+          if (pdfRes.ok) {
+            const pdfData = await pdfRes.json();
+            // Converter base64 para Blob e criar URL
+            const base64Data = pdfData.pdfBase64.includes(',') ? pdfData.pdfBase64.split(',')[1] : pdfData.pdfBase64;
+            const binary = atob(base64Data);
+            const arr = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+            const blob = new Blob([arr], { type: 'application/pdf' });
+            const pdfUrl = URL.createObjectURL(blob);
+            // Abrir PDF em nova aba
+            window.open(pdfUrl, '_blank');
+            setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000);
+            console.log('[2a via] PDF aberto em nova aba');
+          } else {
+            console.warn('[2a via] Falha ao baixar PDF do GCS, gerando relatório local');
+            toast.warning('PDF não disponível no servidor. Gerando relatório local.', { duration: 5000 });
+          }
+        } catch (err) {
+          console.error('[2a via] Erro ao baixar PDF do GCS:', err);
+          toast.warning('Erro ao baixar PDF. Gerando relatório local.', { duration: 5000 });
+        }
+      } else {
+        // Sem PDF no GCS — gerar localmente (fallback para leituras antigas)
+        console.log('[2a via] Sem PDF no GCS, gerando relatório local');
+      }
+
       // Fotos individuais do GCS não são mais usadas — apenas PDF
       setSegundaViaFotos([]);
     } catch (err: any) {
