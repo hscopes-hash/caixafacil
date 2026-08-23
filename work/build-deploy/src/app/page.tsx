@@ -7013,15 +7013,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       const caption = `PLANILHA DE ${modo2via} - ${clienteSelecionado.nome.toUpperCase()}\nData: ${segundaViaSelecionada?.data || ''}${turnoDisplay ? ` — Turno: ${turnoDisplay}` : ''}`;
 
-      // Tentar navigator.share (funciona em alguns navegadores mobile)
-      const canShare2 = !!(navigator.share && navigator.canShare);
-      const canShareFiles2 = canShare2 && (() => {
-        try { return navigator.canShare({ files: [file] }); } catch { return false; }
-      })();
-
-      console.log(`[Planilha 2a via] navigator.share=${!!navigator.share} canShare=${canShare2} canShareFiles=${canShareFiles2} fileSize=${file.size}`);
-
-      if (canShareFiles2) {
+      // Mesmo padrão do PDF — navigator.share direto
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
           await navigator.share({
             title: `Planilha - ${clienteSelecionado.nome}`,
@@ -7036,7 +7029,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             toast.dismiss('planilha-wa-2via');
             return;
           }
-          console.warn('[Planilha 2a via] navigator.share falhou, tentando fallback:', shareError);
+
         }
       }
 
@@ -7056,10 +7049,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
         const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
-        setTimeout(() => abrirWhatsAppLink(grupoUrl), 800);
+        setTimeout(() => abrirWhatsAppLink(grupoUrl), 500);
         toast.info('Planilha baixada! Anexe como documento no grupo do WhatsApp.', { duration: 5000 });
       } else if (phone) {
-        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 800);
+        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 500);
         toast.info('Planilha baixada! Anexe como documento no WhatsApp do cliente.', { duration: 5000 });
       } else {
         toast.success('Planilha baixada! Compartilhe manualmente.', { duration: 5000 });
@@ -8992,15 +8985,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const modo2via = modoOperacao === 'COBRANCA' ? 'COBRANÇA' : 'LEITURA';
       const caption = `PLANILHA DE ${modo2via} - ${clienteSelecionado.nome.toUpperCase()}\nData: ${dataFmt}`;
 
-      // Tentar navigator.share (funciona em alguns navegadores mobile)
-      const canShare = !!(navigator.share && navigator.canShare);
-      const canShareFiles = canShare && (() => {
-        try { return navigator.canShare({ files: [file] }); } catch { return false; }
-      })();
-
-      console.log(`[Planilha] navigator.share=${!!navigator.share} canShare=${canShare} canShareFiles=${canShareFiles} fileType=${file.type} fileSize=${file.size}`);
-
-      if (canShareFiles) {
+      // Mesmo padrão do PDF — navigator.share direto, sem canShare intermediário
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
           await navigator.share({
             title: `Planilha - ${clienteSelecionado.nome}`,
@@ -9015,12 +9001,11 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             toast.dismiss('planilha-wa-resumo');
             return;
           }
-          console.warn('[Planilha] navigator.share falhou, tentando fallback:', shareError);
+
         }
       }
 
-      // Fallback: tentar navigator.share sem files (só texto) + download
-      // Alguns navegadores não suportam compartilhar .xlsx mas suportam texto
+      // Fallback: download + abrir WhatsApp (idêntico ao PDF)
       toast.dismiss('planilha-wa-resumo');
 
       // Download do arquivo
@@ -9039,10 +9024,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
         const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
-        setTimeout(() => abrirWhatsAppLink(grupoUrl), 800);
+        setTimeout(() => abrirWhatsAppLink(grupoUrl), 500);
         toast.info('Planilha baixada! Anexe como documento no grupo do WhatsApp.', { duration: 5000 });
       } else if (phone) {
-        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 800);
+        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 500);
         toast.info('Planilha baixada! Anexe como documento no WhatsApp do cliente.', { duration: 5000 });
       } else {
         toast.success('Planilha baixada! Compartilhe manualmente.', { duration: 5000 });
