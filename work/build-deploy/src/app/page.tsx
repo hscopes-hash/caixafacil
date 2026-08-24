@@ -6472,39 +6472,42 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       });
 
       setSegundaViaDados(filtradas);
-      setSegundaViaExtratoOpen(true);
 
-      // ⚠️ NOVO: buscar o PDF salvo no GCS em vez de gerar um novo
+      // ⚠️ Buscar o PDF salvo no GCS — se encontrar, abrir o PDF e NÃO abrir o modal do canvas
       const leituraComPdf = filtradas.find((l: any) => l.pdfGcsPath);
       if (leituraComPdf?.pdfGcsPath) {
         console.log('[2a via] PDF encontrado no GCS, baixando...');
+        toast.loading('Baixando PDF do relatório...', { id: '2via-pdf' });
         try {
           const pdfRes = await fetch(`/api/leituras/download-pdf?gcsPath=${encodeURIComponent(leituraComPdf.pdfGcsPath)}`);
           if (pdfRes.ok) {
             const pdfData = await pdfRes.json();
-            // Converter base64 para Blob e criar URL
             const base64Data = pdfData.pdfBase64.includes(',') ? pdfData.pdfBase64.split(',')[1] : pdfData.pdfBase64;
             const binary = atob(base64Data);
             const arr = new Uint8Array(binary.length);
             for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
             const blob = new Blob([arr], { type: 'application/pdf' });
             const pdfUrl = URL.createObjectURL(blob);
-            // Abrir PDF em nova aba
+            // Abrir PDF em nova aba — NÃO abrir o modal do canvas
             window.open(pdfUrl, '_blank');
             setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000);
             console.log('[2a via] PDF aberto em nova aba');
+            toast.dismiss('2via-pdf');
+            toast.success('PDF do relatório aberto!', { duration: 5000 });
+            return; // ← NÃO abre o modal do canvas
           } else {
-            console.warn('[2a via] Falha ao baixar PDF do GCS, gerando relatório local');
-            toast.warning('PDF não disponível no servidor. Gerando relatório local.', { duration: 5000 });
+            console.warn('[2a via] Falha ao baixar PDF do GCS, abrindo extrato local');
+            toast.dismiss('2via-pdf');
           }
         } catch (err) {
           console.error('[2a via] Erro ao baixar PDF do GCS:', err);
-          toast.warning('Erro ao baixar PDF. Gerando relatório local.', { duration: 5000 });
+          toast.dismiss('2via-pdf');
         }
-      } else {
-        // Sem PDF no GCS — gerar localmente (fallback para leituras antigas)
-        console.log('[2a via] Sem PDF no GCS, gerando relatório local');
       }
+
+      // Sem PDF no GCS (ou falhou) — abrir o modal do canvas como fallback
+      console.log('[2a via] Abrindo extrato local (sem PDF no GCS)');
+      setSegundaViaExtratoOpen(true);
 
       // Fotos individuais do GCS não são mais usadas — apenas PDF
       setSegundaViaFotos([]);
