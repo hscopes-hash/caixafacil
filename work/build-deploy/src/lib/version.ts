@@ -1,7 +1,7 @@
 // Controle de Versão - Incrementar a cada deploy
 // Formato: MAJOR.MINOR.PATCH.BUILD
 
-export const VERSION_STRING = '2.46.0.752';
-export const VERSION_DISPLAY = 'v2.46.0.752';
-export const LAST_DEPLOY = '2026-08-17';
-export const VERSION_WITH_DATE = 'v2.46.0.752 (2026-08-17)';
+export const VERSION_STRING = '2.46.0.753';
+export const VERSION_DISPLAY = 'v2.46.0.753';
+export const LAST_DEPLOY = '2026-08-18';
+export const VERSION_WITH_DATE = 'v2.46.0.753 (2026-08-18)';

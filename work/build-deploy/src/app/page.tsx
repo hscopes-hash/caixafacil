@@ -6829,11 +6829,36 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       return;
     }
 
-    toast.loading('Gerando PDF do relatório...', { id: 'relatorio-wa-2via' });
+    toast.loading('Preparando PDF do relatório...', { id: 'relatorio-wa-2via' });
 
     try {
-      // 1) Gerar PDF (cópia exata do canvas da visualização, sem paginação)
-      const pdfBlob = await gerarRelatorioPdf2aVia();
+      // 1) Tentar baixar o PDF salvo no GCS primeiro
+      let pdfBlob: Blob | null = null;
+      const leituraComPdf = segundaViaDados.find((l: any) => l.pdfGcsPath);
+      if (leituraComPdf?.pdfGcsPath) {
+        console.log('[WhatsApp 2a via] Baixando PDF do GCS...');
+        try {
+          const pdfRes = await fetch(`/api/leituras/download-pdf?gcsPath=${encodeURIComponent(leituraComPdf.pdfGcsPath)}`);
+          if (pdfRes.ok) {
+            const pdfData = await pdfRes.json();
+            const base64Data = pdfData.pdfBase64.includes(',') ? pdfData.pdfBase64.split(',')[1] : pdfData.pdfBase64;
+            const binary = atob(base64Data);
+            const arr = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+            pdfBlob = new Blob([arr], { type: 'application/pdf' });
+            console.log(`[WhatsApp 2a via] PDF baixado do GCS: ${(pdfBlob.size / 1024).toFixed(0)}KB`);
+          }
+        } catch (err) {
+          console.warn('[WhatsApp 2a via] Falha ao baixar PDF do GCS, gerando local:', err);
+        }
+      }
+
+      // 2) Se não baixou do GCS, gerar localmente (fallback)
+      if (!pdfBlob) {
+        console.log('[WhatsApp 2a via] Gerando PDF localmente...');
+        pdfBlob = await gerarRelatorioPdf2aVia();
+      }
+
       if (!pdfBlob) {
         toast.dismiss('relatorio-wa-2via');
         toast.error('Falha ao gerar relatório');
@@ -7103,8 +7128,29 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       };
 
       if (segundaViaModo === 'RELATORIO') {
-        // === MODO RELATÓRIO: gerar UM PDF (cópia exata do canvas, sem paginação) ===
-        const pdfBlob = await gerarRelatorioPdf2aVia();
+        // === MODO RELATÓRIO: baixar PDF do GCS primeiro, gerar local como fallback ===
+        let pdfBlob: Blob | null = null;
+        const leituraComPdfTg = segundaViaDados.find((l: any) => l.pdfGcsPath);
+        if (leituraComPdfTg?.pdfGcsPath) {
+          console.log('[Telegram 2a via] Baixando PDF do GCS...');
+          try {
+            const pdfRes = await fetch(`/api/leituras/download-pdf?gcsPath=${encodeURIComponent(leituraComPdfTg.pdfGcsPath)}`);
+            if (pdfRes.ok) {
+              const pdfData = await pdfRes.json();
+              const base64Data = pdfData.pdfBase64.includes(',') ? pdfData.pdfBase64.split(',')[1] : pdfData.pdfBase64;
+              const binary = atob(base64Data);
+              const arr = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+              pdfBlob = new Blob([arr], { type: 'application/pdf' });
+            }
+          } catch (err) {
+            console.warn('[Telegram 2a via] Falha ao baixar PDF do GCS:', err);
+          }
+        }
+        if (!pdfBlob) {
+          console.log('[Telegram 2a via] Gerando PDF localmente...');
+          pdfBlob = await gerarRelatorioPdf2aVia();
+        }
         if (!pdfBlob) {
           toast.dismiss('telegram-2via');
           toast.error('Falha ao gerar relatório');

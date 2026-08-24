@@ -305,6 +305,8 @@ export function construirDicionario(data: PlanilhaData, nomeCartao1?: string, no
  * Lê uma planilha gabarito (base64 data URL), substitui os placeholders
  * pelos valores reais e retorna um novo arquivo .xlsx como Blob.
  *
+ * Usa ExcelJS para preservar formatação (cores, bordas, merges, fontes).
+ *
  * @param gabaritoBase64 — data URL (ex: "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,...")
  * @param dicionario — mapa chave→valor com os dados do relatório
  * @returns Blob do arquivo .xlsx gerado
@@ -313,69 +315,73 @@ export async function gerarPlanilhaPreenchida(
   gabaritoBase64: string,
   dicionario: Record<string, string | number>
 ): Promise<Blob> {
-  // Extrai o base64 do data URL
+  // Converter base64 para Buffer
   const base64Data = gabaritoBase64.includes(',') ? gabaritoBase64.split(',')[1] : gabaritoBase64;
-  const binaryString = atob(base64Data);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
+  const buffer = Buffer.from(base64Data, 'base64');
 
-  // Lê o workbook
-  const workbook = XLSX.read(bytes, { type: 'array' });
+  // Escrever para arquivo temporário (ExcelJS precisa de arquivo ou stream)
+  const tmpFile = `/tmp/gabarito_${Date.now()}.xlsx`;
+  const fs = await import('fs');
+  fs.writeFileSync(tmpFile, buffer);
+
+  // Ler com ExcelJS — preserva formatação
+  const ExcelJS = (await import('exceljs')).default;
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(tmpFile);
 
   // Para cada sheet, substitui placeholders em todas as células
-  workbook.SheetNames.forEach(sheetName => {
-    const sheet = workbook.Sheets[sheetName];
-    if (!sheet) return;
-
-    // Itera sobre todas as células
-    const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
-    for (let R = range.s.r; R <= range.e.r; R++) {
-      for (let C = range.s.c; C <= range.e.c; C++) {
-        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-        const cell = sheet[cellAddress];
-        if (!cell) continue;
-
-        // Só processa células de texto ou números convertíveis
-        const valorOriginal = cell.v != null ? String(cell.v) : '';
-        if (!valorOriginal.includes('[')) continue;
+  workbook.eachSheet((sheet) => {
+    sheet.eachRow({ includeEmpty: true }, (row) => {
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        const valorOriginal = cell.value != null ? String(cell.value) : '';
+        if (!valorOriginal.includes('[')) return;
 
         // Substitui todos os placeholders [chave] encontrados
         const valorSubstituido = valorOriginal.replace(/\[([^\]]+)\]/g, (match, key) => {
           const normalizedKey = normalizarChave(key);
           if (normalizedKey in dicionario) {
-            const val = dicionario[normalizedKey];
-            // Números ficam como números para preservar formatação
-            return String(val);
+            return String(dicionario[normalizedKey]);
           }
-          // Placeholder não encontrado — mantém como estava
-          return match;
+          return match; // mantém placeholder se não encontrado
         });
 
-        // Atualiza a célula
-        // Se o valor original era número e o substituído é numérico, mantém como número
-        if (cell.t === 'n' || (!isNaN(Number(valorSubstituido)) && valorSubstituido !== '' && valorSubstituido !== matchOriginal(valorOriginal))) {
-          const num = Number(valorSubstituido);
-          if (!isNaN(num)) {
-            cell.v = num;
-            cell.t = 'n';
-          } else {
-            cell.v = valorSubstituido;
-            cell.t = 's';
-          }
+        // Salvar estilo, alterar valor, restaurar estilo
+        const savedFill = cell.fill;
+        const savedFont = cell.font;
+        const savedBorder = cell.border;
+        const savedAlignment = cell.alignment;
+        const savedNumFmt = cell.numFmt;
+
+        // Se o valor substituído é puramente numérico, manter como número
+        const numVal = Number(valorSubstituido);
+        if (!isNaN(numVal) && valorSubstituido !== '' && !valorSubstituido.includes('[')) {
+          cell.value = numVal;
         } else {
-          cell.v = valorSubstituido;
-          cell.t = 's';
+          cell.value = valorSubstituido;
         }
-      }
-    }
+
+        // Restaurar estilo
+        if (savedFill) cell.fill = savedFill;
+        if (savedFont) cell.font = savedFont;
+        if (savedBorder) cell.border = savedBorder;
+        if (savedAlignment) cell.alignment = savedAlignment;
+        if (savedNumFmt) cell.numFmt = savedNumFmt;
+      });
+    });
   });
 
-  // Gera o novo arquivo .xlsx
-  const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  // Salvar arquivo preenchido
+  const outFile = `/tmp/planilha_preenchida_${Date.now()}.xlsx`;
+  await workbook.xlsx.writeFile(outFile);
 
-  return new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  // Ler arquivo e converter para Blob
+  const outBuffer = fs.readFileSync(outFile);
+
+  // Limpar arquivos temporários
+  try { fs.unlinkSync(tmpFile); } catch {}
+  try { fs.unlinkSync(outFile); } catch {}
+
+  return new Blob([outBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
 
 // Helper para evitar warning de variável não usada
