@@ -8306,7 +8306,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
       // Criar canvas único
       // ⚠️ iOS Safari limita canvas a ~16.7M pixels — escalar down se necessário
-      const MAX_CANVAS_PIXELS = 14_000_000; // margem de segurança
+      const MAX_CANVAS_PIXELS = 16_000_000; // aumentado de 14M para 16M para melhorar qualidade
       let escalaReal = SCALE;
       const pixelsNecessarios = A4_W * alturaFinal * SCALE * SCALE;
       if (pixelsNecessarios > MAX_CANVAS_PIXELS) {
@@ -8513,7 +8513,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       }
 
       // Converter canvas para JPEG data URL
-      const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.98);
       console.log(`[PDF] Canvas único: ${canvas.width}x${canvas.height} px, JPEG: ${jpegDataUrl.length} chars`);
 
       // Criar PDF a partir do JPEG (1 página, dimensões reais)
@@ -8645,7 +8645,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       alturaFinal += 60 + 140 + 40 + padding;
 
       // ⚠️ iOS Safari limita canvas a ~16.7M pixels — escalar down se necessário
-      const MAX_CANVAS_PIXELS_RESUMO = 14_000_000;
+      // Aumentado de 14M para 16M para melhorar qualidade da tarja
+      const MAX_CANVAS_PIXELS_RESUMO = 16_000_000;
       let escalaResumo = SCALE;
       const pixelsResumo = A4_W * alturaFinal * SCALE * SCALE;
       if (pixelsResumo > MAX_CANVAS_PIXELS_RESUMO) {
@@ -8875,7 +8876,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       }
 
       // Converter canvas para PDF (usando criarPdfDeImagem — sem jspdf)
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      // Qualidade aumentada de 0.95 para 0.98 para melhorar nitidez da tarja ao dar zoom
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
       return await criarPdfDeImagem(imgData);
     } catch (err) {
       console.error('Erro ao gerar PDF do resumo:', err);
