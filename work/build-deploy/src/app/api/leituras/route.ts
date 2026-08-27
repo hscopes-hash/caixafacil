@@ -251,17 +251,18 @@ export async function PUT(request: NextRequest) {
     }
 
     // Atualizar todas as leituras do cliente naquele timestamp
+    // Janela ampliada para ±5 minutos (o upload do PDF é assíncrono e pode demorar)
     const dataInicio = new Date(dataISO);
-    dataInicio.setMinutes(dataInicio.getMinutes() - 1);
+    dataInicio.setMinutes(dataInicio.getMinutes() - 5);
     const dataFim = new Date(dataISO);
-    dataFim.setMinutes(dataFim.getMinutes() + 1);
+    dataFim.setMinutes(dataFim.getMinutes() + 5);
 
     const result = await db.$executeRawUnsafe(`
       UPDATE leituras SET "pdfGcsPath" = $1
       WHERE "clienteId" = $2 AND "dataLeitura" BETWEEN $3 AND $4
     `, pdfGcsPath, clienteId, dataInicio, dataFim);
 
-    console.log(`[LEITURAS PUT] ${result} leitura(s) atualizadas com pdfGcsPath=${pdfGcsPath}`);
+    console.log(`[LEITURAS PUT] ${result} leitura(s) atualizadas com pdfGcsPath=${pdfGcsPath} (janela: ${dataInicio.toISOString()} a ${dataFim.toISOString()})`);
 
     return NextResponse.json({ success: true, updated: result });
   } catch (error) {
