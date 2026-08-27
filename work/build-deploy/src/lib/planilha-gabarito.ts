@@ -319,15 +319,10 @@ export async function gerarPlanilhaPreenchida(
   const base64Data = gabaritoBase64.includes(',') ? gabaritoBase64.split(',')[1] : gabaritoBase64;
   const buffer = Buffer.from(base64Data, 'base64');
 
-  // Escrever para arquivo temporário (ExcelJS precisa de arquivo ou stream)
-  const tmpFile = `/tmp/gabarito_${Date.now()}.xlsx`;
-  const fs = await import('fs');
-  fs.writeFileSync(tmpFile, buffer);
-
-  // Ler com ExcelJS — preserva formatação
+  // Ler com ExcelJS a partir do Buffer (sem usar fs — compatível com browser)
   const ExcelJS = (await import('exceljs')).default;
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(tmpFile);
+  await workbook.xlsx.load(buffer);
 
   // Para cada sheet, substitui placeholders em todas as células
   workbook.eachSheet((sheet) => {
@@ -370,16 +365,8 @@ export async function gerarPlanilhaPreenchida(
     });
   });
 
-  // Salvar arquivo preenchido
-  const outFile = `/tmp/planilha_preenchida_${Date.now()}.xlsx`;
-  await workbook.xlsx.writeFile(outFile);
-
-  // Ler arquivo e converter para Blob
-  const outBuffer = fs.readFileSync(outFile);
-
-  // Limpar arquivos temporários
-  try { fs.unlinkSync(tmpFile); } catch {}
-  try { fs.unlinkSync(outFile); } catch {}
+  // Gerar Buffer de saída (sem usar fs — compatível com browser)
+  const outBuffer = await workbook.xlsx.writeBuffer();
 
   return new Blob([outBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
