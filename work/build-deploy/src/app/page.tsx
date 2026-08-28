@@ -6153,9 +6153,18 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           // Fonte adaptativa: mínimo 20px, máximo 44px
           // Para 720px → 22px | Para 1200px → 37px | Para 1920px → 44px(cap)
           const tamanhoFonteBase = Math.max(20, Math.min(44, Math.round(larguraOriginal / 30)));
-          const alturaTarja = Math.round(tamanhoFonteBase * 3.0);
+
+          // Fator de orientação: fotos HORIZONTAIS (paisagem) têm +50% na fonte da tarja vermelha.
+          // Motivo: ao dar zoom no PDF, fotos horizontais ocupam menos espaço vertical na página
+          // e a tarja fica relativamente pequena. Aumentar a fonte melhora a legibilidade.
+          // Fotos VERTICAIS (retrato) mantêm o tamanho original.
+          const ehHorizontal = larguraOriginal > alturaOriginal;
+          const fatorOrientacaoTarja = ehHorizontal ? 1.5 : 1.0;
+          const tamanhoFonteTarja = Math.round(tamanhoFonteBase * fatorOrientacaoTarja);
+          const alturaTarja = Math.round(tamanhoFonteTarja * 3.0);
 
           // Altura da faixa de alerta (dobro do tamanho anterior, fonte no dobro)
+          // ⚠️ Faixa de alerta NÃO é afetada pelo fator de orientação (só a tarja vermelha).
           const temAlerta = alertaDefeito === true && mensagemAlerta;
           const alturaAlerta = temAlerta ? Math.round(tamanhoFonteBase * 3.6) : 0; // dobro de 1.8
 
@@ -6205,7 +6214,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           ctx.textAlign = 'left';
 
           // Tamanho da fonte adaptativo à largura da imagem
-          const tamanhoFonte = tamanhoFonteBase;
+          // ⚠️ Usa tamanhoFonteTarja (com fator de orientação) em vez de tamanhoFonteBase.
+          // Em fotos horizontais: +50% na fonte para melhorar legibilidade ao dar zoom no PDF.
+          const tamanhoFonte = tamanhoFonteTarja;
           const padding = Math.max(12, Math.round(larguraOriginal * 0.03));
 
           // Posições verticais das linhas (centralizadas na tarja)
