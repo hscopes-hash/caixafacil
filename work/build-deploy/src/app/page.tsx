@@ -4425,6 +4425,44 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
   // (Função abrirWhatsAppLink movida para escopo global do arquivo — usada por LoginPage e App)
 
+  // ============================================
+  // AUTO-RESTAURAÇÃO AO ENTRAR NA TELA DE LEITURAS
+  // ============================================
+  // Quando o componente LeiturasPage é montado (usuário entrou na aba "leituras"),
+  // se há um clienteSelecionado restaurado do localStorage E ainda não carregamos
+  // as máquinas dele, chama loadMaquinasCliente automaticamente.
+  // Isso restaura: máquinas, entradas/saídas digitadas, receitas/despesas extras,
+  // fotos de cartão/mercado, recebido, forma de pagamento, etc.
+  // Sem este effect, o usuário precisaria re-selecionar o cliente para ver os campos.
+  const leiturasAutoLoadedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!clienteSelecionado) {
+      leiturasAutoLoadedRef.current = null;
+      return;
+    }
+    // Só auto-carrega uma vez por cliente (evita loop com loadMaquinasCliente)
+    if (leiturasAutoLoadedRef.current === clienteSelecionado.id) return;
+    // Se as máquinas já foram carregadas para este cliente, não refaz
+    if (maquinas.length > 0 && maquinas[0]?.clienteId === clienteSelecionado.id) {
+      leiturasAutoLoadedRef.current = clienteSelecionado.id;
+      return;
+    }
+    leiturasAutoLoadedRef.current = clienteSelecionado.id;
+    // Derivar modo de operação do cliente (igual ao handleClienteChange)
+    let modoNovo: 'COBRANCA' | 'LEITURA' | 'AJUSTE' = 'COBRANCA';
+    if (!ajusteMode) {
+      modoNovo = (clienteSelecionado.formaCobranca === 'LEITURA' ? 'LEITURA' : 'COBRANCA') as 'COBRANCA' | 'LEITURA';
+      setModoOperacao(modoNovo);
+    } else {
+      modoNovo = 'AJUSTE';
+      setModoOperacao('AJUSTE');
+    }
+    console.log(`[LeiturasPage auto-restore] Restaurando persistência para cliente ${clienteSelecionado.nome} (${clienteSelecionado.id}) modo=${modoNovo}`);
+    loadMaquinasCliente(clienteSelecionado.id, modoNovo);
+    loadDebitosVencidos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clienteSelecionado?.id]);
+
   // Enviar texto via WhatsApp — usa navigator.share (sem limite de tamanho) ou wa.me link
   const enviarWhatsAppTextoSeguro = async (texto: string, phone?: string, grupoUrl?: string) => {
     // Método 1: navigator.share com texto (funciona no Chrome Android/iOS, sem limite de tamanho)
@@ -15980,18 +16018,75 @@ export default function App() {
     };
   }, [isAuthenticated, requestWakeLock]);
 
-  const [activeTab, setActiveTabState] = useState(() => {
-    try {
-      const saved = localStorage.getItem('caixafacil-active-tab');
-      return saved || 'dashboard';
-    } catch { return 'dashboard'; }
-  });
+  const [activeTab, setActiveTabState] = useState('dashboard');
 
   // Wrapper que salva no localStorage sempre que muda
+  // (mantém o tab ao recarregar a página, mas é resetado para 'dashboard' no login/logout)
   const setActiveTab = useCallback((tab: string) => {
     setActiveTabState(tab);
     try { localStorage.setItem('caixafacil-active-tab', tab); } catch {}
   }, []);
+
+  // Após login (isAuthenticated: false → true), sempre voltar para o menu principal (dashboard).
+  // Previne o bug de o usuário reabrir o app e cair direto na aba onde estava antes (ex: cobrança).
+  const prevAuthRef = useRef(false);
+  useEffect(() => {
+    if (!prevAuthRef.current && isAuthenticated) {
+      // acabou de logar
+      setActiveTabState('dashboard');
+      try { localStorage.setItem('caixafacil-active-tab', 'dashboard'); } catch {}
+    }
+    prevAuthRef.current = isAuthenticated;
+  }, [isAuthenticated]);
+
+  // Ao fazer logout, limpar a aba salva para que a próxima sessão comece no dashboard.
+  // Também captura o botão "Voltar" do Android: se não estiver no dashboard, volta para ele;
+  // se já estiver no dashboard (e logado), previne saída acidental do app.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      try { localStorage.removeItem('caixafacil-active-tab'); } catch {}
+      // Reseta histórico para que o próximo login não herde entradas antigas
+      try {
+        while (window.history.state && (window.history.state as any).__caixafacil_nav) {
+          window.history.back();
+        }
+      } catch {}
+      return;
+    }
+
+    // Empilhar uma entrada "dummy" no histórico quando o usuário sai do dashboard.
+    // Assim, o botão Voltar do Android volta para o dashboard em vez de fechar o app.
+    const pushDummyIfAway = () => {
+      if (activeTab !== 'dashboard' && !sessionStorage.getItem('cf-history-pushed')) {
+        try {
+          window.history.pushState({ __caixafacil_nav: true } as any, '');
+          sessionStorage.setItem('cf-history-pushed', '1');
+        } catch {}
+      } else if (activeTab === 'dashboard' && sessionStorage.getItem('cf-history-pushed')) {
+        try { sessionStorage.removeItem('cf-history-pushed'); } catch {}
+      }
+    };
+    pushDummyIfAway();
+
+    const onPopState = () => {
+      try { sessionStorage.removeItem('cf-history-pushed'); } catch {}
+      if (activeTab !== 'dashboard') {
+        // Voltar do sub-tab → vai para dashboard
+        setActiveTabState('dashboard');
+        try { localStorage.setItem('caixafacil-active-tab', 'dashboard'); } catch {}
+        // Re-empilhar para futuro back não sair do app
+        try {
+          window.history.pushState({ __caixafacil_nav: true } as any, '');
+          sessionStorage.setItem('cf-history-pushed', '1');
+        } catch {}
+      }
+      // Se já estava no dashboard, deixa o navegador fechar (comportamento padrão)
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+    };
+  }, [isAuthenticated, activeTab]);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [assinaturaPlanoNome, setAssinaturaPlanoNome] = useState<string | null>(null);
