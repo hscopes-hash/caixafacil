@@ -6154,12 +6154,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           // Para 720px → 22px | Para 1200px → 37px | Para 1920px → 44px(cap)
           const tamanhoFonteBase = Math.max(20, Math.min(44, Math.round(larguraOriginal / 30)));
 
-          // Fator de orientação: fotos HORIZONTAIS (paisagem) têm +50% na fonte da tarja vermelha.
-          // Motivo: ao dar zoom no PDF, fotos horizontais ocupam menos espaço vertical na página
-          // e a tarja fica relativamente pequena. Aumentar a fonte melhora a legibilidade.
-          // Fotos VERTICAIS (retrato) mantêm o tamanho original.
-          const ehHorizontal = larguraOriginal > alturaOriginal;
-          const fatorOrientacaoTarja = ehHorizontal ? 1.5 : 1.0;
+          // Fator de orientação: fotos VERTICAIS (retrato) têm +50% na fonte da tarja vermelha.
+          // Motivo: ao dar zoom no PDF, fotos verticais têm a tarja proporcionalmente menor
+          // comparada com a foto. Aumentar a fonte melhora a legibilidade da tarja.
+          // Fotos HORIZONTAIS (paisagem) mantêm o tamanho original.
+          const ehVertical = alturaOriginal >= larguraOriginal;
+          const fatorOrientacaoTarja = ehVertical ? 1.5 : 1.0;
           const tamanhoFonteTarja = Math.round(tamanhoFonteBase * fatorOrientacaoTarja);
           const alturaTarja = Math.round(tamanhoFonteTarja * 3.0);
 
