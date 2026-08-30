@@ -6150,18 +6150,23 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             alturaOriginal = Math.round(alturaOriginal * ratio);
           }
           
-          // Fonte adaptativa: mínimo 20px, máximo 44px
-          // Para 720px → 22px | Para 1200px → 37px | Para 1920px → 44px(cap)
-          const tamanhoFonteBase = Math.max(20, Math.min(44, Math.round(larguraOriginal / 30)));
-
-          // Fator de orientação: fotos VERTICAIS (retrato) têm +50% na fonte da tarja vermelha.
-          // Motivo: ao dar zoom no PDF, fotos verticais têm a tarja proporcionalmente menor
-          // comparada com a foto. Aumentar a fonte melhora a legibilidade da tarja.
-          // Fotos HORIZONTAIS (paisagem) mantêm o tamanho original.
+          // ============================================
+          // FONTE ADAPTATIVA POR ORIENTAÇÃO
+          // ============================================
+          // Fotos VERTICAIS (retrato): baseiam a fonte na ALTURA (lado maior) com divisor generoso
+          //   — ex: 720x1280 → altura/35 = 36px (vs 24px antigo = +50%)
+          //   — ex: 1080x1920 → altura/35 = 54px (vs 36px antigo = +50%)
+          //   — Cap 70px (era 44) para aproveitar o espaço extra
+          // Fotos HORIZONTAIS (paisagem): comportamento original (largura/30, cap 44)
           const ehVertical = alturaOriginal >= larguraOriginal;
-          const fatorOrientacaoTarja = ehVertical ? 1.5 : 1.0;
-          const tamanhoFonteTarja = Math.round(tamanhoFonteBase * fatorOrientacaoTarja);
-          const alturaTarja = Math.round(tamanhoFonteTarja * 3.0);
+          let tamanhoFonteBase: number;
+          if (ehVertical) {
+            tamanhoFonteBase = Math.max(24, Math.min(70, Math.round(alturaOriginal / 35)));
+          } else {
+            tamanhoFonteBase = Math.max(20, Math.min(44, Math.round(larguraOriginal / 30)));
+          }
+          // Altura da tarja: 2.4x fonte (era 3.0x) — stripe mais compacta, linhas mais próximas
+          const alturaTarja = Math.round(tamanhoFonteBase * 2.4);
 
           // Altura da faixa de alerta (dobro do tamanho anterior, fonte no dobro)
           // ⚠️ Faixa de alerta NÃO é afetada pelo fator de orientação (só a tarja vermelha).
@@ -6213,14 +6218,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           ctx.textBaseline = 'middle';
           ctx.textAlign = 'left';
 
-          // Tamanho da fonte adaptativo à largura da imagem
-          // ⚠️ Usa tamanhoFonteTarja (com fator de orientação) em vez de tamanhoFonteBase.
-          // Em fotos horizontais: +50% na fonte para melhorar legibilidade ao dar zoom no PDF.
-          const tamanhoFonte = tamanhoFonteTarja;
+          // Tamanho da fonte para desenhar a tarja
+          // tamanhoFonteBase já é orientado à vertical/horizontal (calculado acima)
+          const tamanhoFonte = tamanhoFonteBase;
           const padding = Math.max(12, Math.round(larguraOriginal * 0.03));
 
           // Posições verticais das linhas (centralizadas na tarja)
-          const espacamentoEntreLinhas = Math.round(tamanhoFonte * 1.5);
+          // Espaçamento 1.2x fonte (era 1.5x) — linhas mais juntas, tarja visualmente compacta
+          const espacamentoEntreLinhas = Math.round(tamanhoFonte * 1.2);
           const inicioTarja = offsetYTarja + alturaTarja / 2;
           const linha1Y = inicioTarja - espacamentoEntreLinhas / 2;
           const linha2Y = inicioTarja + espacamentoEntreLinhas / 2;
@@ -6301,8 +6306,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             });
           }
 
-          // Converter para base64 com qualidade reduzida
-          resolve(canvas.toDataURL('image/jpeg', 0.8));
+          // Converter para base64 — qualidade 0.95 (era 0.8) para preservar nitidez do texto da tarja
+          // JPEG 0.8 degrada bordas de texto branco sobre vermelho, ficando borrado no PDF zoom
+          resolve(canvas.toDataURL('image/jpeg', 0.95));
         } catch (error) {
           clearTimeout(timeout);
           reject(new Error('Erro ao processar canvas: ' + (error instanceof Error ? error.message : 'Erro desconhecido')));
