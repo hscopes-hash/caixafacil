@@ -6153,20 +6153,20 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           // ============================================
           // FONTE ADAPTATIVA POR ORIENTAÇÃO
           // ============================================
-          // Fotos VERTICAIS (retrato): baseiam a fonte na ALTURA (lado maior) com divisor generoso
-          //   — ex: 720x1280 → altura/35 = 36px (vs 24px antigo = +50%)
-          //   — ex: 1080x1920 → altura/35 = 54px (vs 36px antigo = +50%)
-          //   — Cap 70px (era 44) para aproveitar o espaço extra
+          // Fotos VERTICAIS (retrato): baseiam a fonte na ALTURA (lado maior) com divisor agressivo
+          //   — ex: 720x1280  → altura/22 = 58px (vs 24px antigo = +140%)
+          //   — ex: 1080x1920 → altura/22 = 87px (vs 36px antigo = +140%)
+          //   — Cap 100px para aproveitar o espaço extra em fotos verticais
           // Fotos HORIZONTAIS (paisagem): comportamento original (largura/30, cap 44)
           const ehVertical = alturaOriginal >= larguraOriginal;
           let tamanhoFonteBase: number;
           if (ehVertical) {
-            tamanhoFonteBase = Math.max(24, Math.min(70, Math.round(alturaOriginal / 35)));
+            tamanhoFonteBase = Math.max(28, Math.min(100, Math.round(alturaOriginal / 22)));
           } else {
             tamanhoFonteBase = Math.max(20, Math.min(44, Math.round(larguraOriginal / 30)));
           }
-          // Altura da tarja: 2.4x fonte (era 3.0x) — stripe mais compacta, linhas mais próximas
-          const alturaTarja = Math.round(tamanhoFonteBase * 2.4);
+          // Altura da tarja: 2.2x fonte — mais compacta, fonte maior ocupa proporção maior
+          const alturaTarja = Math.round(tamanhoFonteBase * 2.2);
 
           // Altura da faixa de alerta (dobro do tamanho anterior, fonte no dobro)
           // ⚠️ Faixa de alerta NÃO é afetada pelo fator de orientação (só a tarja vermelha).
@@ -6224,8 +6224,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           const padding = Math.max(12, Math.round(larguraOriginal * 0.03));
 
           // Posições verticais das linhas (centralizadas na tarja)
-          // Espaçamento 1.2x fonte (era 1.5x) — linhas mais juntas, tarja visualmente compacta
-          const espacamentoEntreLinhas = Math.round(tamanhoFonte * 1.2);
+          // Espaçamento 1.0x fonte (era 1.5x) — linhas justas, sem espaço extra visível
+          const espacamentoEntreLinhas = Math.round(tamanhoFonte * 1.0);
           const inicioTarja = offsetYTarja + alturaTarja / 2;
           const linha1Y = inicioTarja - espacamentoEntreLinhas / 2;
           const linha2Y = inicioTarja + espacamentoEntreLinhas / 2;
