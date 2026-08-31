@@ -6151,21 +6151,18 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           }
           
           // ============================================
-          // FONTE ADAPTATIVA POR ORIENTAÇÃO
+          // FONTE ADAPTATIVA — GRANDE PARA TODAS AS ORIENTAÇÕES
           // ============================================
-          // Fotos VERTICAIS (retrato): baseiam a fonte na ALTURA (lado maior) com divisor agressivo
-          //   — ex: 720x1280  → altura/22 = 58px (vs 24px antigo = +140%)
-          //   — ex: 1080x1920 → altura/22 = 87px (vs 36px antigo = +140%)
-          //   — Cap 100px para aproveitar o espaço extra em fotos verticais
-          // Fotos HORIZONTAIS (paisagem): comportamento original (largura/30, cap 44)
-          const ehVertical = alturaOriginal >= larguraOriginal;
-          let tamanhoFonteBase: number;
-          if (ehVertical) {
-            tamanhoFonteBase = Math.max(28, Math.min(100, Math.round(alturaOriginal / 22)));
-          } else {
-            tamanhoFonteBase = Math.max(20, Math.min(44, Math.round(larguraOriginal / 30)));
-          }
-          // Altura da tarja: 2.2x fonte — mais compacta, fonte maior ocupa proporção maior
+          // Base: maior dimensão / 22 (cap 100px)
+          //   — 720x1280 (vertical)   → 58px
+          //   — 1280x720 (horizontal)  → 58px
+          //   — 1080x1920 (vertical)  → 87px
+          //   — 1920x1080 (horizontal) → 87px
+          // Antes: horizontal usava largura/30 cap 44 (muito pequeno)
+          // Agora: ambas orientações usam mesma fórmula agressiva
+          const maiorDimensao = Math.max(larguraOriginal, alturaOriginal);
+          const tamanhoFonteBase = Math.max(28, Math.min(100, Math.round(maiorDimensao / 22)));
+          // Altura da tarja: 2.2x fonte — mais compacta
           const alturaTarja = Math.round(tamanhoFonteBase * 2.2);
 
           // Altura da faixa de alerta (dobro do tamanho anterior, fonte no dobro)
@@ -7464,7 +7461,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       }
       await Promise.race([Promise.all(promessas), new Promise<void>(r => setTimeout(r, 10000))]);
 
-      const CARD_HEIGHT = 320;
+      // CARD_HEIGHT aumentado de 320 para 490 — foto agora é 450×450 (era 280×280)
+      // Fotos maiores no PDF = tarja vermelha mais legível ao dar zoom
+      const CARD_HEIGHT = 490;
       const temReceitasExtras = modoOperacao !== 'COBRANCA' && receitasFinal.length > 0;
       const temDespesasExtras = modoOperacao !== 'COBRANCA' && despesasFinal.length > 0;
 
@@ -7523,7 +7522,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
         ctx.strokeRect(padding, y, A4_W - padding * 2, CARD_HEIGHT - 20);
         const img = imagensPorMaquinaId.get(m.id);
-        const fotoX = padding + 10, fotoY = y + 10, fotoW = 280, fotoH = 280;
+        // Foto aumentada de 280×280 para 450×450 — tarja fica 1.6x maior no PDF
+        const fotoX = padding + 10, fotoY = y + 10, fotoW = 450, fotoH = 450;
         ctx.fillStyle = '#f0f0f0'; ctx.fillRect(fotoX, fotoY, fotoW, fotoH);
         if (img && img.complete && img.naturalWidth > 0) {
           const ar = img.naturalWidth / img.naturalHeight;
