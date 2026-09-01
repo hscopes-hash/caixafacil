@@ -6153,15 +6153,17 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           // ============================================
           // FONTE ADAPTATIVA POR ORIENTAÇÃO — VERTICAL APENAS
           // ============================================
-          // Fotos VERTICAIS (retrato): baseiam a fonte na ALTURA (lado maior)
-          //   — 720x1280  → altura/22 = 58px
-          //   — 1080x1920 → altura/22 = 87px
-          //   — Cap 100px
+          // Fotos VERTICAIS (retrato): fonte agressiva para tarja legível após escala no PDF
+          //   — 720x1280  → altura/12 = 106px (cap 150) — fonte MUITO grande na foto original
+          //   — 1080x1920 → altura/12 = 160px → cap 150
+          //   Quando a foto é escalada para 280×280 no PDF (3-4x menor), a fonte ainda fica legível
+          //   — 720x1280 com fonte 106px → no PDF 280px largura: ~41px (legível com zoom)
+          //   — antigo altura/22 = 58px → no PDF 280px: ~22px (ilegível com zoom)
           // Fotos HORIZONTAIS (paisagem): comportamento original (largura/30, cap 44)
           const ehVertical = alturaOriginal >= larguraOriginal;
           let tamanhoFonteBase: number;
           if (ehVertical) {
-            tamanhoFonteBase = Math.max(28, Math.min(100, Math.round(alturaOriginal / 22)));
+            tamanhoFonteBase = Math.max(60, Math.min(150, Math.round(alturaOriginal / 12)));
           } else {
             tamanhoFonteBase = Math.max(20, Math.min(44, Math.round(larguraOriginal / 30)));
           }
@@ -6224,8 +6226,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           const padding = Math.max(12, Math.round(larguraOriginal * 0.03));
 
           // Posições verticais das linhas (centralizadas na tarja)
-          // Espaçamento: vertical 1.0x (linhas justas), horizontal 1.5x (original)
-          const espacamentoEntreLinhas = Math.round(tamanhoFonte * (ehVertical ? 1.0 : 1.5));
+          // Espaçamento: vertical 0.6x (linhas bem juntas), horizontal 1.5x (original)
+          // 0.6x: com fonte grande (100+px), linhas quase se tocam — máxima legibilidade no PDF
+          const espacamentoEntreLinhas = Math.round(tamanhoFonte * (ehVertical ? 0.6 : 1.5));
           const inicioTarja = offsetYTarja + alturaTarja / 2;
           const linha1Y = inicioTarja - espacamentoEntreLinhas / 2;
           const linha2Y = inicioTarja + espacamentoEntreLinhas / 2;
