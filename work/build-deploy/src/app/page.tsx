@@ -6181,7 +6181,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
           // Função helper para desenhar uma faixa de alerta em uma posição Y
           const desenharFaixaAlerta = (posY: number) => {
-            ctx.fillStyle = '#dc2626'; // vermelho
+            ctx.fillStyle = '#f97316'; // LARANJA (era vermelho #dc2626) — teste de deploy
             ctx.fillRect(0, posY, larguraOriginal, alturaAlerta);
             ctx.fillStyle = '#ffffff'; // texto branco
             ctx.textBaseline = 'middle';
@@ -6211,9 +6211,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             desenharFaixaAlerta(offsetYAlerta);
           }
 
-          // Desenhar tarja vermelha (abaixo do alerta inferior)
+          // Desenhar tarja LARANJA (abaixo do alerta inferior) — era vermelha
           const offsetYTarja = offsetYAlerta + alturaAlerta;
-          ctx.fillStyle = '#dc2626'; // vermelho-600
+          ctx.fillStyle = '#f97316'; // LARANJA (era vermelho-600 #dc2626) — teste de deploy
           ctx.fillRect(0, offsetYTarja, larguraOriginal, alturaTarja);
 
           // Configurar texto
