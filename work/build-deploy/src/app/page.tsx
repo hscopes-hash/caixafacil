@@ -6151,19 +6151,22 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           }
           
           // ============================================
-          // FONTE ADAPTATIVA — GRANDE PARA TODAS AS ORIENTAÇÕES
+          // FONTE ADAPTATIVA POR ORIENTAÇÃO — VERTICAL APENAS
           // ============================================
-          // Base: maior dimensão / 22 (cap 100px)
-          //   — 720x1280 (vertical)   → 58px
-          //   — 1280x720 (horizontal)  → 58px
-          //   — 1080x1920 (vertical)  → 87px
-          //   — 1920x1080 (horizontal) → 87px
-          // Antes: horizontal usava largura/30 cap 44 (muito pequeno)
-          // Agora: ambas orientações usam mesma fórmula agressiva
-          const maiorDimensao = Math.max(larguraOriginal, alturaOriginal);
-          const tamanhoFonteBase = Math.max(28, Math.min(100, Math.round(maiorDimensao / 22)));
-          // Altura da tarja: 2.2x fonte — mais compacta
-          const alturaTarja = Math.round(tamanhoFonteBase * 2.2);
+          // Fotos VERTICAIS (retrato): baseiam a fonte na ALTURA (lado maior)
+          //   — 720x1280  → altura/22 = 58px
+          //   — 1080x1920 → altura/22 = 87px
+          //   — Cap 100px
+          // Fotos HORIZONTAIS (paisagem): comportamento original (largura/30, cap 44)
+          const ehVertical = alturaOriginal >= larguraOriginal;
+          let tamanhoFonteBase: number;
+          if (ehVertical) {
+            tamanhoFonteBase = Math.max(28, Math.min(100, Math.round(alturaOriginal / 22)));
+          } else {
+            tamanhoFonteBase = Math.max(20, Math.min(44, Math.round(larguraOriginal / 30)));
+          }
+          // Altura da tarja: vertical 2.2x (compacta), horizontal 3.0x (original)
+          const alturaTarja = Math.round(tamanhoFonteBase * (ehVertical ? 2.2 : 3.0));
 
           // Altura da faixa de alerta (dobro do tamanho anterior, fonte no dobro)
           // ⚠️ Faixa de alerta NÃO é afetada pelo fator de orientação (só a tarja vermelha).
@@ -6221,8 +6224,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           const padding = Math.max(12, Math.round(larguraOriginal * 0.03));
 
           // Posições verticais das linhas (centralizadas na tarja)
-          // Espaçamento 1.0x fonte (era 1.5x) — linhas justas, sem espaço extra visível
-          const espacamentoEntreLinhas = Math.round(tamanhoFonte * 1.0);
+          // Espaçamento: vertical 1.0x (linhas justas), horizontal 1.5x (original)
+          const espacamentoEntreLinhas = Math.round(tamanhoFonte * (ehVertical ? 1.0 : 1.5));
           const inicioTarja = offsetYTarja + alturaTarja / 2;
           const linha1Y = inicioTarja - espacamentoEntreLinhas / 2;
           const linha2Y = inicioTarja + espacamentoEntreLinhas / 2;
