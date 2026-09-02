@@ -6167,8 +6167,10 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           } else {
             tamanhoFonteBase = Math.max(20, Math.min(44, Math.round(larguraOriginal / 30)));
           }
-          // Altura da tarja: vertical 2.2x (compacta), horizontal 3.0x (original)
-          const alturaTarja = Math.round(tamanhoFonteBase * (ehVertical ? 2.2 : 3.0));
+          // Altura da tarja:
+          // - Vertical: 7.0x fonte (comporta 6 linhas × 1.05x + padding)
+          // - Horizontal: 3.0x fonte (2 linhas × 1.5x, original)
+          const alturaTarja = Math.round(tamanhoFonteBase * (ehVertical ? 7.0 : 3.0));
 
           // Altura da faixa de alerta (dobro do tamanho anterior, fonte no dobro)
           // ⚠️ Faixa de alerta NÃO é afetada pelo fator de orientação (só a tarja vermelha).
@@ -6225,19 +6227,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           const tamanhoFonte = tamanhoFonteBase;
           const padding = Math.max(12, Math.round(larguraOriginal * 0.03));
 
-          // Posições verticais das linhas (centralizadas na tarja)
-          // Espaçamento: vertical 0.6x (linhas bem juntas), horizontal 1.5x (original)
-          // 0.6x: com fonte grande (100+px), linhas quase se tocam — máxima legibilidade no PDF
-          const espacamentoEntreLinhas = Math.round(tamanhoFonte * (ehVertical ? 0.6 : 1.5));
-          const inicioTarja = offsetYTarja + alturaTarja / 2;
-          const linha1Y = inicioTarja - espacamentoEntreLinhas / 2;
-          const linha2Y = inicioTarja + espacamentoEntreLinhas / 2;
-
-          // === DESENHO POR COLUNAS (alinhamento perfeito) ===
-          ctx.fillStyle = '#ffffff'; // branco
-          const tamanhoFonteCabecalho = Math.round(tamanhoFonte * 1.15); // cabeçalhos 15% maiores
-          ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
-
           // Formatar valores
           const usuarioLimitado = operador.substring(0, 8);
           const entradaStr = String(entrada ?? '-');
@@ -6245,68 +6234,130 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           const origemStr = origem || '-';
           const numMaquinaStr = numeroMaquina || '-';
 
-          // Medir largura de cada texto para posicionar colunas
-          const cabecalhos = ['Data Hora          ', 'NUM', 'Operador', 'ENTR', 'SAÍDA', 'Origem'];
-          const valores = [data, numMaquinaStr, usuarioLimitado, entradaStr, saidaStr, origemStr];
+          ctx.fillStyle = '#ffffff'; // branco
 
-          // Medir a largura de cada cabeçalho (com fonte maior) e valor (com fonte normal)
-          const largurasCab = cabecalhos.map(t => ctx.measureText(t).width);
-          ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`; // fonte normal para valores
-          const largurasVal = valores.map(t => ctx.measureText(t).width);
+          // ============================================
+          // LAYOUT DIFERENCIADO POR ORIENTAÇÃO
+          // ============================================
+          // VERTICAL: 6 linhas × 2 colunas (label | valor) — fonte enorme, sem fallback
+          // HORIZONTAL: 6 colunas × 2 linhas (cabeçalho | valor) — layout original
+          if (ehVertical) {
+            // Layout vertical: 6 linhas empilhadas, cada uma com "Label: Valor"
+            const linhas = [
+              { label: 'Data Hora:', valor: data },
+              { label: 'NUM:', valor: numMaquinaStr },
+              { label: 'Operador:', valor: usuarioLimitado },
+              { label: 'Entrada:', valor: entradaStr },
+              { label: 'Saída:', valor: saidaStr },
+              { label: 'Origem:', valor: origemStr },
+            ];
 
-          // Largura da barra separadora " | " (medida com fonte de cabeçalho)
-          ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
-          const sepLargura = ctx.measureText(' | ').width;
-          const espacoEntreColunas = tamanhoFonteCabecalho * 0.5; // espaço extra após o separador
+            // Fonte do label (cabeçalho) — 90% da fonte normal (labels são curtos)
+            const fonteLabel = Math.round(tamanhoFonte * 0.9);
+            // Espaçamento entre linhas: 1.05x fonte (mínimo para não sobrepor)
+            const linhaAltura = Math.round(tamanhoFonte * 1.05);
+            // Posição Y inicial (centraliza o bloco de 6 linhas na tarja)
+            const totalAlturaTexto = linhas.length * linhaAltura;
+            let yAtual = offsetYTarja + (alturaTarja - totalAlturaTexto) / 2 + linhaAltura / 2;
 
-          // Calcular largura total ocupada
-          let larguraTotal = 0;
-          const colunas = cabecalhos.map((cab, i) => {
-            const larguraColuna = Math.max(largurasCab[i], largurasVal[i]) + sepLargura;
-            const x = padding + larguraTotal;
-            larguraTotal += larguraColuna + espacoEntreColunas;
-            return { cabecalho: cab, valor: valores[i], x };
-          });
-
-          // Se couber na imagem, desenhar com colunas alinhadas
-          if (larguraTotal <= larguraOriginal - padding) {
-            // Linha 1: Cabeçalhos (fonte maior)
-            ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
-            colunas.forEach(col => {
-              ctx.fillText(col.cabecalho, col.x, linha1Y);
+            // Posição X: label na esquerda, valor após separador
+            const xLabel = padding;
+            ctx.font = `bold ${fonteLabel}px Arial, sans-serif`;
+            // Medir largura do label mais longo para posicionar valores
+            let larguraMaxLabel = 0;
+            linhas.forEach(l => {
+              const w = ctx.measureText(l.label).width;
+              if (w > larguraMaxLabel) larguraMaxLabel = w;
             });
+            const xValor = xLabel + larguraMaxLabel + tamanhoFonte * 0.4;
 
-            // Linha 2: Valores (fonte normal, mesma posição X dos cabeçalhos)
-            ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`;
-            colunas.forEach(col => {
-              ctx.fillText(col.valor, col.x, linha2Y);
+            // Desenhar cada linha
+            linhas.forEach((linha, idx) => {
+              // Label (branco bold)
+              ctx.font = `bold ${fonteLabel}px Arial, sans-serif`;
+              ctx.fillText(linha.label, xLabel, yAtual);
+              // Valor (branco normal, sem bold)
+              ctx.font = `${tamanhoFonte}px Arial, sans-serif`;
+              ctx.fillText(linha.valor, xValor, yAtual);
+              yAtual += linhaAltura;
             });
           } else {
-            // Fallback: se não couber, escala a fonte para caber
-            const fatorReducao = (larguraOriginal - 2 * padding) / larguraTotal;
-            const tamanhoReduzido = Math.max(12, Math.round(tamanhoFonte * fatorReducao));
-            ctx.font = `bold ${tamanhoReduzido}px Arial, sans-serif`;
+            // ============================================
+            // LAYOUT HORIZONTAL (original) — 6 colunas × 2 linhas
+            // ============================================
+            // Posições verticais das linhas (centralizadas na tarja)
+            const espacamentoEntreLinhas = Math.round(tamanhoFonte * 1.5);
+            const inicioTarja = offsetYTarja + alturaTarja / 2;
+            const linha1Y = inicioTarja - espacamentoEntreLinhas / 2;
+            const linha2Y = inicioTarja + espacamentoEntreLinhas / 2;
 
-            // Recalcular com fonte menor
-            const largurasCabR = cabecalhos.map(t => ctx.measureText(t).width);
-            const largurasValR = valores.map(t => ctx.measureText(t).width);
-            const sepLarguraR = ctx.measureText(' | ').width;
-            const espacoR = tamanhoReduzido * 0.6;
+            // === DESENHO POR COLUNAS (alinhamento perfeito) ===
+            const tamanhoFonteCabecalho = Math.round(tamanhoFonte * 1.15); // cabeçalhos 15% maiores
+            ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
 
-            let larguraTotalR = 0;
-            const colunasR = cabecalhos.map((cab, i) => {
-              const larguraColuna = Math.max(largurasCabR[i], largurasValR[i]) + sepLarguraR;
-              const x = padding + larguraTotalR;
-              larguraTotalR += larguraColuna + espacoR;
+            // Medir largura de cada texto para posicionar colunas
+            const cabecalhos = ['Data Hora          ', 'NUM', 'Operador', 'ENTR', 'SAÍDA', 'Origem'];
+            const valores = [data, numMaquinaStr, usuarioLimitado, entradaStr, saidaStr, origemStr];
+
+            // Medir a largura de cada cabeçalho (com fonte maior) e valor (com fonte normal)
+            const largurasCab = cabecalhos.map(t => ctx.measureText(t).width);
+            ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`; // fonte normal para valores
+            const largurasVal = valores.map(t => ctx.measureText(t).width);
+
+            // Largura da barra separadora " | " (medida com fonte de cabeçalho)
+            ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
+            const sepLargura = ctx.measureText(' | ').width;
+            const espacoEntreColunas = tamanhoFonteCabecalho * 0.5; // espaço extra após o separador
+
+            // Calcular largura total ocupada
+            let larguraTotal = 0;
+            const colunas = cabecalhos.map((cab, i) => {
+              const larguraColuna = Math.max(largurasCab[i], largurasVal[i]) + sepLargura;
+              const x = padding + larguraTotal;
+              larguraTotal += larguraColuna + espacoEntreColunas;
               return { cabecalho: cab, valor: valores[i], x };
             });
 
-            colunasR.forEach(col => {
-              ctx.fillText(col.cabecalho, col.x, linha1Y);
-            });
-            colunasR.forEach(col => {
-              ctx.fillText(col.valor, col.x, linha2Y);
-            });
+            // Se couber na imagem, desenhar com colunas alinhadas
+            if (larguraTotal <= larguraOriginal - padding) {
+              // Linha 1: Cabeçalhos (fonte maior)
+              ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
+              colunas.forEach(col => {
+                ctx.fillText(col.cabecalho, col.x, linha1Y);
+              });
+
+              // Linha 2: Valores (fonte normal, mesma posição X dos cabeçalhos)
+              ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`;
+              colunas.forEach(col => {
+                ctx.fillText(col.valor, col.x, linha2Y);
+              });
+            } else {
+              // Fallback: se não couber, escala a fonte para caber
+              const fatorReducao = (larguraOriginal - 2 * padding) / larguraTotal;
+              const tamanhoReduzido = Math.max(12, Math.round(tamanhoFonte * fatorReducao));
+              ctx.font = `bold ${tamanhoReduzido}px Arial, sans-serif`;
+
+              // Recalcular com fonte menor
+              const largurasCabR = cabecalhos.map(t => ctx.measureText(t).width);
+              const largurasValR = valores.map(t => ctx.measureText(t).width);
+              const sepLarguraR = ctx.measureText(' | ').width;
+              const espacoR = tamanhoReduzido * 0.6;
+
+              let larguraTotalR = 0;
+              const colunasR = cabecalhos.map((cab, i) => {
+                const larguraColuna = Math.max(largurasCabR[i], largurasValR[i]) + sepLarguraR;
+                const x = padding + larguraTotalR;
+                larguraTotalR += larguraColuna + espacoR;
+                return { cabecalho: cab, valor: valores[i], x };
+              });
+
+              colunasR.forEach(col => {
+                ctx.fillText(col.cabecalho, col.x, linha1Y);
+              });
+              colunasR.forEach(col => {
+                ctx.fillText(col.valor, col.x, linha2Y);
+              });
+            }
           }
 
           // Converter para base64 — qualidade 0.95 (era 0.8) para preservar nitidez do texto da tarja
