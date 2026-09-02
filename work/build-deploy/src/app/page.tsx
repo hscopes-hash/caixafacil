@@ -6153,22 +6153,20 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           // ============================================
           // FONTE ADAPTATIVA POR ORIENTAÇÃO — VERTICAL APENAS
           // ============================================
-          // Fotos VERTICAIS (retrato): fonte agressiva para tarja legível após escala no PDF
-          //   — 720x1280  → altura/12 = 106px (cap 150) — fonte MUITO grande na foto original
-          //   — 1080x1920 → altura/12 = 160px → cap 150
-          //   Quando a foto é escalada para 280×280 no PDF (3-4x menor), a fonte ainda fica legível
-          //   — 720x1280 com fonte 106px → no PDF 280px largura: ~41px (legível com zoom)
-          //   — antigo altura/22 = 58px → no PDF 280px: ~22px (ilegível com zoom)
+          // Fotos VERTICAIS (retrato): fonte intermediária (2x original)
+          //   — 720x1280  → altura/26 = 49px (era 24px original, +104%)
+          //   — 1080x1920 → altura/26 = 73px → cap 60
+          //   — Cap 60px (era 150 — causava overflow horizontal)
           // Fotos HORIZONTAIS (paisagem): comportamento original (largura/30, cap 44)
           const ehVertical = alturaOriginal >= larguraOriginal;
           let tamanhoFonteBase: number;
           if (ehVertical) {
-            tamanhoFonteBase = Math.max(60, Math.min(150, Math.round(alturaOriginal / 12)));
+            tamanhoFonteBase = Math.max(28, Math.min(60, Math.round(alturaOriginal / 26)));
           } else {
             tamanhoFonteBase = Math.max(20, Math.min(44, Math.round(larguraOriginal / 30)));
           }
           // Altura da tarja:
-          // - Vertical: 7.0x fonte (comporta 6 linhas × 1.05x + padding)
+          // - Vertical: 7.0x fonte (comporta 6 linhas × 1.15x + padding)
           // - Horizontal: 3.0x fonte (2 linhas × 1.5x, original)
           const alturaTarja = Math.round(tamanhoFonteBase * (ehVertical ? 7.0 : 3.0));
 
@@ -6254,8 +6252,8 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
             // Fonte do label (cabeçalho) — 90% da fonte normal (labels são curtos)
             const fonteLabel = Math.round(tamanhoFonte * 0.9);
-            // Espaçamento entre linhas: 1.05x fonte (mínimo para não sobrepor)
-            const linhaAltura = Math.round(tamanhoFonte * 1.05);
+            // Espaçamento entre linhas: 1.15x fonte (equilíbrio entre legibilidade e densidade)
+            const linhaAltura = Math.round(tamanhoFonte * 1.15);
             // Posição Y inicial (centraliza o bloco de 6 linhas na tarja)
             const totalAlturaTexto = linhas.length * linhaAltura;
             let yAtual = offsetYTarja + (alturaTarja - totalAlturaTexto) / 2 + linhaAltura / 2;
