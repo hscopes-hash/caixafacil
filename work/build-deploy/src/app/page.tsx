@@ -3433,6 +3433,22 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   const [fechamentosAnteriores, setFechamentosAnteriores] = useState<{ data: string; dataISO: string; operadores: string; qtdFotos: number; qtdPdfs: number }[]>([]);
   const [segundaViaLoading, setSegundaViaLoading] = useState(false);
   const [segundaViaSelecionada, setSegundaViaSelecionada] = useState<{ data: string; dataISO: string } | null>(null);
+  const [segundaViaDados, setSegundaViaDados] = useState<any[]>([]);
+  const [segundaViaExtratoOpen, setSegundaViaExtratoOpen] = useState(false);
+  // Seletor de visualização da 2a via: 'EXTRATO' (texto) ou 'RELATORIO' (A4 com fotos)
+  // Persiste em localStorage para lembrar da última escolha do usuário
+  const [segundaViaModo, setSegundaViaModo] = useState<'EXTRATO' | 'RELATORIO'>('EXTRATO');
+  // Fotos baixadas do GCS para exibir no relatório (miniaturas)
+  const [segundaViaFotos, setSegundaViaFotos] = useState<Array<{ maquinaId: string; codigo: string; fotoBase64: string }>>([]);
+  // Carrega preferência do usuário ao montar o componente
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('caixafacil-2via-modo');
+      if (saved === 'EXTRATO' || saved === 'RELATORIO') {
+        setSegundaViaModo(saved);
+      }
+    } catch {}
+  }, []);
   // Ref para evitar loop infinito no restore do localStorage
   const restoreDoneRef = useRef<string>('');
   // Estado para rastrear origem da foto (CÂMERA ou GALERIA)
@@ -4424,44 +4440,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   };
 
   // (Função abrirWhatsAppLink movida para escopo global do arquivo — usada por LoginPage e App)
-
-  // ============================================
-  // AUTO-RESTAURAÇÃO AO ENTRAR NA TELA DE LEITURAS
-  // ============================================
-  // Quando o componente LeiturasPage é montado (usuário entrou na aba "leituras"),
-  // se há um clienteSelecionado restaurado do localStorage E ainda não carregamos
-  // as máquinas dele, chama loadMaquinasCliente automaticamente.
-  // Isso restaura: máquinas, entradas/saídas digitadas, receitas/despesas extras,
-  // fotos de cartão/mercado, recebido, forma de pagamento, etc.
-  // Sem este effect, o usuário precisaria re-selecionar o cliente para ver os campos.
-  const leiturasAutoLoadedRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!clienteSelecionado) {
-      leiturasAutoLoadedRef.current = null;
-      return;
-    }
-    // Só auto-carrega uma vez por cliente (evita loop com loadMaquinasCliente)
-    if (leiturasAutoLoadedRef.current === clienteSelecionado.id) return;
-    // Se as máquinas já foram carregadas para este cliente, não refaz
-    if (maquinas.length > 0 && maquinas[0]?.clienteId === clienteSelecionado.id) {
-      leiturasAutoLoadedRef.current = clienteSelecionado.id;
-      return;
-    }
-    leiturasAutoLoadedRef.current = clienteSelecionado.id;
-    // Derivar modo de operação do cliente (igual ao handleClienteChange)
-    let modoNovo: 'COBRANCA' | 'LEITURA' | 'AJUSTE' = 'COBRANCA';
-    if (!ajusteMode) {
-      modoNovo = (clienteSelecionado.formaCobranca === 'LEITURA' ? 'LEITURA' : 'COBRANCA') as 'COBRANCA' | 'LEITURA';
-      setModoOperacao(modoNovo);
-    } else {
-      modoNovo = 'AJUSTE';
-      setModoOperacao('AJUSTE');
-    }
-    console.log(`[LeiturasPage auto-restore] Restaurando persistência para cliente ${clienteSelecionado.nome} (${clienteSelecionado.id}) modo=${modoNovo}`);
-    loadMaquinasCliente(clienteSelecionado.id, modoNovo);
-    loadDebitosVencidos();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clienteSelecionado?.id]);
 
   // Enviar texto via WhatsApp — usa navigator.share (sem limite de tamanho) ou wa.me link
   const enviarWhatsAppTextoSeguro = async (texto: string, phone?: string, grupoUrl?: string) => {
@@ -6150,28 +6128,12 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             alturaOriginal = Math.round(alturaOriginal * ratio);
           }
           
-          // ============================================
-          // FONTE ADAPTATIVA POR ORIENTAÇÃO — VERTICAL APENAS
-          // ============================================
-          // Fotos VERTICAIS (retrato): fonte intermediária (2x original)
-          //   — 720x1280  → altura/26 = 49px (era 24px original, +104%)
-          //   — 1080x1920 → altura/26 = 73px → cap 60
-          //   — Cap 60px (era 150 — causava overflow horizontal)
-          // Fotos HORIZONTAIS (paisagem): comportamento original (largura/30, cap 44)
-          const ehVertical = alturaOriginal >= larguraOriginal;
-          let tamanhoFonteBase: number;
-          if (ehVertical) {
-            tamanhoFonteBase = Math.max(28, Math.min(60, Math.round(alturaOriginal / 26)));
-          } else {
-            tamanhoFonteBase = Math.max(20, Math.min(44, Math.round(larguraOriginal / 30)));
-          }
-          // Altura da tarja:
-          // - Vertical: 7.0x fonte (comporta 6 linhas × 1.15x + padding)
-          // - Horizontal: 3.0x fonte (2 linhas × 1.5x, original)
-          const alturaTarja = Math.round(tamanhoFonteBase * (ehVertical ? 7.0 : 3.0));
+          // Fonte adaptativa: mínimo 20px, máximo 44px
+          // Para 720px → 22px | Para 1200px → 37px | Para 1920px → 44px(cap)
+          const tamanhoFonteBase = Math.max(20, Math.min(44, Math.round(larguraOriginal / 30)));
+          const alturaTarja = Math.round(tamanhoFonteBase * 3.0);
 
           // Altura da faixa de alerta (dobro do tamanho anterior, fonte no dobro)
-          // ⚠️ Faixa de alerta NÃO é afetada pelo fator de orientação (só a tarja vermelha).
           const temAlerta = alertaDefeito === true && mensagemAlerta;
           const alturaAlerta = temAlerta ? Math.round(tamanhoFonteBase * 3.6) : 0; // dobro de 1.8
 
@@ -6181,7 +6143,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
           // Função helper para desenhar uma faixa de alerta em uma posição Y
           const desenharFaixaAlerta = (posY: number) => {
-            ctx.fillStyle = '#dc2626'; // vermelho (revertido de laranja — teste OK)
+            ctx.fillStyle = '#dc2626'; // vermelho
             ctx.fillRect(0, posY, larguraOriginal, alturaAlerta);
             ctx.fillStyle = '#ffffff'; // texto branco
             ctx.textBaseline = 'middle';
@@ -6211,19 +6173,29 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             desenharFaixaAlerta(offsetYAlerta);
           }
 
-          // Desenhar tarja LARANJA (abaixo do alerta inferior) — era vermelha
+          // Desenhar tarja vermelha (abaixo do alerta inferior)
           const offsetYTarja = offsetYAlerta + alturaAlerta;
-          ctx.fillStyle = '#dc2626'; // vermelho-600 (revertido de laranja — teste OK)
+          ctx.fillStyle = '#dc2626'; // vermelho-600
           ctx.fillRect(0, offsetYTarja, larguraOriginal, alturaTarja);
 
           // Configurar texto
           ctx.textBaseline = 'middle';
           ctx.textAlign = 'left';
 
-          // Tamanho da fonte para desenhar a tarja
-          // tamanhoFonteBase já é orientado à vertical/horizontal (calculado acima)
+          // Tamanho da fonte adaptativo à largura da imagem
           const tamanhoFonte = tamanhoFonteBase;
           const padding = Math.max(12, Math.round(larguraOriginal * 0.03));
+
+          // Posições verticais das linhas (centralizadas na tarja)
+          const espacamentoEntreLinhas = Math.round(tamanhoFonte * 1.5);
+          const inicioTarja = offsetYTarja + alturaTarja / 2;
+          const linha1Y = inicioTarja - espacamentoEntreLinhas / 2;
+          const linha2Y = inicioTarja + espacamentoEntreLinhas / 2;
+
+          // === DESENHO POR COLUNAS (alinhamento perfeito) ===
+          ctx.fillStyle = '#ffffff'; // branco
+          const tamanhoFonteCabecalho = Math.round(tamanhoFonte * 1.15); // cabeçalhos 15% maiores
+          ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
 
           // Formatar valores
           const usuarioLimitado = operador.substring(0, 8);
@@ -6232,135 +6204,72 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           const origemStr = origem || '-';
           const numMaquinaStr = numeroMaquina || '-';
 
-          ctx.fillStyle = '#ffffff'; // branco
+          // Medir largura de cada texto para posicionar colunas
+          const cabecalhos = ['Data Hora          ', 'NUM', 'Operador', 'ENTR', 'SAÍDA', 'Origem'];
+          const valores = [data, numMaquinaStr, usuarioLimitado, entradaStr, saidaStr, origemStr];
 
-          // ============================================
-          // LAYOUT DIFERENCIADO POR ORIENTAÇÃO
-          // ============================================
-          // VERTICAL: 6 linhas × 2 colunas (label | valor) — fonte enorme, sem fallback
-          // HORIZONTAL: 6 colunas × 2 linhas (cabeçalho | valor) — layout original
-          if (ehVertical) {
-            // Layout vertical: 6 linhas empilhadas, cada uma com "Label: Valor"
-            const linhas = [
-              { label: 'Data Hora:', valor: data },
-              { label: 'NUM:', valor: numMaquinaStr },
-              { label: 'Operador:', valor: usuarioLimitado },
-              { label: 'Entrada:', valor: entradaStr },
-              { label: 'Saída:', valor: saidaStr },
-              { label: 'Origem:', valor: origemStr },
-            ];
+          // Medir a largura de cada cabeçalho (com fonte maior) e valor (com fonte normal)
+          const largurasCab = cabecalhos.map(t => ctx.measureText(t).width);
+          ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`; // fonte normal para valores
+          const largurasVal = valores.map(t => ctx.measureText(t).width);
 
-            // Fonte do label (cabeçalho) — 90% da fonte normal (labels são curtos)
-            const fonteLabel = Math.round(tamanhoFonte * 0.9);
-            // Espaçamento entre linhas: 1.15x fonte (equilíbrio entre legibilidade e densidade)
-            const linhaAltura = Math.round(tamanhoFonte * 1.15);
-            // Posição Y inicial (centraliza o bloco de 6 linhas na tarja)
-            const totalAlturaTexto = linhas.length * linhaAltura;
-            let yAtual = offsetYTarja + (alturaTarja - totalAlturaTexto) / 2 + linhaAltura / 2;
+          // Largura da barra separadora " | " (medida com fonte de cabeçalho)
+          ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
+          const sepLargura = ctx.measureText(' | ').width;
+          const espacoEntreColunas = tamanhoFonteCabecalho * 0.5; // espaço extra após o separador
 
-            // Posição X: label na esquerda, valor após separador
-            const xLabel = padding;
-            ctx.font = `bold ${fonteLabel}px Arial, sans-serif`;
-            // Medir largura do label mais longo para posicionar valores
-            let larguraMaxLabel = 0;
-            linhas.forEach(l => {
-              const w = ctx.measureText(l.label).width;
-              if (w > larguraMaxLabel) larguraMaxLabel = w;
+          // Calcular largura total ocupada
+          let larguraTotal = 0;
+          const colunas = cabecalhos.map((cab, i) => {
+            const larguraColuna = Math.max(largurasCab[i], largurasVal[i]) + sepLargura;
+            const x = padding + larguraTotal;
+            larguraTotal += larguraColuna + espacoEntreColunas;
+            return { cabecalho: cab, valor: valores[i], x };
+          });
+
+          // Se couber na imagem, desenhar com colunas alinhadas
+          if (larguraTotal <= larguraOriginal - padding) {
+            // Linha 1: Cabeçalhos (fonte maior)
+            ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
+            colunas.forEach(col => {
+              ctx.fillText(col.cabecalho, col.x, linha1Y);
             });
-            const xValor = xLabel + larguraMaxLabel + tamanhoFonte * 0.4;
 
-            // Desenhar cada linha
-            linhas.forEach((linha, idx) => {
-              // Label (branco bold)
-              ctx.font = `bold ${fonteLabel}px Arial, sans-serif`;
-              ctx.fillText(linha.label, xLabel, yAtual);
-              // Valor (branco normal, sem bold)
-              ctx.font = `${tamanhoFonte}px Arial, sans-serif`;
-              ctx.fillText(linha.valor, xValor, yAtual);
-              yAtual += linhaAltura;
+            // Linha 2: Valores (fonte normal, mesma posição X dos cabeçalhos)
+            ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`;
+            colunas.forEach(col => {
+              ctx.fillText(col.valor, col.x, linha2Y);
             });
           } else {
-            // ============================================
-            // LAYOUT HORIZONTAL (original) — 6 colunas × 2 linhas
-            // ============================================
-            // Posições verticais das linhas (centralizadas na tarja)
-            const espacamentoEntreLinhas = Math.round(tamanhoFonte * 1.5);
-            const inicioTarja = offsetYTarja + alturaTarja / 2;
-            const linha1Y = inicioTarja - espacamentoEntreLinhas / 2;
-            const linha2Y = inicioTarja + espacamentoEntreLinhas / 2;
+            // Fallback: se não couber, escala a fonte para caber
+            const fatorReducao = (larguraOriginal - 2 * padding) / larguraTotal;
+            const tamanhoReduzido = Math.max(12, Math.round(tamanhoFonte * fatorReducao));
+            ctx.font = `bold ${tamanhoReduzido}px Arial, sans-serif`;
 
-            // === DESENHO POR COLUNAS (alinhamento perfeito) ===
-            const tamanhoFonteCabecalho = Math.round(tamanhoFonte * 1.15); // cabeçalhos 15% maiores
-            ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
+            // Recalcular com fonte menor
+            const largurasCabR = cabecalhos.map(t => ctx.measureText(t).width);
+            const largurasValR = valores.map(t => ctx.measureText(t).width);
+            const sepLarguraR = ctx.measureText(' | ').width;
+            const espacoR = tamanhoReduzido * 0.6;
 
-            // Medir largura de cada texto para posicionar colunas
-            const cabecalhos = ['Data Hora          ', 'NUM', 'Operador', 'ENTR', 'SAÍDA', 'Origem'];
-            const valores = [data, numMaquinaStr, usuarioLimitado, entradaStr, saidaStr, origemStr];
-
-            // Medir a largura de cada cabeçalho (com fonte maior) e valor (com fonte normal)
-            const largurasCab = cabecalhos.map(t => ctx.measureText(t).width);
-            ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`; // fonte normal para valores
-            const largurasVal = valores.map(t => ctx.measureText(t).width);
-
-            // Largura da barra separadora " | " (medida com fonte de cabeçalho)
-            ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
-            const sepLargura = ctx.measureText(' | ').width;
-            const espacoEntreColunas = tamanhoFonteCabecalho * 0.5; // espaço extra após o separador
-
-            // Calcular largura total ocupada
-            let larguraTotal = 0;
-            const colunas = cabecalhos.map((cab, i) => {
-              const larguraColuna = Math.max(largurasCab[i], largurasVal[i]) + sepLargura;
-              const x = padding + larguraTotal;
-              larguraTotal += larguraColuna + espacoEntreColunas;
+            let larguraTotalR = 0;
+            const colunasR = cabecalhos.map((cab, i) => {
+              const larguraColuna = Math.max(largurasCabR[i], largurasValR[i]) + sepLarguraR;
+              const x = padding + larguraTotalR;
+              larguraTotalR += larguraColuna + espacoR;
               return { cabecalho: cab, valor: valores[i], x };
             });
 
-            // Se couber na imagem, desenhar com colunas alinhadas
-            if (larguraTotal <= larguraOriginal - padding) {
-              // Linha 1: Cabeçalhos (fonte maior)
-              ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
-              colunas.forEach(col => {
-                ctx.fillText(col.cabecalho, col.x, linha1Y);
-              });
-
-              // Linha 2: Valores (fonte normal, mesma posição X dos cabeçalhos)
-              ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`;
-              colunas.forEach(col => {
-                ctx.fillText(col.valor, col.x, linha2Y);
-              });
-            } else {
-              // Fallback: se não couber, escala a fonte para caber
-              const fatorReducao = (larguraOriginal - 2 * padding) / larguraTotal;
-              const tamanhoReduzido = Math.max(12, Math.round(tamanhoFonte * fatorReducao));
-              ctx.font = `bold ${tamanhoReduzido}px Arial, sans-serif`;
-
-              // Recalcular com fonte menor
-              const largurasCabR = cabecalhos.map(t => ctx.measureText(t).width);
-              const largurasValR = valores.map(t => ctx.measureText(t).width);
-              const sepLarguraR = ctx.measureText(' | ').width;
-              const espacoR = tamanhoReduzido * 0.6;
-
-              let larguraTotalR = 0;
-              const colunasR = cabecalhos.map((cab, i) => {
-                const larguraColuna = Math.max(largurasCabR[i], largurasValR[i]) + sepLarguraR;
-                const x = padding + larguraTotalR;
-                larguraTotalR += larguraColuna + espacoR;
-                return { cabecalho: cab, valor: valores[i], x };
-              });
-
-              colunasR.forEach(col => {
-                ctx.fillText(col.cabecalho, col.x, linha1Y);
-              });
-              colunasR.forEach(col => {
-                ctx.fillText(col.valor, col.x, linha2Y);
-              });
-            }
+            colunasR.forEach(col => {
+              ctx.fillText(col.cabecalho, col.x, linha1Y);
+            });
+            colunasR.forEach(col => {
+              ctx.fillText(col.valor, col.x, linha2Y);
+            });
           }
 
-          // Converter para base64 — qualidade 0.95 (era 0.8) para preservar nitidez do texto da tarja
-          // JPEG 0.8 degrada bordas de texto branco sobre vermelho, ficando borrado no PDF zoom
-          resolve(canvas.toDataURL('image/jpeg', 0.95));
+          // Converter para base64 com qualidade reduzida
+          resolve(canvas.toDataURL('image/jpeg', 0.8));
         } catch (error) {
           clearTimeout(timeout);
           reject(new Error('Erro ao processar canvas: ' + (error instanceof Error ? error.message : 'Erro desconhecido')));
@@ -6530,15 +6439,22 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     setSegundaViaLoading(true);
     setSegundaViaSelecionada(fechamento);
     try {
-      // dataISO retornado pelo endpoint fechamentos-anteriores é construído em
-      // UTC no servidor. Tratamos tudo como UTC para evitar deslocamento de
-      // horário ao montar o range de busca.
+      // ⚠️ BUG histórico: dataISO retornado pelo endpoint fechamentos-anteriores
+      // é construído em UTC (getUTC* no servidor), mas o frontend interpretava
+      // como hora local — causava "Nenhuma leitura encontrada".
+      //
+      // Solução: tratar tudo como UTC. Montar o range de busca em UTC e comparar
+      // os timestamps em milissegundos (sem depender de getHours/getMinutes que
+      // usam timezone do browser).
       const isoDate = fechamento.dataISO; // ex: '2026-06-21T17:30:00' (UTC)
+
+      // Timestamp alvo (trata como UTC: anexa 'Z' se não tiver offset)
       const targetIso = isoDate.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(isoDate)
         ? isoDate
         : `${isoDate}Z`;
       const targetMs = new Date(targetIso).getTime();
 
+      // Range: dia inteiro em UTC baseado no dataISO
       const [datePart] = isoDate.split('T');
       const inicioUtc = new Date(`${datePart}T00:00:00Z`);
       const fimUtc = new Date(`${datePart}T23:59:59Z`);
@@ -6555,45 +6471,151 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         return Math.abs(leituraMs - targetMs) <= JANELA_MS;
       });
 
-      // Procura por PDF salvo no GCS para o fechamento selecionado
+      setSegundaViaDados(filtradas);
+
+      // ⚠️ Buscar o PDF salvo no GCS — se encontrar, abrir o PDF e NÃO abrir o modal do canvas
       const leituraComPdf = filtradas.find((l: any) => l.pdfGcsPath);
-      if (!leituraComPdf?.pdfGcsPath) {
-        // Sem PDF — mensagem de não encontrado (mantém modal aberto para escolher outro)
-        toast.error('PDF não encontrado para este fechamento.', { duration: 4000 });
-        return;
+      if (leituraComPdf?.pdfGcsPath) {
+        console.log('[2a via] PDF encontrado no GCS, baixando...');
+        toast.loading('Baixando PDF do relatório...', { id: '2via-pdf' });
+        try {
+          const pdfRes = await fetch(`/api/leituras/download-pdf?gcsPath=${encodeURIComponent(leituraComPdf.pdfGcsPath)}`);
+          if (pdfRes.ok) {
+            const pdfData = await pdfRes.json();
+            const base64Data = pdfData.pdfBase64.includes(',') ? pdfData.pdfBase64.split(',')[1] : pdfData.pdfBase64;
+            const binary = atob(base64Data);
+            const arr = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+            const blob = new Blob([arr], { type: 'application/pdf' });
+            const pdfUrl = URL.createObjectURL(blob);
+            // Abrir PDF em nova aba — NÃO abrir o modal do canvas
+            window.open(pdfUrl, '_blank');
+            setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000);
+            console.log('[2a via] PDF aberto em nova aba');
+            toast.dismiss('2via-pdf');
+            toast.success('PDF do relatório aberto!', { duration: 5000 });
+            return; // ← NÃO abre o modal do canvas
+          } else {
+            console.warn('[2a via] Falha ao baixar PDF do GCS, abrindo extrato local');
+            toast.dismiss('2via-pdf');
+          }
+        } catch (err) {
+          console.error('[2a via] Erro ao baixar PDF do GCS:', err);
+          toast.dismiss('2via-pdf');
+        }
       }
 
-      // PDF encontrado — baixar e abrir no aplicativo padrão (nova aba)
-      toast.loading('Baixando PDF do relatório...', { id: '2via-pdf' });
-      try {
-        const pdfRes = await fetch(`/api/leituras/download-pdf?gcsPath=${encodeURIComponent(leituraComPdf.pdfGcsPath)}`);
-        if (!pdfRes.ok) {
-          toast.dismiss('2via-pdf');
-          toast.error('Erro ao baixar PDF do relatório.', { duration: 5000 });
-          return;
-        }
-        const pdfData = await pdfRes.json();
-        const base64Data = pdfData.pdfBase64.includes(',') ? pdfData.pdfBase64.split(',')[1] : pdfData.pdfBase64;
-        const binary = atob(base64Data);
-        const arr = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
-        const blob = new Blob([arr], { type: 'application/pdf' });
-        const pdfUrl = URL.createObjectURL(blob);
-        // Abre em nova aba — o navegador usa o visualizador padrão de PDF do sistema
-        window.open(pdfUrl, '_blank');
-        setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000);
-        toast.dismiss('2via-pdf');
-        toast.success('PDF do relatório aberto!', { duration: 5000 });
-      } catch (err) {
-        console.error('[2a via] Erro ao baixar PDF do GCS:', err);
-        toast.dismiss('2via-pdf');
-        toast.error('Erro ao abrir PDF do relatório.', { duration: 5000 });
-      }
+      // Sem PDF no GCS (ou falhou) — abrir o modal do canvas como fallback
+      console.log('[2a via] Abrindo extrato local (sem PDF no GCS)');
+      setSegundaViaExtratoOpen(true);
+
+      // Fotos individuais do GCS não são mais usadas — apenas PDF
+      setSegundaViaFotos([]);
     } catch (err: any) {
       toast.error(err.message || 'Erro ao carregar fechamento');
     } finally {
       setSegundaViaLoading(false);
     }
+  };
+
+  const gerarWhatsAppSegundaVia = async () => {
+    if (!clienteSelecionado || segundaViaDados.length === 0) return;
+    const fmt = (n: number) => Math.abs(n).toFixed(2).replace('.', ',');
+
+    const modo2via = clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANCA' : 'LEITURA';
+
+    // Agrupar por máquina e extrair receitas/despesas
+    const porMaquina = new Map<string, any[]>();
+    const despesaItens: { descricao: string; valor: number }[] = [];
+    const receitaItens: { descricao: string; valor: number }[] = [];
+
+    segundaViaDados.forEach((l: any) => {
+      const temLeitura = l.entradaNova > 0 || l.saidaNova > 0 || l.diferencaEntrada !== 0 || l.diferencaSaida !== 0;
+      if (temLeitura) {
+        if (!porMaquina.has(l.maquinaId)) porMaquina.set(l.maquinaId, []);
+        porMaquina.get(l.maquinaId)!.push(l);
+      }
+      if (l.despesa) { try { const p = JSON.parse(l.despesa); if (Array.isArray(p)) p.forEach((d: any) => { if (d.valor > 0) despesaItens.push(d); }); } catch {} }
+      if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor !== 0) receitaItens.push(r); }); } catch {} }
+    });
+
+    const despesasFinal = Array.from(new Map(despesaItens.map(d => [d.descricao, d])).values());
+    const receitasFinal = Array.from(new Map(receitaItens.map(r => [r.descricao, r])).values());
+
+    let texto = `__________________\n`;
+    texto += `${clienteSelecionado.nome.toUpperCase()}\n`;
+    const turno2via = segundaViaDados.find((l: any) => l.turno)?.turno;
+    texto += `Data: ${segundaViaSelecionada?.data}${turno2via ? ` — Turno: ${turno2via === 'MANHA' ? 'MANHÃ' : turno2via}` : ''}\n`;
+    const operadoresSet = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => normalizarOperador(l.usuario)));
+    const opList = Array.from(operadoresSet);
+    if (opList.length > 0) texto += `Operador: ${opList.join(', ')}\n`;
+    texto += `_____________\n`;
+
+    let totalEntradas = 0;
+    let totalSaidas = 0;
+    let idx = 0;
+    porMaquina.forEach((lws) => {
+      const m = lws[0].maquina;
+      if (idx > 0) texto += `_____________\n`;
+      texto += `${m.codigo} - ${(m.tipo?.descricao || '').toUpperCase()}\n`;
+      if (lws[0].usuario?.nome) texto += `Operador: ${normalizarOperador(lws[0].usuario)}\n`;
+      lws.forEach((l: any) => {
+        const e = calcularValor(l.moeda, l.diferencaEntrada);
+        const s = calcularValor(l.moeda, l.diferencaSaida);
+        totalEntradas += e;
+        totalSaidas += s;
+        texto += `E ${String(l.entradaAnterior || 0).padStart(8)} ${String(l.entradaNova || 0).padStart(8)}___${fmt(e)}\n`;
+        texto += `S ${String(l.saidaAnterior || 0).padStart(8)} ${String(l.saidaNova || 0).padStart(8)}___${fmt(s)}\n`;
+        texto += `Saldo: ${fmt(l.saldo)}\n`;
+      });
+      idx++;
+    });
+
+    texto += `_____________\n`;
+    texto += `Qtde Maqs....: ${String(porMaquina.size).padStart(2, '0')}\n`;
+    texto += `Entradas.....: ${fmt(totalEntradas)}\n`;
+    texto += `Saídas.......: ${fmt(totalSaidas)}\n`;
+
+    const jogado = totalEntradas - totalSaidas;
+    const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
+    if (modo2via === 'COBRANCA') {
+      texto += `*Jogado*.....: ${fmt(jogado)}\n`;
+      texto += `Cliente (${acertoPct}%): ${fmt(jogado * (acertoPct / 100))}\n`;
+    }
+    texto += `_____________\n`;
+
+    const totalReceitas = receitasFinal.reduce((a, r) => a + r.valor, 0);
+    const totalDespesas = despesasFinal.reduce((a, d) => a + d.valor, 0);
+
+    if (modo2via !== 'COBRANCA' && receitasFinal.length > 0) {
+      texto += `_____________\n`;
+      receitasFinal.forEach(r => { texto += `  ${r.descricao.padEnd(15)}: ${fmt(r.valor)}\n`; });
+      texto += `Total ENTRADAS: ${fmt(totalReceitas)}\n`;
+      texto += `_____________\n`;
+    }
+    if (modo2via !== 'COBRANCA' && despesasFinal.length > 0) {
+      despesasFinal.forEach(d => { texto += `  ${d.descricao.padEnd(15)}: ${fmt(d.valor)}\n`; });
+      texto += `Total SAÍDAS: ${fmt(totalDespesas)}\n`;
+      texto += `_____________\n`;
+    }
+
+    const temItensExtras = totalReceitas !== 0 || totalDespesas > 0;
+    const entradaFinal = modo2via === 'COBRANCA' ? jogado : (temItensExtras ? totalReceitas : jogado);
+    const saidaFinal = temItensExtras ? totalDespesas : 0;
+    const fechamentoFinal = temItensExtras ? saidaFinal - entradaFinal : entradaFinal;
+    const labelFech = modo2via === 'COBRANCA' ? 'TOTALIZAÇÃO' : 'FECHAMENTO';
+    const tagFinal = Math.abs(fechamentoFinal) < 0.01 ? '[fechou]' : fechamentoFinal >= 0 ? '[sobrou]' : '[faltou]';
+
+    if (modo2via !== 'COBRANCA') {
+      texto += `_____________\n`;
+      texto += `ENTRADA......: ${fmt(entradaFinal)}\n`;
+      texto += `SAÍDA........: ${fmt(saidaFinal)}\n`;
+      texto += `${labelFech}.....: ${fmt(fechamentoFinal)} ${tagFinal}\n`;
+    }
+
+    // 2a via: enviar SOMENTE o extrato em texto via WhatsApp (sem fotos)
+    const phone = clienteSelecionado.telefone?.replace(/\D/g, '') || '';
+    await enviarWhatsAppTextoSeguro(texto, phone);
   };
 
   // =============================================
@@ -6803,10 +6825,407 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     return new Blob([pdfBytes], { type: 'application/pdf' });
   };
 
+  // 2a via: enviar RELATÓRIO via WhatsApp como PDF único (todas as páginas em 1 arquivo)
+  const enviarWhatsAppRelatorio2aVia = async () => {
+    if (!clienteSelecionado || segundaViaDados.length === 0) {
+      toast.error('Nenhum dado de fechamento para gerar relatório');
+      return;
+    }
 
+    toast.loading('Preparando PDF do relatório...', { id: 'relatorio-wa-2via' });
 
+    try {
+      // 1) Tentar baixar o PDF salvo no GCS primeiro
+      let pdfBlob: Blob | null = null;
+      const leituraComPdf = segundaViaDados.find((l: any) => l.pdfGcsPath);
+      if (leituraComPdf?.pdfGcsPath) {
+        console.log('[WhatsApp 2a via] Baixando PDF do GCS...');
+        try {
+          const pdfRes = await fetch(`/api/leituras/download-pdf?gcsPath=${encodeURIComponent(leituraComPdf.pdfGcsPath)}`);
+          if (pdfRes.ok) {
+            const pdfData = await pdfRes.json();
+            const base64Data = pdfData.pdfBase64.includes(',') ? pdfData.pdfBase64.split(',')[1] : pdfData.pdfBase64;
+            const binary = atob(base64Data);
+            const arr = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+            pdfBlob = new Blob([arr], { type: 'application/pdf' });
+            console.log(`[WhatsApp 2a via] PDF baixado do GCS: ${(pdfBlob.size / 1024).toFixed(0)}KB`);
+          }
+        } catch (err) {
+          console.warn('[WhatsApp 2a via] Falha ao baixar PDF do GCS, gerando local:', err);
+        }
+      }
 
+      // 2) Se não baixou do GCS, gerar localmente (fallback)
+      if (!pdfBlob) {
+        console.log('[WhatsApp 2a via] Gerando PDF localmente...');
+        pdfBlob = await gerarRelatorioPdf2aVia();
+      }
 
+      if (!pdfBlob) {
+        toast.dismiss('relatorio-wa-2via');
+        toast.error('Falha ao gerar relatório');
+        return;
+      }
+
+      const now = new Date();
+      const fileName = `relatorio_${clienteSelecionado.nome.replace(/\s+/g, '_')}_${now.getTime()}.pdf`;
+      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+      console.log(`[WhatsApp 2a via] PDF criado: ${file.size} bytes`);
+
+      // 3) Caption
+      const modo2via = clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANÇA' : 'LEITURA';
+      const caption = `RELATÓRIO DE ${modo2via} - ${clienteSelecionado.nome.toUpperCase()}\nData: ${segundaViaSelecionada?.data || ''}${(() => { const t = segundaViaDados.find((l: any) => l.turno)?.turno; return t ? ` — Turno: ${t === 'MANHA' ? 'MANHÃ' : t}` : ''; })()}`;
+
+      // 4) Web Share API com o PDF (funciona em mobile)
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            title: `Relatório - ${clienteSelecionado.nome}`,
+            text: caption,
+            files: [file],
+          });
+          toast.dismiss('relatorio-wa-2via');
+          toast.success('PDF do relatório enviado!', { duration: 5000 });
+          return;
+        } catch (shareError: unknown) {
+          if (shareError instanceof Error && shareError.name === 'AbortError') {
+            toast.dismiss('relatorio-wa-2via');
+            return;
+          }
+        }
+      }
+
+      // 5) Fallback: download do PDF + abrir WhatsApp
+      toast.dismiss('relatorio-wa-2via');
+      const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
+      const phone = clienteSelecionado.telefone?.replace(/\D/g, '') || '';
+
+      const downloadLink = document.createElement('a');
+      const pdfUrl = URL.createObjectURL(file);
+      downloadLink.href = pdfUrl;
+      downloadLink.download = fileName;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      setTimeout(() => URL.revokeObjectURL(pdfUrl), 5000);
+
+      if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
+        const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
+        setTimeout(() => abrirWhatsAppLink(grupoUrl), 500);
+        toast.info('PDF baixado! Anexe como documento no grupo do WhatsApp.', { duration: 5000 });
+      } else if (phone) {
+        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 500);
+        toast.info('PDF baixado! Anexe como documento no WhatsApp do cliente.', { duration: 5000 });
+      } else {
+        toast.success('PDF baixado! Compartilhe manualmente.', { duration: 5000 });
+      }
+    } catch (error) {
+      toast.dismiss('relatorio-wa-2via');
+      console.error('Erro ao gerar/enviar relatório WhatsApp:', error);
+      toast.error('Erro ao gerar relatório');
+    }
+  };
+
+  // Enviar planilha Excel preenchida via WhatsApp — 2a via (a partir do gabarito do cliente)
+  const enviarPlanilhaWhatsApp2aVia = async () => {
+    if (!clienteSelecionado || segundaViaDados.length === 0) {
+      toast.error('Nenhum dado de fechamento para gerar planilha');
+      return;
+    }
+    const gabarito = (clienteSelecionado as any).planilhaGabarito;
+    if (!gabarito) {
+      toast.error('Cliente não possui planilha gabarito cadastrada');
+      return;
+    }
+
+    toast.loading('Gerando planilha Excel...', { id: 'planilha-wa-2via' });
+
+    try {
+      // Pré-processar dados da 2a via (mesma lógica do PDF da 2a via)
+      const modo2via = clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANCA' : 'LEITURA';
+      const porMaquina = new Map<string, any[]>();
+      const despesaItens: { descricao: string; valor: number }[] = [];
+      const receitaItens: { descricao: string; valor: number }[] = [];
+      segundaViaDados.forEach((l: any) => {
+        const temLeitura = l.entradaNova > 0 || l.saidaNova > 0 || l.diferencaEntrada !== 0 || l.diferencaSaida !== 0;
+        if (temLeitura) {
+          if (!porMaquina.has(l.maquinaId)) porMaquina.set(l.maquinaId, []);
+          porMaquina.get(l.maquinaId)!.push(l);
+        }
+        if (l.despesa) { try { const p = JSON.parse(l.despesa); if (Array.isArray(p)) p.forEach((d: any) => { if (d.valor > 0) despesaItens.push(d); }); } catch {} }
+        if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor !== 0) receitaItens.push(r); }); } catch {} }
+      });
+      const despesasFinal = Array.from(new Map(despesaItens.map(d => [d.descricao, d])).values());
+      const receitasFinal = Array.from(new Map(receitaItens.map(r => [r.descricao, r])).values());
+      const maquinasArr = Array.from(porMaquina.entries());
+
+      // Calcular totais
+      let totalEntradas = 0;
+      let totalSaidas = 0;
+      maquinasArr.forEach(([_id, lws]) => {
+        totalEntradas += calcularValor(lws[0].moeda, lws[0].diferencaEntrada);
+        totalSaidas += calcularValor(lws[0].moeda, lws[0].diferencaSaida);
+      });
+      const totalReceitas = receitasFinal.reduce((a, r) => a + r.valor, 0);
+      const totalDespesas = despesasFinal.reduce((a, d) => a + d.valor, 0);
+      const jogado = totalEntradas - totalSaidas;
+      const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
+      const valorCliente = jogado * (acertoPct / 100);
+
+      // Fechamento (mesma lógica do PDF da 2a via)
+      const temItensExtras = totalReceitas !== 0 || totalDespesas > 0;
+      const entradaFinal = modo2via === 'COBRANCA' ? jogado : (temItensExtras ? totalReceitas : jogado);
+      const saidaFinal = temItensExtras ? totalDespesas : 0;
+      const fechamentoFinal = temItensExtras ? saidaFinal - entradaFinal : entradaFinal;
+
+      // Receitas e despesas por descrição normalizada
+      const receitasDict: Record<string, number> = {};
+      receitasFinal.forEach(r => {
+        receitasDict[normalizarChave(r.descricao)] = r.valor;
+      });
+      const despesasDict: Record<string, number> = {};
+      despesasFinal.forEach(d => {
+        despesasDict[normalizarChave(d.descricao)] = d.valor;
+      });
+
+      // Operadores
+      const operadoresSet = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => normalizarOperador(l.usuario)));
+      const operadorStr = operadoresSet.size > 0 ? Array.from(operadoresSet).join(', ') : '';
+
+      // Turno
+      const turno2via = segundaViaDados.find((l: any) => l.turno)?.turno;
+      const turnoDisplay = turno2via ? (turno2via === 'MANHA' ? 'MANHÃ' : turno2via === 'INTEGRAL' ? '' : turno2via) : '';
+
+      const planilhaData: PlanilhaData = {
+        cliente: clienteSelecionado.nome,
+        data: segundaViaSelecionada?.data || '',
+        turno: turnoDisplay || 'INTEGRAL',
+        operador: operadorStr || usuarioNome,
+        modoOperacao: modo2via,
+        jogado,
+        clienteParte: valorCliente,
+        receita: totalReceitas,
+        despesa: totalDespesas,
+        debitoSaldo: 0, // 2a via não tem débitos vencidos no momento do fechamento histórico
+        fechamento: fechamentoFinal,
+        acertoPercentual: acertoPct,
+        leituraAtual: jogado * ((100 - acertoPct) / 100),
+        leituraAnterior: 0, // 2a via não tem saldo anterior (já foi registrado no fechamento)
+        recebido: 0, // 2a via não tem dados de recebimento (já foi registrado no fechamento)
+        formaPagamento: '',
+        valorPago: 0,
+        saldoAnterior: 0,
+        receitas: receitasDict,
+        despesas: despesasDict,
+        maquinas: maquinasArr.map(([_id, lws]) => ({
+          codigo: lws[0].maquina?.codigo || '',
+          tipo: lws[0].maquina?.tipo?.descricao || '',
+          entradaAnterior: lws[0].entradaAnterior || 0,
+          entradaNova: lws[0].entradaNova || 0,
+          diferencaEntrada: lws[0].diferencaEntrada || 0,
+          saidaAnterior: lws[0].saidaAnterior || 0,
+          saidaNova: lws[0].saidaNova || 0,
+          diferencaSaida: lws[0].diferencaSaida || 0,
+          saldo: lws[0].saldo || 0, // saldo armazenado no banco (valor em R$ = movimento)
+          moeda: lws[0].moeda || 'M001',
+        })),
+      };
+
+      const dicionario = construirDicionario(planilhaData, clienteSelecionado.nomeCartao1, clienteSelecionado.nomeCartao2);
+      const blob = await gerarPlanilhaPreenchida(gabarito, dicionario);
+
+      const now = new Date();
+      const fileName = `planilha_${clienteSelecionado.nome.replace(/\s+/g, '_')}_${now.getTime()}.xlsx`;
+      const file = new File([blob], fileName, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+      const caption = `PLANILHA DE ${modo2via} - ${clienteSelecionado.nome.toUpperCase()}\nData: ${segundaViaSelecionada?.data || ''}${turnoDisplay ? ` — Turno: ${turnoDisplay}` : ''}`;
+
+      // Mesmo padrão do PDF — navigator.share direto
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            title: `Planilha - ${clienteSelecionado.nome}`,
+            text: caption,
+            files: [file],
+          });
+          toast.dismiss('planilha-wa-2via');
+          toast.success('Planilha enviada!', { duration: 5000 });
+          return;
+        } catch (shareError: unknown) {
+          if (shareError instanceof Error && shareError.name === 'AbortError') {
+            toast.dismiss('planilha-wa-2via');
+            return;
+          }
+
+        }
+      }
+
+      // Fallback: download + abrir WhatsApp
+      toast.dismiss('planilha-wa-2via');
+      const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
+      const phone = clienteSelecionado.telefone?.replace(/\D/g, '') || '';
+
+      const downloadLink = document.createElement('a');
+      const planilhaUrl = URL.createObjectURL(file);
+      downloadLink.href = planilhaUrl;
+      downloadLink.download = fileName;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      setTimeout(() => URL.revokeObjectURL(planilhaUrl), 5000);
+
+      if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
+        const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
+        setTimeout(() => abrirWhatsAppLink(grupoUrl), 500);
+        toast.info('Planilha baixada! Anexe como documento no grupo do WhatsApp.', { duration: 5000 });
+      } else if (phone) {
+        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 500);
+        toast.info('Planilha baixada! Anexe como documento no WhatsApp do cliente.', { duration: 5000 });
+      } else {
+        toast.success('Planilha baixada! Compartilhe manualmente.', { duration: 5000 });
+      }
+    } catch (error) {
+      toast.dismiss('planilha-wa-2via');
+      console.error('Erro ao gerar/enviar planilha 2a via:', error);
+      toast.error('Erro ao gerar planilha: ' + (error instanceof Error ? error.message : 'erro desconhecido'));
+    }
+  };
+
+  // Comprimir imagem via canvas (reduz tamanho para envio via WhatsApp)
+  const comprimirImagem = (blob: Blob, maxPx = 1200, qualidade = 0.7): Promise<Blob> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let { width, height } = img;
+        if (width > maxPx || height > maxPx) {
+          if (width > height) { height = Math.round(height * maxPx / width); width = maxPx; }
+          else { width = Math.round(width * maxPx / height); height = maxPx; }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((b) => resolve(b || blob), 'image/jpeg', qualidade);
+      };
+      img.onerror = () => resolve(blob); // fallback sem compressão
+      img.src = URL.createObjectURL(blob);
+    });
+  };
+
+  // 2a via: enviar extrato + fotos via Telegram
+  const enviarTelegram2aVia = async () => {
+    if (!clienteSelecionado || segundaViaDados.length === 0) return;
+    const telegramGroupId = (clienteSelecionado as any).telegramGroupId;
+    if (!telegramGroupId) {
+      toast.error('Cliente não possui grupo Telegram cadastrado. Cadastre no formulário do cliente.');
+      return;
+    }
+    try {
+      toast.loading('Gerando PDF do relatório...', { id: 'telegram-2via' });
+
+      // Helper: parse JSON robusto
+      const parseJsonSafe = async (res: Response) => {
+        try { return await res.json(); }
+        catch { const text = await res.text().catch(() => ''); return { success: false, error: `HTTP ${res.status}: ${text.substring(0, 200) || res.statusText}` }; }
+      };
+
+      if (segundaViaModo === 'RELATORIO') {
+        // === MODO RELATÓRIO: baixar PDF do GCS primeiro, gerar local como fallback ===
+        let pdfBlob: Blob | null = null;
+        const leituraComPdfTg = segundaViaDados.find((l: any) => l.pdfGcsPath);
+        if (leituraComPdfTg?.pdfGcsPath) {
+          console.log('[Telegram 2a via] Baixando PDF do GCS...');
+          try {
+            const pdfRes = await fetch(`/api/leituras/download-pdf?gcsPath=${encodeURIComponent(leituraComPdfTg.pdfGcsPath)}`);
+            if (pdfRes.ok) {
+              const pdfData = await pdfRes.json();
+              const base64Data = pdfData.pdfBase64.includes(',') ? pdfData.pdfBase64.split(',')[1] : pdfData.pdfBase64;
+              const binary = atob(base64Data);
+              const arr = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+              pdfBlob = new Blob([arr], { type: 'application/pdf' });
+            }
+          } catch (err) {
+            console.warn('[Telegram 2a via] Falha ao baixar PDF do GCS:', err);
+          }
+        }
+        if (!pdfBlob) {
+          console.log('[Telegram 2a via] Gerando PDF localmente...');
+          pdfBlob = await gerarRelatorioPdf2aVia();
+        }
+        if (!pdfBlob) {
+          toast.dismiss('telegram-2via');
+          toast.error('Falha ao gerar relatório');
+          return;
+        }
+
+        // Converter Blob para data URL
+        const reader = new FileReader();
+        const pdfDataUrl = await new Promise<string>((resolve) => {
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(pdfBlob);
+        });
+        console.log(`[Telegram 2a via] PDF criado: ${pdfDataUrl.length} chars`);
+
+        // Enviar PDF como documento (sem compressão)
+        const res = await fetch('/api/telegram/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            empresaId: empresa?.id,
+            clienteId: clienteSelecionado?.id,
+            mensagem: null,
+            fotos: [pdfDataUrl],
+            primeiraFotoComoDocumento: true,
+          }),
+        });
+        const data = await parseJsonSafe(res);
+        toast.dismiss('telegram-2via');
+        if (res.ok && data.success) {
+          toast.success('PDF do relatório enviado!', { duration: 5000 });
+        } else {
+          toast.error(data.errorDetail || data.error || 'Erro ao enviar PDF', { duration: 10000 });
+        }
+      } else {
+        // === MODO EXTRATO: enviar imagem do extrato + fotos das máquinas ===
+        const extratoImagem = await gerarExtratoImagemSegundaVia();
+
+        // Fotos individuais do GCS não são mais usadas — apenas extrato + PDF
+        const fotosEnvio: string[] = [];
+        if (extratoImagem) fotosEnvio.push(extratoImagem);
+
+        const res = await fetch('/api/telegram/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            empresaId: empresa?.id,
+            clienteId: clienteSelecionado?.id,
+            mensagem: null,
+            fotos: fotosEnvio,
+            primeiraFotoComoDocumento: false,
+          }),
+        });
+        const data = await parseJsonSafe(res);
+        toast.dismiss('telegram-2via');
+        if (res.ok && data.success) {
+          toast.success(`Extrato + ${fotos.length} foto(s) enviados!`);
+        } else {
+          toast.error(data.errorDetail || data.error || 'Erro ao enviar para Telegram', { duration: 10000 });
+        }
+      }
+    } catch (error) {
+      toast.dismiss('telegram-2via');
+      const errMsg = error instanceof Error ? error.message : 'Erro ao enviar para Telegram';
+      console.error('Erro Telegram 2a via:', error);
+      toast.error(errMsg, { duration: 8000 });
+    }
+  };
+
+  // 2a via: enviar fotos foi desativado — agora usamos PDF
+  const enviarFotos2aVia = async () => {
+    toast.info('Use o botão "Ver PDF" para visualizar o relatório.', { duration: 5000 });
+  };
 
   // =============================================
   // LOCALSTORAGE — Salvar/Carregar/Limpar digitação
@@ -7412,8 +7831,711 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     
     return mensagem;
   };
+  // Converter extrato em imagem (canvas) para enviar junto com as fotos
+  // Gerar extrato 2a via como imagem (canvas) para envio via WhatsApp
+  const gerarExtratoImagemSegundaVia = (): Promise<string | null> => {
+    return new Promise((resolve) => {
+      try {
+        const el = document.getElementById('extrato-segunda-via');
+        if (!el) { resolve(null); return; }
 
-  // Gera imagem do extrato (canvas) para envio via WhatsApp/Telegram (fluxo do resumo)
+        // Usar html2canvas ou canvas nativo do conteúdo
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { resolve(null); return; }
+
+        const fontSize = 26;
+        const lineHeight = 34;
+        const padding = 28;
+        const larguraCanvas = 680;
+
+        // Extrair texto do elemento
+        const textContent = el.innerText || el.textContent || '';
+        const linhas = textContent.split('\n').filter(l => l.trim());
+
+        const alturaTexto = linhas.length * lineHeight + padding * 2;
+        canvas.width = larguraCanvas;
+        canvas.height = Math.max(alturaTexto, 200);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, larguraCanvas, canvas.height);
+
+        ctx.fillStyle = '#000000';
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'left';
+
+        linhas.forEach((linha, i) => {
+          const trim = linha.trim();
+          // Negrito para linhas com formato de título
+          const isBold = trim.includes('EXTRATO') || trim.includes('2a VIA') ||
+            trim === trim.toUpperCase() && trim.length > 3 && trim.length < 40;
+          ctx.font = `${isBold ? 'bold ' : ''}${fontSize}px "Courier New", Courier, monospace`;
+          ctx.fillText(trim, padding, padding + i * lineHeight);
+        });
+
+        resolve(canvas.toDataURL('image/jpeg', 0.9));
+      } catch (err) {
+        console.error('Erro ao gerar imagem extrato 2a via:', err);
+        resolve(null);
+      }
+    });
+  };
+
+  // Gerar RELATÓRIO 2a via em formato A4 com fotos em miniatura
+  // Layout paginado: máximo 8 cards de máquinas por página
+  // Cada página é uma imagem separada (melhora zoom no Telegram)
+  const gerarRelatorioImagem2aVia = async (): Promise<string[] | null> => {
+    try {
+      if (!segundaViaDados || segundaViaDados.length === 0) {
+        return null;
+      }
+
+        const SCALE = 2;
+        const A4_W = 794;
+        const padding = 40;
+
+        // Configurações de fonte
+        const FONT_TITLE = 'bold 26px "Arial", sans-serif';
+        const FONT_SUBTITLE = '18px "Arial", sans-serif';
+        const FONT_LABEL = 'bold 20px "Arial", sans-serif';
+        const FONT_VALUE = '20px "Arial", sans-serif';
+        const FONT_TOTAL = 'bold 28px "Arial", sans-serif';
+
+        // Pré-processar dados
+        const modo2via = clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANCA' : 'LEITURA';
+        const porMaquina = new Map<string, any[]>();
+        const despesaItens: { descricao: string; valor: number }[] = [];
+        const receitaItens: { descricao: string; valor: number }[] = [];
+        segundaViaDados.forEach((l: any) => {
+          const temLeitura = l.entradaNova > 0 || l.saidaNova > 0 || l.diferencaEntrada !== 0 || l.diferencaSaida !== 0;
+          if (temLeitura) {
+            if (!porMaquina.has(l.maquinaId)) porMaquina.set(l.maquinaId, []);
+            porMaquina.get(l.maquinaId)!.push(l);
+          }
+          if (l.despesa) { try { const p = JSON.parse(l.despesa); if (Array.isArray(p)) p.forEach((d: any) => { if (d.valor > 0) despesaItens.push(d); }); } catch {} }
+          if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor !== 0) receitaItens.push(r); }); } catch {} }
+        });
+        const despesasFinal = Array.from(new Map(despesaItens.map(d => [d.descricao, d])).values());
+        const receitasFinal = Array.from(new Map(receitaItens.map(r => [r.descricao, r])).values());
+        const maquinasArr = Array.from(porMaquina.entries());
+
+        // Calcular totais
+        let totalEntradas = 0;
+        let totalSaidas = 0;
+        maquinasArr.forEach(([id, lws]) => {
+          totalEntradas += calcularValor(lws[0].moeda, lws[0].diferencaEntrada);
+          totalSaidas += calcularValor(lws[0].moeda, lws[0].diferencaSaida);
+        });
+        const totalReceitas = receitasFinal.reduce((a, r) => a + r.valor, 0);
+        const totalDespesas = despesasFinal.reduce((a, d) => a + d.valor, 0);
+        const jogado = totalEntradas - totalSaidas;
+        const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
+        const valorCliente = jogado * (acertoPct / 100);
+        const temItensExtras = totalReceitas !== 0 || totalDespesas > 0;
+        const entradaFinal = modo2via === 'COBRANCA' ? jogado : (temItensExtras ? totalReceitas : jogado);
+        const saidaFinal = temItensExtras ? totalDespesas : 0;
+        const fechamentoFinal = temItensExtras ? saidaFinal - entradaFinal : entradaFinal;
+
+        // Pré-carregar imagens
+        const imagensPorMaquinaId = new Map<string, HTMLImageElement>();
+        const imagensPorCodigo = new Map<string, HTMLImageElement>();
+        const promessasCarregamento: Promise<void>[] = [];
+        for (const [id, lws] of maquinasArr) {
+          const m = lws[0].maquina;
+          const fotoObj = segundaViaFotos.find(f => f.maquinaId === id || f.codigo === m.codigo);
+          if (fotoObj) {
+            const promise = new Promise<void>((resolveImg) => {
+              const img = new Image();
+              img.onload = () => { imagensPorMaquinaId.set(id, img); if (m.codigo) imagensPorCodigo.set(m.codigo, img); resolveImg(); };
+              img.onerror = () => { resolveImg(); };
+              img.src = fotoObj.fotoBase64;
+            });
+            promessasCarregamento.push(promise);
+          }
+        }
+        await Promise.race([Promise.all(promessasCarregamento), new Promise<void>((resolve) => setTimeout(resolve, 10000))]);
+
+        const operadores = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => normalizarOperador(l.usuario)));
+        const CARD_HEIGHT = 400;
+        const MAX_CARDS_POR_PAGINA = 6;
+
+        // Dividir máquinas em páginas
+        const paginas: typeof maquinasArr[] = [];
+        for (let i = 0; i < maquinasArr.length; i += MAX_CARDS_POR_PAGINA) {
+          paginas.push(maquinasArr.slice(i, i + MAX_CARDS_POR_PAGINA));
+        }
+        // Se não há máquinas, criar pelo menos 1 página (para totais)
+        if (paginas.length === 0) paginas.push([]);
+
+        const temReceitasExtras = modo2via !== 'COBRANCA' && receitasFinal.length > 0;
+        const temDespesasExtras = modo2via !== 'COBRANCA' && despesasFinal.length > 0;
+        const titulo = modo2via === 'COBRANCA' ? 'RELATÓRIO DE COBRANÇA' : 'RELATÓRIO DE LEITURA';
+        const nomeCliente = clienteSelecionado?.nome?.toUpperCase() || '';
+        const dataRelatorio = segundaViaSelecionada?.data || '';
+        const operadoresStr = operadores.size > 0 ? Array.from(operadores).join(', ') : '';
+
+        // Função helper para desenhar o cabeçalho em uma página
+        const desenharCabecalho = (ctxPag: CanvasRenderingContext2D, numPagina: number, totalPaginas: number): number => {
+          let yp = padding;
+          ctxPag.textAlign = 'center';
+          ctxPag.fillStyle = '#000000';
+          ctxPag.font = FONT_TITLE;
+          ctxPag.fillText(titulo, A4_W / 2, yp);
+          yp += 35;
+          ctxPag.font = FONT_SUBTITLE;
+          ctxPag.fillText(nomeCliente, A4_W / 2, yp);
+          yp += 30;
+          ctxPag.font = FONT_VALUE;
+          ctxPag.fillText(`Data: ${dataRelatorio}`, A4_W / 2, yp);
+          yp += 30;
+          if (operadoresStr) { ctxPag.fillText(`Operador: ${operadoresStr}`, A4_W / 2, yp); yp += 30; }
+          // Indicador de página
+          if (totalPaginas > 1) {
+            ctxPag.font = '14px Arial';
+            ctxPag.fillText(`Página ${numPagina} de ${totalPaginas}`, A4_W / 2, yp);
+            yp += 20;
+          }
+          // Separador
+          yp += 10;
+          ctxPag.strokeStyle = '#000000';
+          ctxPag.lineWidth = 2;
+          ctxPag.beginPath();
+          ctxPag.moveTo(padding, yp);
+          ctxPag.lineTo(A4_W - padding, yp);
+          ctxPag.stroke();
+          yp += 30;
+          return yp;
+        };
+
+        // Função helper para desenhar um card de máquina
+        // Layout: foto CENTRALIZADA no topo, texto ABAIXO da foto (sem overflow horizontal)
+        const desenharCardMaquina = (ctxPag: CanvasRenderingContext2D, id: string, lws: any[], yCard: number): number => {
+          const m = lws[0].maquina;
+          const e = calcularValor(lws[0].moeda, lws[0].diferencaEntrada);
+          const s = calcularValor(lws[0].moeda, lws[0].diferencaSaida);
+
+          ctxPag.strokeStyle = '#333333';
+          ctxPag.lineWidth = 2;
+          ctxPag.strokeRect(padding, yCard, A4_W - padding * 2, CARD_HEIGHT - 20);
+
+          const img = imagensPorMaquinaId.get(id) || (m.codigo ? imagensPorCodigo.get(m.codigo) : undefined);
+
+          // === FOTO CENTRALIZADA NO TOPO ===
+          // Área da foto: centralizada horizontalmente, 280px de largura máxima
+          const fotoW = 280;
+          const fotoH = 240;
+          const fotoX = Math.round((A4_W - fotoW) / 2); // centralizada
+          const fotoY = yCard + 10;
+
+          ctxPag.fillStyle = '#f0f0f0';
+          ctxPag.fillRect(fotoX, fotoY, fotoW, fotoH);
+
+          if (img && img.complete && img.naturalWidth > 0) {
+            const natW = img.naturalWidth;
+            const natH = img.naturalHeight;
+            const aspectRatio = natW / natH;
+            let drawW = fotoW, drawH = fotoH;
+            if (aspectRatio > 1) { drawW = fotoW; drawH = Math.round(fotoW / aspectRatio); }
+            else { drawH = fotoH; drawW = Math.round(fotoH * aspectRatio); }
+            const drawX = fotoX + Math.round((fotoW - drawW) / 2);
+            const drawY = fotoY + Math.round((fotoH - drawH) / 2);
+            ctxPag.drawImage(img, drawX, drawY, drawW, drawH);
+          } else {
+            ctxPag.fillStyle = '#999999';
+            ctxPag.font = '14px Arial';
+            ctxPag.textAlign = 'center';
+            ctxPag.fillText('sem foto', fotoX + fotoW / 2, fotoY + fotoH / 2);
+          }
+
+          // === TEXTO ABAIXO DA FOTO ===
+          // Largura total do card para o texto
+          const textY = fotoY + fotoH + 25; // 25px abaixo da foto
+          const nomeMaquina = (m.tipo?.descricao || '').toUpperCase();
+          const moeda = lws[0].moeda || 'M001';
+          const multiplicadoresMoeda: Record<string, number> = { M001: 0.01, M005: 0.05, M010: 0.10, M025: 0.25 };
+          const multiplicador = multiplicadoresMoeda[moeda] ?? 0.01;
+          const moedaStr = `x${multiplicador.toString().replace('.', ',')}`;
+
+          // Linha 1: Código + Nome + Multiplicador (centralizada)
+          ctxPag.fillStyle = '#000000';
+          ctxPag.font = FONT_LABEL;
+          ctxPag.textAlign = 'center';
+          ctxPag.fillText(`${m.codigo} - ${nomeMaquina} ${moedaStr}`, A4_W / 2, textY);
+
+          // Linha 2: Entrada (centralizada)
+          const entAtual = lws[0].entradaNova || 0;
+          const entAnt = lws[0].entradaAnterior || 0;
+          ctxPag.font = FONT_VALUE;
+          ctxPag.fillText(`Entrada: ${entAtual} - ${entAnt} = ${entAtual - entAnt}`, A4_W / 2, textY + 30);
+
+          // Linha 3: Saída (centralizada)
+          const saiAtual = lws[0].saidaNova || 0;
+          const saiAnt = lws[0].saidaAnterior || 0;
+          ctxPag.fillText(`Saída: ${saiAtual} - ${saiAnt} = ${saiAtual - saiAnt}`, A4_W / 2, textY + 60);
+
+          // Linha 4: Saldo (centralizada)
+          ctxPag.font = FONT_LABEL;
+          ctxPag.fillStyle = '#000000';
+          ctxPag.fillText(`Saldo: ${formatNumber(lws[0].saldo)}`, A4_W / 2, textY + 95);
+
+          ctxPag.textAlign = 'left'; // reset
+          return yCard + CARD_HEIGHT;
+        };
+
+        // Função helper para desenhar totais finais
+        const desenharTotais = (ctxPag: CanvasRenderingContext2D, yTotais: number): number => {
+          let yt = yTotais + 10;
+          // Extras (lado a lado)
+          if (temReceitasExtras || temDespesasExtras) {
+            const colW = (A4_W - padding * 2 - 20) / 2;
+            const itensReceitas = temReceitasExtras ? receitasFinal.length : 0;
+            const itensDespesas = temDespesasExtras ? despesasFinal.length : 0;
+            const maxItens = Math.max(itensReceitas, itensDespesas);
+            const sectionH = 30 + maxItens * 30 + 40 + 20;
+
+            if (temReceitasExtras) {
+              ctxPag.strokeStyle = '#0066cc'; ctxPag.lineWidth = 3;
+              ctxPag.strokeRect(padding, yt, colW, sectionH);
+              ctxPag.fillStyle = '#e6f0ff'; ctxPag.fillRect(padding, yt, colW, sectionH);
+              ctxPag.textAlign = 'left'; ctxPag.fillStyle = '#0066cc'; ctxPag.font = FONT_LABEL;
+              ctxPag.fillText('ENTRADA', padding + 15, yt + 30);
+              ctxPag.fillStyle = '#000000'; ctxPag.font = FONT_VALUE;
+              let yRec = yt + 60;
+              receitasFinal.forEach((r) => { ctxPag.fillText(`${r.descricao || 'OUTROS'}: ${formatNumber(r.valor)}`, padding + 15, yRec); yRec += 30; });
+              ctxPag.fillStyle = '#0066cc'; ctxPag.font = FONT_LABEL;
+              ctxPag.fillText(`Total: ${formatNumber(totalReceitas)}`, padding + 15, yt + sectionH - 20);
+            }
+            if (temDespesasExtras) {
+              const col2X = padding + colW + 20;
+              ctxPag.strokeStyle = '#cc3300'; ctxPag.strokeRect(col2X, yt, colW, sectionH);
+              ctxPag.fillStyle = '#ffe6e6'; ctxPag.fillRect(col2X, yt, colW, sectionH);
+              ctxPag.textAlign = 'left'; ctxPag.fillStyle = '#cc3300'; ctxPag.font = FONT_LABEL;
+              ctxPag.fillText('SAÍDA', col2X + 15, yt + 30);
+              ctxPag.fillStyle = '#000000'; ctxPag.font = FONT_VALUE;
+              let yDesp = yt + 60;
+              despesasFinal.forEach((d) => { ctxPag.fillText(`${d.descricao || 'OUTROS'}: ${formatNumber(d.valor)}`, col2X + 15, yDesp); yDesp += 30; });
+              ctxPag.fillStyle = '#cc3300'; ctxPag.font = FONT_LABEL;
+              ctxPag.fillText(`Total: ${formatNumber(totalDespesas)}`, col2X + 15, yt + sectionH - 20);
+            }
+            yt += sectionH + 20;
+            ctxPag.fillStyle = '#000000';
+          }
+
+          // 3 cards de totais
+          yt += 10;
+          ctxPag.font = FONT_TITLE; ctxPag.textAlign = 'center';
+          ctxPag.fillText('TOTAIS', A4_W / 2, yt); yt += 30;
+          const cardW = (A4_W - padding * 2 - 20) / 3;
+          const cardH = 100; const cardY = yt;
+          // Card 1
+          ctxPag.strokeStyle = '#0066cc'; ctxPag.lineWidth = 3;
+          ctxPag.strokeRect(padding, cardY, cardW, cardH);
+          ctxPag.fillStyle = '#e6f0ff'; ctxPag.fillRect(padding, cardY, cardW, cardH);
+          ctxPag.fillStyle = '#0066cc'; ctxPag.font = FONT_LABEL; ctxPag.textAlign = 'center';
+          ctxPag.fillText('ENTRADA', padding + cardW / 2, cardY + 35);
+          ctxPag.font = FONT_TOTAL; ctxPag.fillText(formatNumber(modo2via === 'COBRANCA' ? totalEntradas : totalReceitas), padding + cardW / 2, cardY + 75);
+          // Card 2
+          const c2X = padding + cardW + 10;
+          ctxPag.strokeStyle = '#cc3300'; ctxPag.strokeRect(c2X, cardY, cardW, cardH);
+          ctxPag.fillStyle = '#ffe6e6'; ctxPag.fillRect(c2X, cardY, cardW, cardH);
+          ctxPag.fillStyle = '#cc3300'; ctxPag.font = FONT_LABEL;
+          ctxPag.fillText('SAÍDA', c2X + cardW / 2, cardY + 35);
+          ctxPag.font = FONT_TOTAL; ctxPag.fillText(formatNumber(modo2via === 'COBRANCA' ? totalSaidas : totalDespesas), c2X + cardW / 2, cardY + 75);
+          // Card 3
+          const c3X = padding + (cardW + 10) * 2;
+          let tituloFech: string, corFech: string, bgFech: string;
+          if (fechamentoFinal > 0) { tituloFech = 'SOBROU'; corFech = '#008800'; bgFech = '#e6ffe6'; }
+          else if (fechamentoFinal === 0) { tituloFech = 'FECHOU'; corFech = '#0066cc'; bgFech = '#e6f0ff'; }
+          else { tituloFech = 'FALTOU'; corFech = '#cc0000'; bgFech = '#ffe6e6'; }
+          ctxPag.strokeStyle = corFech; ctxPag.strokeRect(c3X, cardY, cardW, cardH);
+          ctxPag.fillStyle = bgFech; ctxPag.fillRect(c3X, cardY, cardW, cardH);
+          ctxPag.fillStyle = corFech; ctxPag.font = FONT_LABEL;
+          ctxPag.fillText(tituloFech, c3X + cardW / 2, cardY + 35);
+          ctxPag.font = FONT_TOTAL; ctxPag.fillText(formatNumber(fechamentoFinal), c3X + cardW / 2, cardY + 75);
+          yt = cardY + cardH + 20;
+
+          if (modo2via === 'COBRANCA') {
+            ctxPag.textAlign = 'left'; ctxPag.font = FONT_VALUE; ctxPag.fillStyle = '#000000';
+            ctxPag.fillText(`Cliente (${acertoPct}%): ${formatNumber(valorCliente)}`, padding, yt); yt += 30;
+          }
+          return yt + padding;
+        };
+
+        // === Gerar cada página ===
+        const imagens: string[] = [];
+        for (let pagIdx = 0; pagIdx < paginas.length; pagIdx++) {
+          const maquinasPagina = paginas[pagIdx];
+          const isUltimaPagina = pagIdx === paginas.length - 1;
+
+          // Calcular altura da página
+          let alturaPagina = padding + 40 + 30 + 30 + (operadoresStr ? 30 : 0) + (paginas.length > 1 ? 20 : 0) + 10 + 30;
+          alturaPagina += maquinasPagina.length * (CARD_HEIGHT + 20);
+          if (isUltimaPagina) {
+            if (temReceitasExtras || temDespesasExtras) {
+              const maxItens = Math.max(temReceitasExtras ? receitasFinal.length : 0, temDespesasExtras ? despesasFinal.length : 0);
+              alturaPagina += 30 + maxItens * 30 + 40 + 20 + 20;
+            }
+            alturaPagina += 60 + 140 + 40 + padding;
+          } else {
+            alturaPagina += padding;
+          }
+
+          const canvasPag = document.createElement('canvas');
+          canvasPag.width = A4_W * SCALE;
+          canvasPag.height = alturaPagina * SCALE;
+          const ctxPag = canvasPag.getContext('2d');
+          if (!ctxPag) continue;
+          ctxPag.scale(SCALE, SCALE);
+          ctxPag.imageSmoothingEnabled = true;
+          ctxPag.imageSmoothingQuality = 'high';
+
+          // Fundo branco
+          ctxPag.fillStyle = '#ffffff';
+          ctxPag.fillRect(0, 0, A4_W, alturaPagina);
+
+          // Cabeçalho
+          let y = desenharCabecalho(ctxPag, pagIdx + 1, paginas.length);
+
+          // Cards de máquinas
+          ctxPag.textAlign = 'left';
+          for (const [id, lws] of maquinasPagina) {
+            y = desenharCardMaquina(ctxPag, id, lws, y);
+            y += 20;
+          }
+
+          // Totais (apenas na última página)
+          if (isUltimaPagina) {
+            y = desenharTotais(ctxPag, y);
+          }
+
+          imagens.push(canvasPag.toDataURL('image/jpeg', 0.92));
+        }
+
+        console.log(`[Relatório 2a via] ${imagens.length} página(s) geradas (${maquinasArr.length} máquinas, máx ${MAX_CARDS_POR_PAGINA} por página)`);
+        return imagens.length > 0 ? imagens : null;
+      } catch (err) {
+        console.error('Erro ao gerar relatório 2a via:', err);
+        return null;
+      }
+  };
+
+  // Gerar UMA imagem única do relatório (para WhatsApp)
+  // Retorna a primeira página
+  const gerarRelatorioImagemUnica = async (): Promise<string | null> => {
+    const imagens = await gerarRelatorioImagem2aVia();
+    if (!imagens || imagens.length === 0) return null;
+    return imagens[0];
+  };
+
+  // Gerar PDF do relatório — cópia EXATA do canvas da visualização
+  // Renderiza TODO o conteúdo em um único canvas (sem paginação, sem quebra)
+  // e converte para PDF (1 página com a imagem inteira).
+  // Retorna Blob PDF pronto para envio.
+  const gerarRelatorioPdf2aVia = async (): Promise<Blob | null> => {
+    try {
+      if (!segundaViaDados || segundaViaDados.length === 0) return null;
+
+      const SCALE = 2;
+      const A4_W = 794;
+      const padding = 40;
+
+      const FONT_TITLE = 'bold 30px "Arial", sans-serif';
+      const FONT_SUBTITLE = '22px "Arial", sans-serif';
+      const FONT_LABEL = 'bold 24px "Arial", sans-serif';
+      const FONT_VALUE = '24px "Arial", sans-serif';
+      const FONT_TOTAL = 'bold 32px "Arial", sans-serif';
+
+      const modo2via = clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANCA' : 'LEITURA';
+      const porMaquina = new Map<string, any[]>();
+      const despesaItens: { descricao: string; valor: number }[] = [];
+      const receitaItens: { descricao: string; valor: number }[] = [];
+      segundaViaDados.forEach((l: any) => {
+        const temLeitura = l.entradaNova > 0 || l.saidaNova > 0 || l.diferencaEntrada !== 0 || l.diferencaSaida !== 0;
+        if (temLeitura) { if (!porMaquina.has(l.maquinaId)) porMaquina.set(l.maquinaId, []); porMaquina.get(l.maquinaId)!.push(l); }
+        if (l.despesa) { try { const p = JSON.parse(l.despesa); if (Array.isArray(p)) p.forEach((d: any) => { if (d.valor > 0) despesaItens.push(d); }); } catch {} }
+        if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor !== 0) receitaItens.push(r); }); } catch {} }
+      });
+      const despesasFinal = Array.from(new Map(despesaItens.map(d => [d.descricao, d])).values());
+      const receitasFinal = Array.from(new Map(receitaItens.map(r => [r.descricao, r])).values());
+      const maquinasArr = Array.from(porMaquina.entries());
+
+      let totalEntradas = 0, totalSaidas = 0;
+      maquinasArr.forEach(([id, lws]) => {
+        totalEntradas += calcularValor(lws[0].moeda, lws[0].diferencaEntrada);
+        totalSaidas += calcularValor(lws[0].moeda, lws[0].diferencaSaida);
+      });
+      const totalReceitas = receitasFinal.reduce((a, r) => a + r.valor, 0);
+      const totalDespesas = despesasFinal.reduce((a, d) => a + d.valor, 0);
+      const jogado = totalEntradas - totalSaidas;
+      const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
+      const valorCliente = jogado * (acertoPct / 100);
+      const temItensExtras = totalReceitas !== 0 || totalDespesas > 0;
+      // COBRANCA: ENTRADAS = total entradas máquinas, SAIDAS = total saídas máquinas, FECHAMENTO = jogado
+      const fechamentoFinal = modo2via === 'COBRANCA' ? jogado : (temItensExtras ? (totalDespesas - totalReceitas) : jogado);
+
+      // Pré-carregar imagens
+      const imagensPorMaquinaId = new Map<string, HTMLImageElement>();
+      const imagensPorCodigo = new Map<string, HTMLImageElement>();
+      const promessas: Promise<void>[] = [];
+      for (const [id, lws] of maquinasArr) {
+        const m = lws[0].maquina;
+        const fotoObj = segundaViaFotos.find(f => f.maquinaId === id || f.codigo === m.codigo);
+        if (fotoObj) {
+          promessas.push(new Promise<void>((resolve) => {
+            const img = new Image();
+            img.onload = () => { imagensPorMaquinaId.set(id, img); if (m.codigo) imagensPorCodigo.set(m.codigo, img); resolve(); };
+            img.onerror = () => resolve();
+            img.src = fotoObj.fotoBase64;
+          }));
+        }
+      }
+      await Promise.race([Promise.all(promessas), new Promise<void>(r => setTimeout(r, 10000))]);
+
+      const operadores = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => normalizarOperador(l.usuario)));
+      const CARD_HEIGHT = 420;
+      const temReceitasExtras = modo2via !== 'COBRANCA' && receitasFinal.length > 0;
+      const temDespesasExtras = modo2via !== 'COBRANCA' && despesasFinal.length > 0;
+
+      // Calcular altura total (sem paginação)
+      let alturaFinal = padding + 40 + 30 + 30 + (operadores.size > 0 ? 30 : 0) + 10 + 30;
+      alturaFinal += maquinasArr.length * (CARD_HEIGHT + 20);
+      // Espaço para card CARTÃO e MERCADO (se houver fotos no GCS)
+      const temCartao1_2via = segundaViaFotos.some(f => f.codigo === 'CARTAO1' || f.maquinaId === 'cartao1-canhoto');
+      const temCartao2_2via = segundaViaFotos.some(f => f.codigo === 'CARTAO2' || f.maquinaId === 'cartao2-canhoto');
+      const temCartao2via = temCartao1_2via || temCartao2_2via;
+      const temMercado2via = segundaViaFotos.some(f => f.codigo === 'MERCADO' || f.maquinaId === 'mercado-cupons');
+      if (temCartao1_2via) alturaFinal += 240 + 10;
+      if (temCartao2_2via) alturaFinal += 240 + 10;
+      if (temMercado2via) alturaFinal += 240 + 10;
+      alturaFinal += 10 + 30; // separador
+      if (temReceitasExtras || temDespesasExtras) {
+        const maxItens = Math.max(temReceitasExtras ? receitasFinal.length : 0, temDespesasExtras ? despesasFinal.length : 0);
+        alturaFinal += 30 + maxItens * 30 + 40 + 20 + 20;
+      }
+      alturaFinal += 60 + 140 + 40 + padding;
+
+      // Criar canvas único
+      // ⚠️ iOS Safari limita canvas a ~16.7M pixels — escalar down se necessário
+      const MAX_CANVAS_PIXELS = 16_000_000; // aumentado de 14M para 16M para melhorar qualidade
+      let escalaReal = SCALE;
+      const pixelsNecessarios = A4_W * alturaFinal * SCALE * SCALE;
+      if (pixelsNecessarios > MAX_CANVAS_PIXELS) {
+        escalaReal = Math.sqrt(MAX_CANVAS_PIXELS / (A4_W * alturaFinal));
+        console.warn(`[PDF] Canvas muito grande para iOS — reduzindo escala de ${SCALE}x para ${escalaReal.toFixed(2)}x`);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(A4_W * escalaReal);
+      canvas.height = Math.round(alturaFinal * escalaReal);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.scale(escalaReal, escalaReal);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+
+      // Fundo branco
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, A4_W, alturaFinal);
+
+      // Cabeçalho
+      let y = padding;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#000000';
+      ctx.font = FONT_TITLE;
+      ctx.fillText(modo2via === 'COBRANCA' ? 'RELATÓRIO DE COBRANÇA' : 'RELATÓRIO DE LEITURA', A4_W / 2, y); y += 35;
+      ctx.font = FONT_SUBTITLE;
+      ctx.fillText(clienteSelecionado?.nome?.toUpperCase() || '', A4_W / 2, y); y += 30;
+      ctx.font = FONT_VALUE;
+      const turno2viaPdf = segundaViaDados.find((l: any) => l.turno)?.turno;
+      ctx.fillText(`Data: ${segundaViaSelecionada?.data || ''}${turno2viaPdf ? ` — Turno: ${turno2viaPdf === 'MANHA' ? 'MANHÃ' : turno2viaPdf}` : ''}`, A4_W / 2, y); y += 30;
+      if (operadores.size > 0) { ctx.fillText(`Operador: ${Array.from(operadores).join(', ')}`, A4_W / 2, y); y += 30; }
+      y += 10;
+      ctx.strokeStyle = '#000000'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(padding, y); ctx.lineTo(A4_W - padding, y); ctx.stroke(); y += 30;
+
+      // Cards de máquinas — foto CENTRALIZADA no topo, texto ABAIXO da foto
+      ctx.textAlign = 'center';
+      for (const [id, lws] of maquinasArr) {
+        const m = lws[0].maquina;
+        ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
+        ctx.strokeRect(padding, y, A4_W - padding * 2, CARD_HEIGHT - 20);
+        const img = imagensPorMaquinaId.get(id) || (m.codigo ? imagensPorCodigo.get(m.codigo) : undefined);
+        // Foto centralizada
+        const fotoW = 280, fotoH = 260;
+        const fotoX = Math.round((A4_W - fotoW) / 2), fotoY = y + 10;
+        ctx.fillStyle = '#f0f0f0'; ctx.fillRect(fotoX, fotoY, fotoW, fotoH);
+        if (img && img.complete && img.naturalWidth > 0) {
+          const ar = img.naturalWidth / img.naturalHeight;
+          let dw = fotoW, dh = fotoH;
+          if (ar > 1) { dw = fotoW; dh = Math.round(fotoW / ar); } else { dh = fotoH; dw = Math.round(fotoH * ar); }
+          ctx.drawImage(img, fotoX + Math.round((fotoW - dw) / 2), fotoY + Math.round((fotoH - dh) / 2), dw, dh);
+        } else {
+          ctx.fillStyle = '#999999'; ctx.font = '14px Arial';
+          ctx.fillText('sem foto', fotoX + fotoW / 2, fotoY + fotoH / 2);
+        }
+        // Texto abaixo da foto (centralizado)
+        const textY = fotoY + fotoH + 30;
+        ctx.fillStyle = '#000000';
+        const nomeMaquina = (m.tipo?.descricao || '').toUpperCase();
+        const moeda = lws[0].moeda || 'M001';
+        const multMap: Record<string, number> = { M001: 0.01, M005: 0.05, M010: 0.10, M025: 0.25 };
+        const mult = multMap[moeda] ?? 0.01;
+        const moedaStr = `x${mult.toString().replace('.', ',')}`;
+        ctx.font = FONT_LABEL;
+        ctx.fillText(`${m.codigo} - ${nomeMaquina} ${moedaStr}`, A4_W / 2, textY);
+        ctx.font = FONT_VALUE;
+        ctx.fillText(`Entrada: ${lws[0].entradaNova || 0} - ${lws[0].entradaAnterior || 0} = ${(lws[0].entradaNova || 0) - (lws[0].entradaAnterior || 0)}`, A4_W / 2, textY + 30);
+        ctx.fillText(`Saída: ${lws[0].saidaNova || 0} - ${lws[0].saidaAnterior || 0} = ${(lws[0].saidaNova || 0) - (lws[0].saidaAnterior || 0)}`, A4_W / 2, textY + 60);
+        ctx.font = FONT_LABEL; ctx.fillStyle = '#000000';
+        ctx.fillText(`Saldo: ${formatNumber(lws[0].saldo)}`, A4_W / 2, textY + 95);
+        y += CARD_HEIGHT + 10;
+      }
+      ctx.textAlign = 'left';
+
+      // Cards CARTÃO 1 e CARTÃO 2 (canhotos) — se houver foto no GCS
+      if (temCartao2via) {
+        const nomeC1 = clienteSelecionado?.nomeCartao1 || 'CARTÃO1';
+        const nomeC2 = clienteSelecionado?.nomeCartao2 || 'CARTÃO2';
+        const cartao1Foto = segundaViaFotos.find(f => f.codigo === 'CARTAO1' || f.maquinaId === 'cartao1-canhoto');
+        const cartao2Foto = segundaViaFotos.find(f => f.codigo === 'CARTAO2' || f.maquinaId === 'cartao2-canhoto');
+
+        const drawCartaoCard = async (foto: { fotoBase64: string } | undefined, label: string) => {
+          const cartaoCardH = 240;
+          ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
+          ctx.strokeRect(padding, y, A4_W - padding * 2, cartaoCardH);
+          const cfotoX = padding + 10, cfotoY = y + 10, cfotoW = 220, cfotoH = 220;
+          ctx.fillStyle = '#f0f0f0'; ctx.fillRect(cfotoX, cfotoY, cfotoW, cfotoH);
+          if (foto) {
+            try {
+              const cImg = await new Promise<HTMLImageElement>((resolve) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => resolve(img);
+                img.src = foto.fotoBase64;
+              });
+              if (cImg.complete && cImg.naturalWidth > 0) {
+                const ar = cImg.naturalWidth / cImg.naturalHeight;
+                let dw = cfotoW, dh = cfotoH;
+                if (ar > 1) { dw = cfotoW; dh = Math.round(cfotoW / ar); } else { dh = cfotoH; dw = Math.round(cfotoH * ar); }
+                ctx.drawImage(cImg, cfotoX + Math.round((cfotoW - dw) / 2), cfotoY + Math.round((cfotoH - dh) / 2), dw, dh);
+              }
+            } catch {}
+          }
+          ctx.fillStyle = '#000000'; ctx.font = FONT_LABEL; ctx.textAlign = 'left';
+          ctx.fillText(`${label} — Canhotos`, cfotoX + cfotoW + 20, y + 60);
+          y += cartaoCardH + 10;
+        };
+
+        if (cartao1Foto) await drawCartaoCard(cartao1Foto, nomeC1);
+        if (cartao2Foto) await drawCartaoCard(cartao2Foto, nomeC2);
+      }
+
+      // Card MERCADO (cupons) — se houver foto no GCS
+      if (temMercado2via) {
+        const mercadoFoto = segundaViaFotos.find(f => f.codigo === 'MERCADO' || f.maquinaId === 'mercado-cupons');
+        const mercadoCardH = 240;
+        ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
+        ctx.strokeRect(padding, y, A4_W - padding * 2, mercadoCardH);
+        const mfotoX = padding + 10, mfotoY = y + 10, mfotoW = 220, mfotoH = 220;
+        ctx.fillStyle = '#f0f0f0'; ctx.fillRect(mfotoX, mfotoY, mfotoW, mfotoH);
+        if (mercadoFoto) {
+          try {
+            const mImg = await new Promise<HTMLImageElement>((resolve) => {
+              const img = new Image();
+              img.onload = () => resolve(img);
+              img.onerror = () => resolve(img);
+              img.src = mercadoFoto.fotoBase64;
+            });
+            if (mImg.complete && mImg.naturalWidth > 0) {
+              const ar = mImg.naturalWidth / mImg.naturalHeight;
+              let dw = mfotoW, dh = mfotoH;
+              if (ar > 1) { dw = mfotoW; dh = Math.round(mfotoW / ar); } else { dh = mfotoH; dw = Math.round(mfotoH * ar); }
+              ctx.drawImage(mImg, mfotoX + Math.round((mfotoW - dw) / 2), mfotoY + Math.round((mfotoH - dh) / 2), dw, dh);
+            }
+          } catch {}
+        }
+        ctx.fillStyle = '#000000'; ctx.font = FONT_LABEL; ctx.textAlign = 'left';
+        ctx.fillText('MERCADO — Cupons Fiscais', mfotoX + mfotoW + 20, y + 60);
+        y += mercadoCardH + 10;
+      }
+
+      // Separador
+      y += 10;
+      ctx.strokeStyle = '#000000'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(padding, y); ctx.lineTo(A4_W - padding, y); ctx.stroke(); y += 30;
+
+      // Extras lado a lado
+      if (temReceitasExtras || temDespesasExtras) {
+        const colW = (A4_W - padding * 2 - 20) / 2;
+        const maxItens = Math.max(temReceitasExtras ? receitasFinal.length : 0, temDespesasExtras ? despesasFinal.length : 0);
+        const sectionH = 30 + maxItens * 30 + 40 + 20;
+        if (temReceitasExtras) {
+          ctx.strokeStyle = '#0066cc'; ctx.lineWidth = 3; ctx.strokeRect(padding, y, colW, sectionH);
+          ctx.fillStyle = '#e6f0ff'; ctx.fillRect(padding, y, colW, sectionH);
+          ctx.textAlign = 'left'; ctx.fillStyle = '#0066cc'; ctx.font = FONT_LABEL;
+          ctx.fillText('ENTRADA', padding + 15, y + 30);
+          ctx.fillStyle = '#000000'; ctx.font = FONT_VALUE;
+          let yRec = y + 60;
+          receitasFinal.forEach((r) => { ctx.fillText(`${r.descricao || 'OUTROS'}: ${formatNumber(r.valor)}`, padding + 15, yRec); yRec += 30; });
+          ctx.fillStyle = '#0066cc'; ctx.font = FONT_LABEL;
+          ctx.fillText(`Total: ${formatNumber(totalReceitas)}`, padding + 15, y + sectionH - 20);
+        }
+        if (temDespesasExtras) {
+          const col2X = padding + colW + 20;
+          ctx.strokeStyle = '#cc3300'; ctx.strokeRect(col2X, y, colW, sectionH);
+          ctx.fillStyle = '#ffe6e6'; ctx.fillRect(col2X, y, colW, sectionH);
+          ctx.textAlign = 'left'; ctx.fillStyle = '#cc3300'; ctx.font = FONT_LABEL;
+          ctx.fillText('SAÍDA', col2X + 15, y + 30);
+          ctx.fillStyle = '#000000'; ctx.font = FONT_VALUE;
+          let yDesp = y + 60;
+          despesasFinal.forEach((d) => { ctx.fillText(`${d.descricao || 'OUTROS'}: ${formatNumber(d.valor)}`, col2X + 15, yDesp); yDesp += 30; });
+          ctx.fillStyle = '#cc3300'; ctx.font = FONT_LABEL;
+          ctx.fillText(`Total: ${formatNumber(totalDespesas)}`, col2X + 15, y + sectionH - 20);
+        }
+        y += sectionH + 20; ctx.fillStyle = '#000000';
+      }
+
+      // Totais finais (3 cards)
+      y += 10;
+      ctx.font = FONT_TITLE; ctx.textAlign = 'center';
+      ctx.fillText('TOTAIS', A4_W / 2, y); y += 30;
+      const cardW = (A4_W - padding * 2 - 20) / 3;
+      const cardH = 100; const cardY = y;
+      ctx.strokeStyle = '#0066cc'; ctx.lineWidth = 3; ctx.strokeRect(padding, cardY, cardW, cardH);
+      ctx.fillStyle = '#e6f0ff'; ctx.fillRect(padding, cardY, cardW, cardH);
+      ctx.fillStyle = '#0066cc'; ctx.font = FONT_LABEL; ctx.fillText('ENTRADA', padding + cardW / 2, cardY + 35);
+      ctx.font = FONT_TOTAL; ctx.fillText(formatNumber(modo2via === 'COBRANCA' ? totalEntradas : totalReceitas), padding + cardW / 2, cardY + 75);
+      const c2X = padding + cardW + 10;
+      ctx.strokeStyle = '#cc3300'; ctx.strokeRect(c2X, cardY, cardW, cardH);
+      ctx.fillStyle = '#ffe6e6'; ctx.fillRect(c2X, cardY, cardW, cardH);
+      ctx.fillStyle = '#cc3300'; ctx.font = FONT_LABEL; ctx.fillText('SAÍDA', c2X + cardW / 2, cardY + 35);
+      ctx.font = FONT_TOTAL; ctx.fillText(formatNumber(modo2via === 'COBRANCA' ? totalSaidas : totalDespesas), c2X + cardW / 2, cardY + 75);
+      const c3X = padding + (cardW + 10) * 2;
+      let tituloFech: string, corFech: string, bgFech: string;
+      if (fechamentoFinal > 0) { tituloFech = 'SOBROU'; corFech = '#008800'; bgFech = '#e6ffe6'; }
+      else if (fechamentoFinal === 0) { tituloFech = 'FECHOU'; corFech = '#0066cc'; bgFech = '#e6f0ff'; }
+      else { tituloFech = 'FALTOU'; corFech = '#cc0000'; bgFech = '#ffe6e6'; }
+      ctx.strokeStyle = corFech; ctx.strokeRect(c3X, cardY, cardW, cardH);
+      ctx.fillStyle = bgFech; ctx.fillRect(c3X, cardY, cardW, cardH);
+      ctx.fillStyle = corFech; ctx.font = FONT_LABEL; ctx.fillText(tituloFech, c3X + cardW / 2, cardY + 35);
+      ctx.font = FONT_TOTAL; ctx.fillText(formatNumber(fechamentoFinal), c3X + cardW / 2, cardY + 75);
+      y = cardY + cardH + 20;
+      if (modo2via === 'COBRANCA') {
+        ctx.textAlign = 'left'; ctx.font = FONT_VALUE; ctx.fillStyle = '#000000';
+        ctx.fillText(`Cliente (${acertoPct}%): ${formatNumber(valorCliente)}`, padding, y); y += 30;
+      }
+
+      // Converter canvas para JPEG data URL
+      const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.98);
+      console.log(`[PDF] Canvas único: ${canvas.width}x${canvas.height} px, JPEG: ${jpegDataUrl.length} chars`);
+
+      // Criar PDF a partir do JPEG (1 página, dimensões reais)
+      return await criarPdfDeImagem(jpegDataUrl);
+    } catch (err) {
+      console.error('Erro ao gerar PDF do relatório:', err);
+      return null;
+    }
+  };
+
   const gerarExtratoImagem = (): Promise<string> => {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement('canvas');
@@ -7480,7 +8602,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       const FONT_VALUE = '24px "Arial", sans-serif';
       const FONT_TOTAL = 'bold 32px "Arial", sans-serif';
 
-      // Adaptar maquinasSalvas para o formato esperado pela geração do PDF do resumo
+      // Adaptar maquinasSalvas para o mesmo formato que gerarRelatorioPdf2aVia espera
       const maquinasArr = maquinasSalvas.map(m => [m.id, m] as [string, any]);
       const receitasFinal = receitasSalvas.filter(d => d.valor !== 0);
       const despesasFinal = despesasSalvas.filter(d => d.valor > 0);
@@ -7516,9 +8638,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       }
       await Promise.race([Promise.all(promessas), new Promise<void>(r => setTimeout(r, 10000))]);
 
-      // CARD_HEIGHT aumentado de 320 para 490 — foto agora é 450×450 (era 280×280)
-      // Fotos maiores no PDF = tarja vermelha mais legível ao dar zoom
-      const CARD_HEIGHT = 490;
+      const CARD_HEIGHT = 420;
       const temReceitasExtras = modoOperacao !== 'COBRANCA' && receitasFinal.length > 0;
       const temDespesasExtras = modoOperacao !== 'COBRANCA' && despesasFinal.length > 0;
 
@@ -7571,14 +8691,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       ctx.strokeStyle = '#000000'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(padding, y); ctx.lineTo(A4_W - padding, y); ctx.stroke(); y += 30;
 
-      // Cards de máquinas
-      ctx.textAlign = 'left';
+      // Cards de máquinas — foto CENTRALIZADA no topo, texto ABAIXO da foto
+      ctx.textAlign = 'center';
       for (const m of maquinasSalvas) {
         ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
         ctx.strokeRect(padding, y, A4_W - padding * 2, CARD_HEIGHT - 20);
         const img = imagensPorMaquinaId.get(m.id);
-        // Foto aumentada de 280×280 para 450×450 — tarja fica 1.6x maior no PDF
-        const fotoX = padding + 10, fotoY = y + 10, fotoW = 450, fotoH = 450;
+        // Foto centralizada
+        const fotoW = 280, fotoH = 260;
+        const fotoX = Math.round((A4_W - fotoW) / 2), fotoY = y + 10;
         ctx.fillStyle = '#f0f0f0'; ctx.fillRect(fotoX, fotoY, fotoW, fotoH);
         if (img && img.complete && img.naturalWidth > 0) {
           const ar = img.naturalWidth / img.naturalHeight;
@@ -7586,22 +8707,23 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           if (ar > 1) { dw = fotoW; dh = Math.round(fotoW / ar); } else { dh = fotoH; dw = Math.round(fotoH * ar); }
           ctx.drawImage(img, fotoX + Math.round((fotoW - dw) / 2), fotoY + Math.round((fotoH - dh) / 2), dw, dh);
         } else {
-          ctx.fillStyle = '#999999'; ctx.font = '14px Arial'; ctx.textAlign = 'center';
-          ctx.fillText('sem foto', fotoX + fotoW / 2, fotoY + fotoH / 2); ctx.textAlign = 'left';
+          ctx.fillStyle = '#999999'; ctx.font = '14px Arial';
+          ctx.fillText('sem foto', fotoX + fotoW / 2, fotoY + fotoH / 2);
         }
+        // Texto abaixo da foto (centralizado)
+        const textY = fotoY + fotoH + 30;
         const multMap: Record<string, number> = { M001: 0.01, M005: 0.05, M010: 0.10, M025: 0.25 };
         const mult = multMap[m.moeda || 'M001'] ?? 0.01;
-        const textX = fotoX + fotoW + 20;
         ctx.fillStyle = '#000000'; ctx.font = FONT_LABEL;
-        ctx.fillText(`${m.codigo} - ${(m.tipo?.descricao || '').toUpperCase()}`, textX, y + 40);
+        ctx.fillText(`${m.codigo} - ${(m.tipo?.descricao || '').toUpperCase()} x${mult.toString().replace('.', ',')}`, A4_W / 2, textY);
         ctx.font = FONT_VALUE;
-        ctx.fillText(`x${mult.toString().replace('.', ',')}`, textX, y + 70);
-        ctx.fillText(`E: ${m.novaEntrada || 0} - ${m.entradaAtual || 0} = ${(parseInt(m.novaEntrada) || 0) - (m.entradaAtual || 0)}`, textX, y + 110);
-        ctx.fillText(`S: ${m.novaSaida || 0} - ${m.saidaAtual || 0} = ${(parseInt(m.novaSaida) || 0) - (m.saidaAtual || 0)}`, textX, y + 145);
+        ctx.fillText(`Entrada: ${m.novaEntrada || 0} - ${m.entradaAtual || 0} = ${(parseInt(m.novaEntrada) || 0) - (m.entradaAtual || 0)}`, A4_W / 2, textY + 30);
+        ctx.fillText(`Saída: ${m.novaSaida || 0} - ${m.saidaAtual || 0} = ${(parseInt(m.novaSaida) || 0) - (m.saidaAtual || 0)}`, A4_W / 2, textY + 60);
         ctx.font = FONT_LABEL;
-        ctx.fillText(`Saldo: ${formatNumber(m.saldoMaquina || 0)}`, textX, y + 185);
+        ctx.fillText(`Saldo: ${formatNumber(m.saldoMaquina || 0)}`, A4_W / 2, textY + 95);
         y += CARD_HEIGHT;
       }
+      ctx.textAlign = 'left';
 
       // Card CARTÃO 1 (canhotos) — só se houver foto
       if (resumoCartaoFoto) {
@@ -7685,7 +8807,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       ctx.strokeStyle = '#000000'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(padding, y); ctx.lineTo(A4_W - padding, y); ctx.stroke(); y += 30;
 
-      // Receitas/Despesas extras
+      // Receitas/Despesas extras — mesmo padrão do gerarRelatorioPdf2aVia
       if (temReceitasExtras || temDespesasExtras) {
         const colW = (A4_W - padding * 2 - 20) / 2;
         const maxItens = Math.max(temReceitasExtras ? receitasFinal.length : 0, temDespesasExtras ? despesasFinal.length : 0);
@@ -10740,21 +11862,60 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground mb-2">Selecione um fechamento:</p>
                   {fechamentosAnteriores.map((f) => (
-                    <button
-                      key={f.dataISO}
-                      onClick={() => selecionarSegundaVia(f)}
-                      className={`w-full text-left px-3 py-2.5 rounded-lg border transition-colors text-sm ${
-                        segundaViaSelecionada?.dataISO === f.dataISO
-                          ? 'border-amber-500/50 bg-amber-500/10 text-amber-500'
-                          : 'border-border hover:bg-muted/50 text-foreground'
-                      }`}
-                    >
-                      <span className="font-medium">{f.data}</span>
-                      {f.operadores && <p className="text-xs opacity-60 mt-0.5">{f.operadores}</p>}
-                      {f.qtdPdfs > 0
-                        ? <p className="text-xs text-emerald-500">📄 PDF disponível</p>
-                        : <p className="text-xs text-muted-foreground">Sem PDF</p>}
-                    </button>
+                    <div key={f.dataISO} className="flex gap-1">
+                      <button
+                        onClick={() => selecionarSegundaVia(f)}
+                        className={`flex-1 text-left px-3 py-2.5 rounded-lg border transition-colors text-sm ${
+                          segundaViaSelecionada?.dataISO === f.dataISO
+                            ? 'border-amber-500/50 bg-amber-500/10 text-amber-500'
+                            : 'border-border hover:bg-muted/50 text-foreground'
+                        }`}
+                      >
+                        <span className="font-medium">{f.data}</span>
+                        {f.operadores && <p className="text-xs opacity-60 mt-0.5">{f.operadores}</p>}
+                        {f.qtdPdfs > 0 && <p className="text-xs text-emerald-500">📄 PDF</p>}
+                      </button>
+                      {f.qtdPdfs > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 shrink-0 text-emerald-500"
+                          title="Ver PDF do relatório"
+                          onClick={async () => {
+                            try {
+                              toast.loading('Baixando PDF...', { id: 'ver-pdf' });
+                              // Buscar o pdfGcsPath da primeira leitura desse fechamento
+                              const res = await fetch(`/api/leituras?clienteId=${clienteSelecionado?.id}&dataISO=${encodeURIComponent(f.dataISO)}`);
+                              const leituras = await res.json();
+                              const leituraComPdf = leituras.find((l: any) => l.pdfGcsPath);
+                              if (!leituraComPdf) {
+                                toast.dismiss('ver-pdf');
+                                toast.error('PDF não encontrado para este fechamento');
+                                return;
+                              }
+                              const pdfRes = await fetch(`/api/leituras/download-pdf?gcsPath=${encodeURIComponent(leituraComPdf.pdfGcsPath)}`);
+                              if (!pdfRes.ok) {
+                                toast.dismiss('ver-pdf');
+                                toast.error('Erro ao baixar PDF');
+                                return;
+                              }
+                              const pdfData = await pdfRes.json();
+                              toast.dismiss('ver-pdf');
+                              // Abrir PDF em nova aba
+                              const blob = await (await fetch(pdfData.pdfBase64)).blob();
+                              const url = URL.createObjectURL(blob);
+                              window.open(url, '_blank');
+                              setTimeout(() => URL.revokeObjectURL(url), 30000);
+                            } catch (err) {
+                              toast.dismiss('ver-pdf');
+                              toast.error('Erro ao visualizar PDF');
+                            }
+                          }}
+                        >
+                          <FileText className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
@@ -10764,6 +11925,417 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             </DialogContent>
           </Dialog>
 
+          {/* Modal Extrato 2a Via — Extrato Selecionado */}
+          <Dialog open={segundaViaExtratoOpen} onOpenChange={setSegundaViaExtratoOpen}>
+            <DialogContent className="bg-card border-border text-foreground max-w-md max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="text-center text-base">Extrato 2a Via</DialogTitle>
+              </DialogHeader>
+
+              {/* Seletor EXTRATO / RELATÓRIO — última seleção persiste em localStorage */}
+              {!segundaViaLoading && segundaViaDados.length > 0 && (
+                <div className="flex gap-2 p-1 bg-muted rounded-lg">
+                  <button
+                    onClick={() => {
+                      setSegundaViaModo('EXTRATO');
+                      try { localStorage.setItem('caixafacil-2via-modo', 'EXTRATO'); } catch {}
+                    }}
+                    className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                      segundaViaModo === 'EXTRATO'
+                        ? 'bg-amber-500 text-white shadow'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    EXTRATO
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSegundaViaModo('RELATORIO');
+                      try { localStorage.setItem('caixafacil-2via-modo', 'RELATORIO'); } catch {}
+                    }}
+                    className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                      segundaViaModo === 'RELATORIO'
+                        ? 'bg-amber-500 text-white shadow'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    RELATÓRIO
+                  </button>
+                </div>
+              )}
+
+              {segundaViaLoading ? (
+                <div className="text-center py-8 text-muted-foreground">Carregando...</div>
+              ) : segundaViaDados.length > 0 ? (
+                <>
+                  {segundaViaModo === 'EXTRATO' ? (
+                    <div className="bg-white text-black p-4 rounded-lg font-mono text-sm" id="extrato-segunda-via">
+                    <div className="text-center mb-2">
+                      <p className="font-bold text-xs opacity-60 mb-1">EXTRATO DE {clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANÇA' : 'LEITURA'} 2a VIA</p>
+                      <p className="font-bold">{clienteSelecionado?.nome?.toUpperCase()}</p>
+                    </div>
+                    <p>Data: {segundaViaSelecionada?.data}{(() => { const t = segundaViaDados.find((l: any) => l.turno)?.turno; return t ? ` — Turno: ${t === 'MANHA' ? 'MANHÃ' : t}` : ''; })()}</p>
+                    {(() => {
+                      const operadores = new Set(segundaViaDados.filter(l => l.usuario?.nome).map(l => normalizarOperador(l.usuario)));
+                      const opTexto = Array.from(operadores).join(', ');
+                      return opTexto ? <p>Operador: {opTexto}</p> : null;
+                    })()}
+                    {(() => {
+                    })()}
+                    <p className="border-b border-black my-2">_____________</p>
+
+                    {/* Agrupar por máquina — formato idêntico ao extrato original */}
+                    {(() => {
+                      const modo2via = clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANCA' : 'LEITURA';
+                      const porMaquina = new Map<string, any[]>();
+                      const despesaItens: { descricao: string; valor: number }[] = [];
+                      const receitaItens: { descricao: string; valor: number }[] = [];
+
+                      segundaViaDados.forEach((l: any) => {
+                        const temLeitura = l.entradaNova > 0 || l.saidaNova > 0 || l.diferencaEntrada !== 0 || l.diferencaSaida !== 0;
+                        if (temLeitura) {
+                          if (!porMaquina.has(l.maquinaId)) porMaquina.set(l.maquinaId, []);
+                          porMaquina.get(l.maquinaId)!.push(l);
+                        }
+                        if (l.despesa) { try { const p = JSON.parse(l.despesa); if (Array.isArray(p)) p.forEach((d: any) => { if (d.valor > 0) despesaItens.push(d); }); } catch {} }
+                        if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor !== 0) receitaItens.push(r); }); } catch {} }
+                      });
+
+                      // Deduplicar despesas/receitas
+                      const despesasFinal = Array.from(new Map(despesaItens.map(d => [d.descricao, d])).values());
+                      const receitasFinal = Array.from(new Map(receitaItens.map(r => [r.descricao, r])).values());
+
+                      const maquinasArr = Array.from(porMaquina.entries());
+                      let totalEntradas = 0;
+                      let totalSaidas = 0;
+                      maquinasArr.forEach(([id, lws]) => {
+                        totalEntradas += calcularValor(lws[0].moeda, lws[0].diferencaEntrada);
+                        totalSaidas += calcularValor(lws[0].moeda, lws[0].diferencaSaida);
+                      });
+
+                      const totalReceitas = receitasFinal.reduce((a, r) => a + r.valor, 0);
+                      const totalDespesas = despesasFinal.reduce((a, d) => a + d.valor, 0);
+                      const jogado = totalEntradas - totalSaidas;
+                      const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
+                      const valorCliente = jogado * (acertoPct / 100);
+                      const temItensExtras = totalReceitas !== 0 || totalDespesas > 0;
+                      const entradaFinal = modo2via === 'COBRANCA' ? jogado : (temItensExtras ? totalReceitas : jogado);
+                      const saidaFinal = temItensExtras ? totalDespesas : 0;
+                      const fechamentoFinal = temItensExtras ? saidaFinal - entradaFinal : entradaFinal;
+                      const labelFech = modo2via === 'COBRANCA' ? 'TOTALIZAÇÃO' : 'FECHAMENTO';
+
+                      return (
+                        <>
+                          {maquinasArr.map(([id, lws]) => {
+                            const m = lws[0].maquina;
+                            const e = calcularValor(lws[0].moeda, lws[0].diferencaEntrada);
+                            const s = calcularValor(lws[0].moeda, lws[0].diferencaSaida);
+                            return (
+                              <div key={id}>
+                                <p className="font-bold">{m.codigo} - {(m.tipo?.descricao || '').toUpperCase()}</p>
+                                {lws[0].usuario?.nome && <p className="text-xs opacity-70">Operador: {normalizarOperador(lws[0].usuario)}</p>}
+                                <p>E {String(lws[0].entradaAnterior || 0).padStart(10)} {String(lws[0].entradaNova || 0).padStart(10)}___{formatNumber(e)}</p>
+                                <p>S {String(lws[0].saidaAnterior || 0).padStart(10)} {String(lws[0].saidaNova || 0).padStart(10)}___{formatNumber(s)}</p>
+                                <p>Saldo: {formatNumber(lws[0].saldo)}</p>
+                                <p className="border-b border-black my-2">_____________</p>
+                              </div>
+                            );
+                          })}
+
+                          <div className="mt-1 space-y-1">
+                            <p>Qtde Maqs....: {String(maquinasArr.length).padStart(2, '0')}</p>
+                            <p>Entradas.....: {formatNumber(totalEntradas)}</p>
+                            <p>Saídas.......: {formatNumber(totalSaidas)}</p>
+                            {modo2via === 'COBRANCA' && <p className="font-bold">Jogado.......: {formatNumber(jogado)}</p>}
+                            {modo2via === 'COBRANCA' && <p>Cliente ({acertoPct}%): {formatNumber(valorCliente)}</p>}
+                            <p className="border-b border-black my-2">_____________</p>
+                          </div>
+
+                          {modo2via !== 'COBRANCA' && receitasFinal.length > 0 && (
+                            <div>
+                              <p className="border-b border-black my-2">_____________</p>
+                              {receitasFinal.map((r, i) => (
+                                <p key={i}>  {(r.descricao || 'OUTROS').padEnd(13)}: {formatNumber(r.valor)}</p>
+                              ))}
+                              <p className="font-bold text-green-700">Total ENTRADAS: {formatNumber(totalReceitas)}</p>
+                              <p className="border-b border-black my-2">_____________</p>
+                            </div>
+                          )}
+
+                          {modo2via !== 'COBRANCA' && despesasFinal.length > 0 && (
+                            <div>
+                              {despesasFinal.map((d, i) => (
+                                <p key={i}>  {(d.descricao || 'OUTROS').padEnd(13)}: {formatNumber(d.valor)}</p>
+                              ))}
+                              <p className="font-bold">Total SAÍDAS: {formatNumber(totalDespesas)}</p>
+                              <p className="border-b border-black my-2">_____________</p>
+                            </div>
+                          )}
+
+                          {modo2via !== 'COBRANCA' && (
+                          <div className="mt-3 space-y-1">
+                            <p>ENTRADA......: {formatNumber(entradaFinal)}</p>
+                            <p>SAÍDA........: {formatNumber(saidaFinal)}</p>
+                            <p className="font-bold">{labelFech}..: {formatNumber(fechamentoFinal)} {fechamentoFinal >= 0 ? '[sobrou]' : '[faltou]'}</p>
+                          </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                  ) : (
+                    /* MODO RELATÓRIO — preview HTML do que será gerado no canvas A4 */
+                    <div className="bg-white text-black p-3 rounded-lg" id="relatorio-segunda-via">
+                      <div className="text-center mb-3">
+                        <p className="font-bold text-base mb-1">
+                          {clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'RELATÓRIO DE COBRANÇA' : 'RELATÓRIO DE LEITURA'}
+                        </p>
+                        <p className="font-bold text-sm">{clienteSelecionado?.nome?.toUpperCase()}</p>
+                        <p className="text-sm">Data: {segundaViaSelecionada?.data}{(() => { const t = segundaViaDados.find((l: any) => l.turno)?.turno; return t ? ` — Turno: ${t === 'MANHA' ? 'MANHÃ' : t}` : ''; })()}</p>
+                        {(() => {
+                          const operadores = new Set(segundaViaDados.filter((l: any) => l.usuario?.nome).map((l: any) => normalizarOperador(l.usuario)));
+                          return operadores.size > 0 ? <p className="text-sm">Operador: {Array.from(operadores).join(', ')}</p> : null;
+                        })()}
+                      </div>
+
+                      {/* Cards de máquinas com foto em miniatura */}
+                      {(() => {
+                        const modo2via = clienteSelecionado?.formaCobranca === 'COBRANCA' ? 'COBRANCA' : 'LEITURA';
+                        const porMaquina = new Map<string, any[]>();
+                        const despesaItens: { descricao: string; valor: number }[] = [];
+                        const receitaItens: { descricao: string; valor: number }[] = [];
+                        segundaViaDados.forEach((l: any) => {
+                          const temLeitura = l.entradaNova > 0 || l.saidaNova > 0 || l.diferencaEntrada !== 0 || l.diferencaSaida !== 0;
+                          if (temLeitura) {
+                            if (!porMaquina.has(l.maquinaId)) porMaquina.set(l.maquinaId, []);
+                            porMaquina.get(l.maquinaId)!.push(l);
+                          }
+                          if (l.despesa) { try { const p = JSON.parse(l.despesa); if (Array.isArray(p)) p.forEach((d: any) => { if (d.valor > 0) despesaItens.push(d); }); } catch {} }
+                          if (l.caixa) { try { const p = JSON.parse(l.caixa); if (Array.isArray(p)) p.forEach((r: any) => { if (r.valor !== 0) receitaItens.push(r); }); } catch {} }
+                        });
+                        const despesasFinal = Array.from(new Map(despesaItens.map(d => [d.descricao, d])).values());
+                        const receitasFinal = Array.from(new Map(receitaItens.map(r => [r.descricao, r])).values());
+                        const maquinasArr = Array.from(porMaquina.entries());
+                        let totalEntradas = 0;
+                        let totalSaidas = 0;
+                        maquinasArr.forEach(([id, lws]) => {
+                          totalEntradas += calcularValor(lws[0].moeda, lws[0].diferencaEntrada);
+                          totalSaidas += calcularValor(lws[0].moeda, lws[0].diferencaSaida);
+                        });
+                        const totalReceitas = receitasFinal.reduce((a, r) => a + r.valor, 0);
+                        const totalDespesas = despesasFinal.reduce((a, d) => a + d.valor, 0);
+                        const jogado = totalEntradas - totalSaidas;
+                        const acertoPct = clienteSelecionado?.acertoPercentual ?? 50;
+                        const valorCliente = jogado * (acertoPct / 100);
+                        const temItensExtras = totalReceitas !== 0 || totalDespesas > 0;
+                        // COBRANCA: ENTRADAS = total entradas máquinas, SAIDAS = total saídas máquinas, FECHAMENTO = jogado
+                        const fechamentoFinal = modo2via === 'COBRANCA' ? jogado : (temItensExtras ? (totalDespesas - totalReceitas) : jogado);
+
+                        return (
+                          <>
+                            {/* Cards de cada máquina */}
+                            <div className="space-y-2 mb-3">
+                              {maquinasArr.map(([id, lws]) => {
+                                const m = lws[0].maquina;
+                                const e = calcularValor(lws[0].moeda, lws[0].diferencaEntrada);
+                                const s = calcularValor(lws[0].moeda, lws[0].diferencaSaida);
+                                const foto = segundaViaFotos.find(f => f.maquinaId === id || f.codigo === m.codigo);
+                                return (
+                                  <div key={id} className="border border-gray-700 rounded p-2 flex gap-3">
+                                    {/* Miniatura da foto — object-contain para não cortar a tarja vermelha */}
+                                    <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
+                                      {foto ? (
+                                        <img src={foto.fotoBase64} alt={m.codigo} className="w-full h-full object-contain" />
+                                      ) : (
+                                        <span className="text-xs text-gray-500">sem foto</span>
+                                      )}
+                                    </div>
+                                    {/* Dados da máquina */}
+                                    <div className="flex-1 text-sm">
+                                      {/* Linha 1: Código + Nome (negrito) + Moeda (sem negrito) */}
+                                      <p className="text-base">
+                                        <span className="font-bold">
+                                          {m.codigo} - {(m.tipo?.descricao || '').toUpperCase()}
+                                        </span>{' '}
+                                        <span className="font-normal">
+                                          {(() => {
+                                            const multMap: Record<string, number> = { M001: 0.01, M005: 0.05, M010: 0.10, M025: 0.25 };
+                                            const mult = multMap[lws[0].moeda || 'M001'] ?? 0.01;
+                                            return `x${mult.toString().replace('.', ',')}`;
+                                          })()}
+                                        </span>
+                                      </p>
+                                      {/* Linha 2: Entrada — apenas números, sem prefixo */}
+                                      <p>
+                                        {lws[0].entradaNova || 0} - {lws[0].entradaAnterior || 0} = {(lws[0].entradaNova || 0) - (lws[0].entradaAnterior || 0)}
+                                      </p>
+                                      {/* Linha 3: Saída — apenas números, sem prefixo */}
+                                      <p>
+                                        {lws[0].saidaNova || 0} - {lws[0].saidaAnterior || 0} = {(lws[0].saidaNova || 0) - (lws[0].saidaAnterior || 0)}
+                                      </p>
+                                      {/* Linha 4: Saldo (total entradas - total saídas × moeda) */}
+                                      <p className="font-medium">Saldo: {formatNumber(lws[0].saldo)}</p>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Card CARTÃO 1 (canhotos) — busca foto do GCS da 2a via */}
+                            {(() => {
+                              const cartao1Foto2via = segundaViaFotos.find(f => f.codigo === 'CARTAO1' || f.maquinaId === 'cartao1-canhoto');
+                              return cartao1Foto2via ? (
+                                <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
+                                  <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
+                                    <img src={cartao1Foto2via.fotoBase64} alt="Canhotos" className="w-full h-full object-contain" />
+                                  </div>
+                                  <div className="flex-1 text-sm flex items-center">
+                                    <p className="text-base font-bold">{clienteSelecionado?.nomeCartao1 || 'CARTÃO1'} — Canhotos</p>
+                                  </div>
+                                </div>
+                              ) : null;
+                            })()}
+
+                            {/* Card CARTÃO 2 (canhotos) — busca foto do GCS da 2a via */}
+                            {(() => {
+                              const cartao2Foto2via = segundaViaFotos.find(f => f.codigo === 'CARTAO2' || f.maquinaId === 'cartao2-canhoto');
+                              return cartao2Foto2via ? (
+                                <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
+                                  <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
+                                    <img src={cartao2Foto2via.fotoBase64} alt="Canhotos" className="w-full h-full object-contain" />
+                                  </div>
+                                  <div className="flex-1 text-sm flex items-center">
+                                    <p className="text-base font-bold">{clienteSelecionado?.nomeCartao2 || 'CARTÃO2'} — Canhotos</p>
+                                  </div>
+                                </div>
+                              ) : null;
+                            })()}
+
+                            {/* Card MERCADO (cupons) — busca foto do GCS da 2a via */}
+                            {(() => {
+                              const mercadoFoto2via = segundaViaFotos.find(f => f.codigo === 'MERCADO' || f.maquinaId === 'mercado-cupons');
+                              return mercadoFoto2via ? (
+                                <div className="border border-gray-700 rounded p-2 flex gap-3 mb-3">
+                                  <div className="w-24 h-24 flex-shrink-0 bg-gray-200 rounded overflow-hidden flex items-center justify-center">
+                                    <img src={mercadoFoto2via.fotoBase64} alt="Cupons" className="w-full h-full object-contain" />
+                                  </div>
+                                  <div className="flex-1 text-sm flex items-center">
+                                    <p className="text-base font-bold">MERCADO — Cupons Fiscais</p>
+                                  </div>
+                                </div>
+                              ) : null;
+                            })()}
+
+                            {/* Receitas/Despesas extras — lado a lado com moldura */}
+                            {modo2via !== 'COBRANCA' && (receitasFinal.length > 0 || despesasFinal.length > 0) && (
+                              <div className="grid grid-cols-2 gap-2 mb-3">
+                                {receitasFinal.length > 0 && (
+                                  <div className="border-2 border-blue-700 bg-blue-50 rounded p-2 text-sm">
+                                    <p className="font-bold text-blue-700 mb-1">ENTRADA</p>
+                                    {receitasFinal.map((r, i) => <p key={i}>  {r.descricao}: {formatNumber(r.valor)}</p>)}
+                                    <p className="font-bold text-blue-700 mt-1">Total: {formatNumber(totalReceitas)}</p>
+                                  </div>
+                                )}
+                                {despesasFinal.length > 0 && (
+                                  <div className="border-2 border-red-700 bg-red-50 rounded p-2 text-sm">
+                                    <p className="font-bold text-red-700 mb-1">SAÍDA</p>
+                                    {despesasFinal.map((d, i) => <p key={i}>  {d.descricao}: {formatNumber(d.valor)}</p>)}
+                                    <p className="font-bold text-red-700 mt-1">Total: {formatNumber(totalDespesas)}</p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Cards de totais em molduras (3 lado a lado) — ENTRADA, SAÍDA, FECHAMENTO */}
+                            <div className="grid grid-cols-3 gap-2 mt-3">
+                              {/* Card 1: Total Entrada (azul) */}
+                              <div className="border-2 border-blue-700 bg-blue-50 rounded p-2 text-center">
+                                <p className="font-bold text-blue-700 text-xs">ENTRADA</p>
+                                <p className="font-bold text-base text-blue-900">{formatNumber(modo2via === 'COBRANCA' ? totalEntradas : totalReceitas)}</p>
+                              </div>
+                              {/* Card 2: Total Saída (vermelho) */}
+                              <div className="border-2 border-red-700 bg-red-50 rounded p-2 text-center">
+                                <p className="font-bold text-red-700 text-xs">SAÍDA</p>
+                                <p className="font-bold text-base text-red-900">{formatNumber(modo2via === 'COBRANCA' ? totalSaidas : totalDespesas)}</p>
+                              </div>
+                              {/* Card 3: Fechamento — título dinâmico (SOBROU/FECHOU/FALTOU) e cor conforme valor */}
+                              {(() => {
+                                // > 0 → SOBROU (verde)
+                                // = 0 → FECHOU (azul)
+                                // < 0 → FALTOU (vermelho)
+                                if (fechamentoFinal > 0) {
+                                  return (
+                                    <div className="border-2 border-green-700 bg-green-50 rounded p-2 text-center">
+                                      <p className="font-bold text-green-700 text-xs">SOBROU</p>
+                                      <p className="font-bold text-base text-green-900">{formatNumber(fechamentoFinal)}</p>
+                                    </div>
+                                  );
+                                } else if (fechamentoFinal === 0) {
+                                  return (
+                                    <div className="border-2 border-blue-700 bg-blue-50 rounded p-2 text-center">
+                                      <p className="font-bold text-blue-700 text-xs">FECHOU</p>
+                                      <p className="font-bold text-base text-blue-900">{formatNumber(fechamentoFinal)}</p>
+                                    </div>
+                                  );
+                                } else {
+                                  return (
+                                    <div className="border-2 border-red-700 bg-red-50 rounded p-2 text-center">
+                                      <p className="font-bold text-red-700 text-xs">FALTOU</p>
+                                      <p className="font-bold text-base text-red-900">{formatNumber(fechamentoFinal)}</p>
+                                    </div>
+                                  );
+                                }
+                              })()}
+                            </div>
+
+                            {modo2via === 'COBRANCA' && (
+                              <p className="text-center mt-2 text-sm">Cliente ({acertoPct}%): {formatNumber(valorCliente)}</p>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  <DialogFooter className="flex gap-2 mt-4 flex-wrap">
+                    <Button variant="outline" onClick={() => window.print()}>
+                      <Printer className="w-4 h-4 mr-2" />
+                      Imprimir
+                    </Button>
+                    <Button
+                      onClick={segundaViaModo === 'RELATORIO' ? enviarWhatsAppRelatorio2aVia : gerarWhatsAppSegundaVia}
+                      className="bg-gradient-to-r from-green-500 to-emerald-600"
+                    >
+                      <MessageCircle className="w-4 h-4 mr-2" />
+                      {segundaViaModo === 'RELATORIO' ? 'WhatsApp (Relatório PDF)' : 'WhatsApp (Somente Extrato)'}
+                    </Button>
+                    {(clienteSelecionado as any)?.planilhaGabarito && (
+                      <Button
+                        onClick={enviarPlanilhaWhatsApp2aVia}
+                        className="bg-gradient-to-r from-emerald-600 to-teal-700"
+                      >
+                        <FileSpreadsheet className="w-4 h-4 mr-2" />
+                        WhatsApp (Planilha Excel)
+                      </Button>
+                    )}
+                    <Button
+                      onClick={enviarTelegram2aVia}
+                      className="bg-sky-500 hover:bg-sky-600 text-white"
+                    >
+                      <Send className="w-4 h-4 mr-2" />
+                      Telegram (Fotos + Extrato)
+                    </Button>
+                    <Button variant="outline" onClick={() => { setSegundaViaExtratoOpen(false); setSegundaViaSelecionada(null); }}>
+                      <X className="w-4 h-4 mr-2" />
+                      Sair
+                    </Button>
+                  </DialogFooter>
+                </>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">Nenhuma leitura encontrada.</div>
+              )}
+            </DialogContent>
+          </Dialog>
           <Dialog open={resumoModalOpen} onOpenChange={(open) => {
             // Bloqueia clique fora e ESC — só fecha via botão Sair (fecharResumo)
             if (open === false) {
@@ -16090,75 +17662,18 @@ export default function App() {
     };
   }, [isAuthenticated, requestWakeLock]);
 
-  const [activeTab, setActiveTabState] = useState('dashboard');
+  const [activeTab, setActiveTabState] = useState(() => {
+    try {
+      const saved = localStorage.getItem('caixafacil-active-tab');
+      return saved || 'dashboard';
+    } catch { return 'dashboard'; }
+  });
 
   // Wrapper que salva no localStorage sempre que muda
-  // (mantém o tab ao recarregar a página, mas é resetado para 'dashboard' no login/logout)
   const setActiveTab = useCallback((tab: string) => {
     setActiveTabState(tab);
     try { localStorage.setItem('caixafacil-active-tab', tab); } catch {}
   }, []);
-
-  // Após login (isAuthenticated: false → true), sempre voltar para o menu principal (dashboard).
-  // Previne o bug de o usuário reabrir o app e cair direto na aba onde estava antes (ex: cobrança).
-  const prevAuthRef = useRef(false);
-  useEffect(() => {
-    if (!prevAuthRef.current && isAuthenticated) {
-      // acabou de logar
-      setActiveTabState('dashboard');
-      try { localStorage.setItem('caixafacil-active-tab', 'dashboard'); } catch {}
-    }
-    prevAuthRef.current = isAuthenticated;
-  }, [isAuthenticated]);
-
-  // Ao fazer logout, limpar a aba salva para que a próxima sessão comece no dashboard.
-  // Também captura o botão "Voltar" do Android: se não estiver no dashboard, volta para ele;
-  // se já estiver no dashboard (e logado), previne saída acidental do app.
-  useEffect(() => {
-    if (!isAuthenticated) {
-      try { localStorage.removeItem('caixafacil-active-tab'); } catch {}
-      // Reseta histórico para que o próximo login não herde entradas antigas
-      try {
-        while (window.history.state && (window.history.state as any).__caixafacil_nav) {
-          window.history.back();
-        }
-      } catch {}
-      return;
-    }
-
-    // Empilhar uma entrada "dummy" no histórico quando o usuário sai do dashboard.
-    // Assim, o botão Voltar do Android volta para o dashboard em vez de fechar o app.
-    const pushDummyIfAway = () => {
-      if (activeTab !== 'dashboard' && !sessionStorage.getItem('cf-history-pushed')) {
-        try {
-          window.history.pushState({ __caixafacil_nav: true } as any, '');
-          sessionStorage.setItem('cf-history-pushed', '1');
-        } catch {}
-      } else if (activeTab === 'dashboard' && sessionStorage.getItem('cf-history-pushed')) {
-        try { sessionStorage.removeItem('cf-history-pushed'); } catch {}
-      }
-    };
-    pushDummyIfAway();
-
-    const onPopState = () => {
-      try { sessionStorage.removeItem('cf-history-pushed'); } catch {}
-      if (activeTab !== 'dashboard') {
-        // Voltar do sub-tab → vai para dashboard
-        setActiveTabState('dashboard');
-        try { localStorage.setItem('caixafacil-active-tab', 'dashboard'); } catch {}
-        // Re-empilhar para futuro back não sair do app
-        try {
-          window.history.pushState({ __caixafacil_nav: true } as any, '');
-          sessionStorage.setItem('cf-history-pushed', '1');
-        } catch {}
-      }
-      // Se já estava no dashboard, deixa o navegador fechar (comportamento padrão)
-    };
-    window.addEventListener('popstate', onPopState);
-    return () => {
-      window.removeEventListener('popstate', onPopState);
-    };
-  }, [isAuthenticated, activeTab]);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [assinaturaPlanoNome, setAssinaturaPlanoNome] = useState<string | null>(null);
