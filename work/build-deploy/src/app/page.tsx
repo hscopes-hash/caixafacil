@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo, startTransition } from 'react';
+import html2canvas from 'html2canvas';
 import { useSwipeNavigation } from '@/hooks/use-swipe-navigation';
 import { useKioskMode } from '@/hooks/use-kiosk-mode';
 import { useTheme } from 'next-themes';
@@ -6128,10 +6129,25 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
             alturaOriginal = Math.round(alturaOriginal * ratio);
           }
           
-          // Fonte adaptativa: mínimo 20px, máximo 44px
-          // Para 720px → 22px | Para 1200px → 37px | Para 1920px → 44px(cap)
-          const tamanhoFonteBase = Math.max(20, Math.min(44, Math.round(larguraOriginal / 30)));
-          const alturaTarja = Math.round(tamanhoFonteBase * 3.0);
+          // ============================================
+          // FONTE ADAPTATIVA POR ORIENTAÇÃO — VERTICAL APENAS
+          // ============================================
+          // Fotos VERTICAIS (retrato): fonte intermediária (2x original)
+          //   — 720x1280  → altura/26 = 49px (era 24px original, +104%)
+          //   — 1080x1920 → altura/26 = 73px → cap 60
+          //   — Cap 60px
+          // Fotos HORIZONTAIS (paisagem): comportamento original (largura/30, cap 44)
+          const ehVertical = alturaOriginal >= larguraOriginal;
+          let tamanhoFonteBase: number;
+          if (ehVertical) {
+            tamanhoFonteBase = Math.max(28, Math.min(60, Math.round(alturaOriginal / 26)));
+          } else {
+            tamanhoFonteBase = Math.max(20, Math.min(44, Math.round(larguraOriginal / 30)));
+          }
+          // Altura da tarja:
+          // - Vertical: 7.0x fonte (comporta 6 linhas × 1.15x + padding)
+          // - Horizontal: 3.0x fonte (2 linhas × 1.5x, original)
+          const alturaTarja = Math.round(tamanhoFonteBase * (ehVertical ? 7.0 : 3.0));
 
           // Altura da faixa de alerta (dobro do tamanho anterior, fonte no dobro)
           const temAlerta = alertaDefeito === true && mensagemAlerta;
@@ -6182,20 +6198,9 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           ctx.textBaseline = 'middle';
           ctx.textAlign = 'left';
 
-          // Tamanho da fonte adaptativo à largura da imagem
+          // Tamanho da fonte para desenhar a tarja
           const tamanhoFonte = tamanhoFonteBase;
           const padding = Math.max(12, Math.round(larguraOriginal * 0.03));
-
-          // Posições verticais das linhas (centralizadas na tarja)
-          const espacamentoEntreLinhas = Math.round(tamanhoFonte * 1.5);
-          const inicioTarja = offsetYTarja + alturaTarja / 2;
-          const linha1Y = inicioTarja - espacamentoEntreLinhas / 2;
-          const linha2Y = inicioTarja + espacamentoEntreLinhas / 2;
-
-          // === DESENHO POR COLUNAS (alinhamento perfeito) ===
-          ctx.fillStyle = '#ffffff'; // branco
-          const tamanhoFonteCabecalho = Math.round(tamanhoFonte * 1.15); // cabeçalhos 15% maiores
-          ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
 
           // Formatar valores
           const usuarioLimitado = operador.substring(0, 8);
@@ -6204,72 +6209,103 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
           const origemStr = origem || '-';
           const numMaquinaStr = numeroMaquina || '-';
 
-          // Medir largura de cada texto para posicionar colunas
-          const cabecalhos = ['Data Hora          ', 'NUM', 'Operador', 'ENTR', 'SAÍDA', 'Origem'];
-          const valores = [data, numMaquinaStr, usuarioLimitado, entradaStr, saidaStr, origemStr];
+          ctx.fillStyle = '#ffffff'; // branco
 
-          // Medir a largura de cada cabeçalho (com fonte maior) e valor (com fonte normal)
-          const largurasCab = cabecalhos.map(t => ctx.measureText(t).width);
-          ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`; // fonte normal para valores
-          const largurasVal = valores.map(t => ctx.measureText(t).width);
+          // ============================================
+          // LAYOUT DIFERENCIADO POR ORIENTAÇÃO
+          // ============================================
+          // VERTICAL: 6 linhas × 2 colunas (label | valor) — fonte grande, sem fallback
+          // HORIZONTAL: 6 colunas × 2 linhas (cabeçalho | valor) — layout original
+          if (ehVertical) {
+            // Layout vertical: 6 linhas empilhadas, cada uma com "Label: Valor"
+            const linhas = [
+              { label: 'Data Hora:', valor: data },
+              { label: 'NUM:', valor: numMaquinaStr },
+              { label: 'Operador:', valor: usuarioLimitado },
+              { label: 'Entrada:', valor: entradaStr },
+              { label: 'Saída:', valor: saidaStr },
+              { label: 'Origem:', valor: origemStr },
+            ];
 
-          // Largura da barra separadora " | " (medida com fonte de cabeçalho)
-          ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
-          const sepLargura = ctx.measureText(' | ').width;
-          const espacoEntreColunas = tamanhoFonteCabecalho * 0.5; // espaço extra após o separador
+            const fonteLabel = Math.round(tamanhoFonte * 0.9);
+            const linhaAltura = Math.round(tamanhoFonte * 1.15);
+            const totalAlturaTexto = linhas.length * linhaAltura;
+            let yAtual = offsetYTarja + (alturaTarja - totalAlturaTexto) / 2 + linhaAltura / 2;
 
-          // Calcular largura total ocupada
-          let larguraTotal = 0;
-          const colunas = cabecalhos.map((cab, i) => {
-            const larguraColuna = Math.max(largurasCab[i], largurasVal[i]) + sepLargura;
-            const x = padding + larguraTotal;
-            larguraTotal += larguraColuna + espacoEntreColunas;
-            return { cabecalho: cab, valor: valores[i], x };
-          });
-
-          // Se couber na imagem, desenhar com colunas alinhadas
-          if (larguraTotal <= larguraOriginal - padding) {
-            // Linha 1: Cabeçalhos (fonte maior)
-            ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
-            colunas.forEach(col => {
-              ctx.fillText(col.cabecalho, col.x, linha1Y);
+            const xLabel = padding;
+            ctx.font = `bold ${fonteLabel}px Arial, sans-serif`;
+            let larguraMaxLabel = 0;
+            linhas.forEach(l => {
+              const w = ctx.measureText(l.label).width;
+              if (w > larguraMaxLabel) larguraMaxLabel = w;
             });
+            const xValor = xLabel + larguraMaxLabel + tamanhoFonte * 0.4;
 
-            // Linha 2: Valores (fonte normal, mesma posição X dos cabeçalhos)
-            ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`;
-            colunas.forEach(col => {
-              ctx.fillText(col.valor, col.x, linha2Y);
+            linhas.forEach((linha) => {
+              ctx.font = `bold ${fonteLabel}px Arial, sans-serif`;
+              ctx.fillText(linha.label, xLabel, yAtual);
+              ctx.font = `${tamanhoFonte}px Arial, sans-serif`;
+              ctx.fillText(linha.valor, xValor, yAtual);
+              yAtual += linhaAltura;
             });
           } else {
-            // Fallback: se não couber, escala a fonte para caber
-            const fatorReducao = (larguraOriginal - 2 * padding) / larguraTotal;
-            const tamanhoReduzido = Math.max(12, Math.round(tamanhoFonte * fatorReducao));
-            ctx.font = `bold ${tamanhoReduzido}px Arial, sans-serif`;
+            // ============================================
+            // LAYOUT HORIZONTAL (original) — 6 colunas × 2 linhas
+            // ============================================
+            const espacamentoEntreLinhas = Math.round(tamanhoFonte * 1.5);
+            const inicioTarja = offsetYTarja + alturaTarja / 2;
+            const linha1Y = inicioTarja - espacamentoEntreLinhas / 2;
+            const linha2Y = inicioTarja + espacamentoEntreLinhas / 2;
 
-            // Recalcular com fonte menor
-            const largurasCabR = cabecalhos.map(t => ctx.measureText(t).width);
-            const largurasValR = valores.map(t => ctx.measureText(t).width);
-            const sepLarguraR = ctx.measureText(' | ').width;
-            const espacoR = tamanhoReduzido * 0.6;
+            const tamanhoFonteCabecalho = Math.round(tamanhoFonte * 1.15);
+            ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
 
-            let larguraTotalR = 0;
-            const colunasR = cabecalhos.map((cab, i) => {
-              const larguraColuna = Math.max(largurasCabR[i], largurasValR[i]) + sepLarguraR;
-              const x = padding + larguraTotalR;
-              larguraTotalR += larguraColuna + espacoR;
+            const cabecalhos = ['Data Hora          ', 'NUM', 'Operador', 'ENTR', 'SAÍDA', 'Origem'];
+            const valores = [data, numMaquinaStr, usuarioLimitado, entradaStr, saidaStr, origemStr];
+
+            const largurasCab = cabecalhos.map(t => ctx.measureText(t).width);
+            ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`;
+            const largurasVal = valores.map(t => ctx.measureText(t).width);
+
+            ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
+            const sepLargura = ctx.measureText(' | ').width;
+            const espacoEntreColunas = tamanhoFonteCabecalho * 0.5;
+
+            let larguraTotal = 0;
+            const colunas = cabecalhos.map((cab, i) => {
+              const larguraColuna = Math.max(largurasCab[i], largurasVal[i]) + sepLargura;
+              const x = padding + larguraTotal;
+              larguraTotal += larguraColuna + espacoEntreColunas;
               return { cabecalho: cab, valor: valores[i], x };
             });
 
-            colunasR.forEach(col => {
-              ctx.fillText(col.cabecalho, col.x, linha1Y);
-            });
-            colunasR.forEach(col => {
-              ctx.fillText(col.valor, col.x, linha2Y);
-            });
+            if (larguraTotal <= larguraOriginal - padding) {
+              ctx.font = `bold ${tamanhoFonteCabecalho}px Arial, sans-serif`;
+              colunas.forEach(col => { ctx.fillText(col.cabecalho, col.x, linha1Y); });
+              ctx.font = `bold ${tamanhoFonte}px Arial, sans-serif`;
+              colunas.forEach(col => { ctx.fillText(col.valor, col.x, linha2Y); });
+            } else {
+              const fatorReducao = (larguraOriginal - 2 * padding) / larguraTotal;
+              const tamanhoReduzido = Math.max(12, Math.round(tamanhoFonte * fatorReducao));
+              ctx.font = `bold ${tamanhoReduzido}px Arial, sans-serif`;
+              const largurasCabR = cabecalhos.map(t => ctx.measureText(t).width);
+              const largurasValR = valores.map(t => ctx.measureText(t).width);
+              const sepLarguraR = ctx.measureText(' | ').width;
+              const espacoR = tamanhoReduzido * 0.6;
+              let larguraTotalR = 0;
+              const colunasR = cabecalhos.map((cab, i) => {
+                const larguraColuna = Math.max(largurasCabR[i], largurasValR[i]) + sepLarguraR;
+                const x = padding + larguraTotalR;
+                larguraTotalR += larguraColuna + espacoR;
+                return { cabecalho: cab, valor: valores[i], x };
+              });
+              colunasR.forEach(col => { ctx.fillText(col.cabecalho, col.x, linha1Y); });
+              colunasR.forEach(col => { ctx.fillText(col.valor, col.x, linha2Y); });
+            }
           }
 
-          // Converter para base64 com qualidade reduzida
-          resolve(canvas.toDataURL('image/jpeg', 0.8));
+          // Converter para base64 — qualidade 0.95 para preservar nitidez do texto da tarja
+          resolve(canvas.toDataURL('image/jpeg', 0.95));
         } catch (error) {
           clearTimeout(timeout);
           reject(new Error('Erro ao processar canvas: ' + (error instanceof Error ? error.message : 'Erro desconhecido')));
@@ -8586,6 +8622,58 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
   // RELATÓRIO PDF DO RESUMO (igual à 2a via, mas usando maquinasSalvas)
   // =============================================
   const gerarRelatorioPdfResumo = async (): Promise<Blob | null> => {
+    try {
+      if (!maquinasSalvas || maquinasSalvas.length === 0) return null;
+
+      console.log('[gerarRelatorioPdfResumo] Gerando PDF a partir do preview HTML (html2canvas)');
+
+      // Esperar um tick para garantir que o DOM do preview está renderizado
+      await new Promise(r => setTimeout(r, 100));
+
+      // Capturar o elemento de preview (#relatorio-resumo) com html2canvas
+      // Este é o mesmo elemento que o usuário vê no modal de resumo — fica perfeito
+      const previewEl = document.getElementById('relatorio-resumo');
+      if (!previewEl) {
+        console.warn('[gerarRelatorioPdfResumo] Elemento #relatorio-resumo não encontrado — fallback para canvas manual');
+        return await gerarRelatorioPdfResumoCanvas();
+      }
+
+      // Aguardar imagens carregarem dentro do preview
+      const imgs = previewEl.querySelectorAll('img');
+      await Promise.all(Array.from(imgs).map(img => {
+        if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+        return new Promise<void>(resolve => {
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+          setTimeout(resolve, 3000); // timeout de segurança
+        });
+      }));
+
+      // html2canvas com scale 3 para alta resolução (PDF nítido ao dar zoom)
+      const canvas = await html2canvas(previewEl, {
+        scale: 3,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: '#ffffff',
+        logging: false,
+        imageTimeout: 5000,
+      });
+
+      console.log(`[gerarRelatorioPdfResumo] Canvas capturado: ${canvas.width}×${canvas.height}px`);
+
+      // Converter canvas para imagem JPEG de alta qualidade
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+      return await criarPdfDeImagem(imgData);
+    } catch (err) {
+      console.error('[gerarRelatorioPdfResumo] Erro ao gerar PDF via html2canvas:', err);
+      // Fallback para o método manual de canvas
+      console.warn('[gerarRelatorioPdfResumo] Tentando fallback com canvas manual...');
+      return await gerarRelatorioPdfResumoCanvas();
+    }
+  };
+
+  // Função fallback — gera PDF desenhando manualmente no canvas (método antigo)
+  const gerarRelatorioPdfResumoCanvas = async (): Promise<Blob | null> => {
     try {
       if (!maquinasSalvas || maquinasSalvas.length === 0) return null;
 
