@@ -9060,6 +9060,119 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     }
   };
 
+  // ============================================
+  // WhatsApp PDF Canvas — gera PDF a partir do canvas do preview HTML
+  // e envia via WhatsApp (igual ao fluxo do relatório, mas força html2canvas)
+  // ============================================
+  const enviarWhatsAppPdfCanvas = async () => {
+    if (!clienteSelecionado || maquinasSalvas.length === 0) {
+      toast.error('Nenhum dado para gerar relatório');
+      return;
+    }
+
+    toast.loading('Gerando PDF do canvas...', { id: 'wa-pdf-canvas' });
+
+    try {
+      // Esperar um tick para garantir que o DOM do preview está renderizado
+      await new Promise(r => setTimeout(r, 100));
+
+      const previewEl = document.getElementById('relatorio-resumo');
+      if (!previewEl) {
+        toast.dismiss('wa-pdf-canvas');
+        toast.error('Preview do relatório não encontrado');
+        return;
+      }
+
+      // Aguardar imagens carregarem dentro do preview
+      const imgs = previewEl.querySelectorAll('img');
+      await Promise.all(Array.from(imgs).map(img => {
+        if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+        return new Promise<void>(resolve => {
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+          setTimeout(resolve, 3000);
+        });
+      }));
+
+      // Capturar preview com html2canvas (scale 3 para alta resolução)
+      const canvas = await html2canvas(previewEl, {
+        scale: 3,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: '#ffffff',
+        logging: false,
+        imageTimeout: 5000,
+      });
+
+      console.log(`[WhatsApp PDF Canvas] Canvas capturado: ${canvas.width}×${canvas.height}px`);
+
+      // Converter canvas para imagem JPEG de alta qualidade → PDF
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+      const pdfBlob = await criarPdfDeImagem(imgData);
+
+      if (!pdfBlob) {
+        toast.dismiss('wa-pdf-canvas');
+        toast.error('Falha ao gerar PDF do canvas');
+        return;
+      }
+
+      const now = new Date();
+      const fileName = `relatorio_canvas_${clienteSelecionado.nome.replace(/\s+/g, '_')}_${now.getTime()}.pdf`;
+      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+
+      const modo2via = modoOperacao === 'COBRANCA' ? 'COBRANÇA' : 'LEITURA';
+      const caption = `RELATÓRIO DE ${modo2via} (Canvas) - ${clienteSelecionado.nome.toUpperCase()}\nData: ${dataFormatada}`;
+
+      // Tentar navigator.share (funciona no Chrome Android)
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            title: `Relatório - ${clienteSelecionado.nome}`,
+            text: caption,
+            files: [file],
+          });
+          toast.dismiss('wa-pdf-canvas');
+          toast.success('PDF do canvas enviado!', { duration: 5000 });
+          return;
+        } catch (shareError: unknown) {
+          if (shareError instanceof Error && shareError.name === 'AbortError') {
+            toast.dismiss('wa-pdf-canvas');
+            return;
+          }
+        }
+      }
+
+      // Fallback: baixar PDF + abrir WhatsApp
+      toast.dismiss('wa-pdf-canvas');
+      const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
+      const phone = clienteSelecionado.telefone?.replace(/\D/g, '') || '';
+
+      const downloadLink = document.createElement('a');
+      const pdfUrl = URL.createObjectURL(file);
+      downloadLink.href = pdfUrl;
+      downloadLink.download = fileName;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      setTimeout(() => URL.revokeObjectURL(pdfUrl), 5000);
+
+      if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
+        const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
+        setTimeout(() => abrirWhatsAppLink(grupoUrl), 500);
+        toast.info('PDF baixado! Anexe como documento no grupo do WhatsApp.', { duration: 5000 });
+      } else if (phone) {
+        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 500);
+        toast.info('PDF baixado! Anexe como documento no WhatsApp do cliente.', { duration: 5000 });
+      } else {
+        toast.success('PDF baixado! Compartilhe manualmente.', { duration: 5000 });
+      }
+    } catch (error) {
+      toast.dismiss('wa-pdf-canvas');
+      console.error('[WhatsApp PDF Canvas] Erro:', error);
+      toast.error('Erro ao gerar PDF do canvas');
+    }
+  };
+
   // Enviar planilha Excel preenchida via WhatsApp (a partir do gabarito do cliente)
   const enviarPlanilhaWhatsApp = async () => {
     if (!clienteSelecionado || maquinasSalvas.length === 0) {
@@ -12641,6 +12754,14 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
                 >
                   <Send className="w-4 h-4 mr-2" />
                   Telegram (Fotos + Extrato)
+                </Button>
+                <Button
+                  onClick={enviarWhatsAppPdfCanvas}
+                  className="bg-gradient-to-r from-orange-500 to-amber-600 text-white"
+                  title="Gera PDF a partir do canvas da visualização do relatório e envia via WhatsApp"
+                >
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  WhatsApp PDF Canvas
                 </Button>
                 <Button variant="outline" data-close-resumo="true" onClick={fecharResumo}>
                   <X className="w-4 h-4 mr-2" />
