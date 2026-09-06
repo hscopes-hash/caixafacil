@@ -9074,7 +9074,7 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
 
     try {
       // Esperar um tick para garantir que o DOM do preview está renderizado
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise(r => setTimeout(r, 200));
 
       const previewEl = document.getElementById('relatorio-resumo');
       if (!previewEl) {
@@ -9083,8 +9083,38 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         return;
       }
 
-      // Aguardar imagens carregarem dentro do preview
-      const imgs = previewEl.querySelectorAll('img');
+      // ⚠️ CLONAR o elemento para capturar altura TOTAL (não só a visível)
+      // O preview está dentro de um Dialog com max-h-[90vh] overflow-y-auto,
+      // então html2canvas só capturaria a parte visível sem o clone.
+      const clone = previewEl.cloneNode(true) as HTMLElement;
+      clone.id = 'relatorio-resumo-clone';
+
+      // Posicionar o clone fora da tela mas com largura fixa e sem restrições de altura
+      const cloneWidth = previewEl.scrollWidth || previewEl.getBoundingClientRect().width || 400;
+
+      clone.style.position = 'fixed';
+      clone.style.left = '-9999px';
+      clone.style.top = '0';
+      clone.style.width = `${cloneWidth}px`;
+      clone.style.maxHeight = 'none';
+      clone.style.overflow = 'visible';
+      clone.style.transform = 'none';
+      clone.style.margin = '0';
+      clone.style.padding = '12px';
+      clone.style.backgroundColor = '#ffffff';
+      clone.style.boxSizing = 'border-box';
+
+      // Remover restrições de altura em todos os filhos
+      clone.querySelectorAll('*').forEach(el => {
+        const htmlEl = el as HTMLElement;
+        htmlEl.style.maxHeight = 'none';
+        htmlEl.style.overflow = 'visible';
+      });
+
+      document.body.appendChild(clone);
+
+      // Aguardar imagens carregarem no clone
+      const imgs = clone.querySelectorAll('img');
       await Promise.all(Array.from(imgs).map(img => {
         if (img.complete && img.naturalWidth > 0) return Promise.resolve();
         return new Promise<void>(resolve => {
@@ -9094,77 +9124,92 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
         });
       }));
 
-      // Capturar preview com html2canvas (scale 3 para alta resolução)
-      const canvas = await html2canvas(previewEl, {
-        scale: 3,
-        useCORS: true,
-        allowTaint: false,
-        backgroundColor: '#ffffff',
-        logging: false,
-        imageTimeout: 5000,
-      });
+      // Pequeno delay para garantir renderização do clone
+      await new Promise(r => setTimeout(r, 100));
 
-      console.log(`[WhatsApp PDF Canvas] Canvas capturado: ${canvas.width}×${canvas.height}px`);
+      try {
+        // Capturar clone com html2canvas (scale 3 para alta resolução)
+        // O PDF fica IGUAL à visualização — captura altura total do conteúdo
+        const canvas = await html2canvas(clone, {
+          scale: 3,
+          useCORS: true,
+          allowTaint: false,
+          backgroundColor: '#ffffff',
+          logging: false,
+          imageTimeout: 5000,
+          width: clone.scrollWidth,
+          height: clone.scrollHeight,
+          windowWidth: clone.scrollWidth,
+          windowHeight: clone.scrollHeight,
+        });
 
-      // Converter canvas para imagem JPEG de alta qualidade → PDF
-      const imgData = canvas.toDataURL('image/jpeg', 0.98);
-      const pdfBlob = await criarPdfDeImagem(imgData);
+        console.log(`[WhatsApp PDF Canvas] Canvas capturado: ${canvas.width}×${canvas.height}px`);
 
-      if (!pdfBlob) {
-        toast.dismiss('wa-pdf-canvas');
-        toast.error('Falha ao gerar PDF do canvas');
-        return;
-      }
+        // Converter canvas para imagem JPEG de alta qualidade → PDF
+        const imgData = canvas.toDataURL('image/jpeg', 0.98);
+        const pdfBlob = await criarPdfDeImagem(imgData);
 
-      const now = new Date();
-      const fileName = `relatorio_canvas_${clienteSelecionado.nome.replace(/\s+/g, '_')}_${now.getTime()}.pdf`;
-      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-
-      const modo2via = modoOperacao === 'COBRANCA' ? 'COBRANÇA' : 'LEITURA';
-      const caption = `RELATÓRIO DE ${modo2via} (Canvas) - ${clienteSelecionado.nome.toUpperCase()}\nData: ${dataFormatada}`;
-
-      // Tentar navigator.share (funciona no Chrome Android)
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            title: `Relatório - ${clienteSelecionado.nome}`,
-            text: caption,
-            files: [file],
-          });
+        if (!pdfBlob) {
           toast.dismiss('wa-pdf-canvas');
-          toast.success('PDF do canvas enviado!', { duration: 5000 });
+          toast.error('Falha ao gerar PDF do canvas');
           return;
-        } catch (shareError: unknown) {
-          if (shareError instanceof Error && shareError.name === 'AbortError') {
+        }
+
+        const now = new Date();
+        const fileName = `relatorio_canvas_${clienteSelecionado.nome.replace(/\s+/g, '_')}_${now.getTime()}.pdf`;
+        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+
+        const modo2via = modoOperacao === 'COBRANCA' ? 'COBRANÇA' : 'LEITURA';
+        const caption = `RELATÓRIO DE ${modo2via} - ${clienteSelecionado.nome.toUpperCase()}\nData: ${dataFormatada}`;
+
+        // Tentar navigator.share (funciona no Chrome Android)
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              title: `Relatório - ${clienteSelecionado.nome}`,
+              text: caption,
+              files: [file],
+            });
             toast.dismiss('wa-pdf-canvas');
+            toast.success('PDF do canvas enviado!', { duration: 5000 });
             return;
+          } catch (shareError: unknown) {
+            if (shareError instanceof Error && shareError.name === 'AbortError') {
+              toast.dismiss('wa-pdf-canvas');
+              return;
+            }
           }
         }
-      }
 
-      // Fallback: baixar PDF + abrir WhatsApp
-      toast.dismiss('wa-pdf-canvas');
-      const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
-      const phone = clienteSelecionado.telefone?.replace(/\D/g, '') || '';
+        // Fallback: baixar PDF + abrir WhatsApp
+        toast.dismiss('wa-pdf-canvas');
+        const whatsappOriginal = (clienteSelecionado?.whatsapp || '').trim();
+        const phone = clienteSelecionado.telefone?.replace(/\D/g, '') || '';
 
-      const downloadLink = document.createElement('a');
-      const pdfUrl = URL.createObjectURL(file);
-      downloadLink.href = pdfUrl;
-      downloadLink.download = fileName;
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      document.body.removeChild(downloadLink);
-      setTimeout(() => URL.revokeObjectURL(pdfUrl), 5000);
+        const downloadLink = document.createElement('a');
+        const pdfUrl = URL.createObjectURL(file);
+        downloadLink.href = pdfUrl;
+        downloadLink.download = fileName;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        setTimeout(() => URL.revokeObjectURL(pdfUrl), 5000);
 
-      if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
-        const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
-        setTimeout(() => abrirWhatsAppLink(grupoUrl), 500);
-        toast.info('PDF baixado! Anexe como documento no grupo do WhatsApp.', { duration: 5000 });
-      } else if (phone) {
-        setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 500);
-        toast.info('PDF baixado! Anexe como documento no WhatsApp do cliente.', { duration: 5000 });
-      } else {
-        toast.success('PDF baixado! Compartilhe manualmente.', { duration: 5000 });
+        if (whatsappOriginal && whatsappOriginal.includes('chat.whatsapp.com')) {
+          const grupoUrl = whatsappOriginal.startsWith('http') ? whatsappOriginal : `https://chat.whatsapp.com/${whatsappOriginal}`;
+          setTimeout(() => abrirWhatsAppLink(grupoUrl), 500);
+          toast.info('PDF baixado! Anexe como documento no grupo do WhatsApp.', { duration: 5000 });
+        } else if (phone) {
+          setTimeout(() => abrirWhatsAppLink(`https://wa.me/55${phone}`), 500);
+          toast.info('PDF baixado! Anexe como documento no WhatsApp do cliente.', { duration: 5000 });
+        } else {
+          toast.success('PDF baixado! Compartilhe manualmente.', { duration: 5000 });
+        }
+      } finally {
+        // SEMPRE remover o clone, mesmo se houver erro
+        if (clone.parentNode) {
+          clone.parentNode.removeChild(clone);
+        }
       }
     } catch (error) {
       toast.dismiss('wa-pdf-canvas');
