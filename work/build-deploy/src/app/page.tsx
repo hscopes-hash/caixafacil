@@ -9113,6 +9113,33 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       document.body.appendChild(clone);
       console.log('[WhatsApp PDF Canvas] Clone adicionado ao DOM');
 
+      // ⚠️ CORRIGIR CORES lab() — html2canvas não suporta função lab() (Tailwind v4 usa)
+      // Converte todos os elementos para usar cores RGB explícitas
+      const processarCoresLab = (el: HTMLElement) => {
+        const computed = window.getComputedStyle(el);
+        const props = ['color', 'backgroundColor', 'borderColor', 'borderTopColor', 'borderBottomColor', 'borderLeftColor', 'borderRightColor', 'fill', 'stroke'] as const;
+        props.forEach(prop => {
+          const val = computed[prop];
+          if (val && (val.includes('lab(') || val.includes('oklab(') || val.includes('oklch(') || val.includes('color('))) {
+            // Converter para rgb via canvas temporário (navegador faz a conversão)
+            try {
+              const tmpCtx = document.createElement('canvas').getContext('2d');
+              if (tmpCtx) {
+                tmpCtx.fillStyle = val;
+                const rgb = tmpCtx.fillStyle; // navegador converte para rgb/rgba
+                (el.style as any)[prop] = rgb;
+              }
+            } catch {}
+          }
+        });
+      };
+      // Aplicar a todos os elementos do clone
+      processarCoresLab(clone);
+      clone.querySelectorAll('*').forEach(el => {
+        processarCoresLab(el as HTMLElement);
+      });
+      console.log('[WhatsApp PDF Canvas] Cores lab()/oklab()/oklch() convertidas para RGB');
+
       // Aguardar imagens carregarem no clone
       const imgs = clone.querySelectorAll('img');
       console.log(`[WhatsApp PDF Canvas] ${imgs.length} imagem(ns) para carregar`);
