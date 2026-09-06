@@ -17957,14 +17957,31 @@ export default function App() {
   const [activeTab, setActiveTabState] = useState(() => {
     try {
       const saved = localStorage.getItem('caixafacil-active-tab');
-      return saved || 'dashboard';
+      const savedTs = localStorage.getItem('caixafacil-active-tab-ts');
+      // ⚠️ Só restaura a aba se foi salva há menos de 15 minutos
+      // Se passou mais tempo, volta para o dashboard (sessão "expirou")
+      const TEMPO_MAX_MIN = 15;
+      if (saved && savedTs) {
+        const ts = parseInt(savedTs, 10);
+        const idadeMin = (Date.now() - ts) / (1000 * 60);
+        if (idadeMin <= TEMPO_MAX_MIN) {
+          return saved;
+        }
+        // Expirou — limpar dados salvos
+        localStorage.removeItem('caixafacil-active-tab');
+        localStorage.removeItem('caixafacil-active-tab-ts');
+      }
+      return 'dashboard';
     } catch { return 'dashboard'; }
   });
 
-  // Wrapper que salva no localStorage sempre que muda
+  // Wrapper que salva no localStorage sempre que muda (com timestamp)
   const setActiveTab = useCallback((tab: string) => {
     setActiveTabState(tab);
-    try { localStorage.setItem('caixafacil-active-tab', tab); } catch {}
+    try {
+      localStorage.setItem('caixafacil-active-tab', tab);
+      localStorage.setItem('caixafacil-active-tab-ts', String(Date.now()));
+    } catch {}
   }, []);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
