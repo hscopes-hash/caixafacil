@@ -9073,24 +9073,24 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     toast.loading('Gerando PDF do canvas...', { id: 'wa-pdf-canvas' });
 
     try {
+      console.log('[WhatsApp PDF Canvas] Iniciando...');
       // Esperar um tick para garantir que o DOM do preview está renderizado
       await new Promise(r => setTimeout(r, 200));
 
       const previewEl = document.getElementById('relatorio-resumo');
+      console.log('[WhatsApp PDF Canvas] Preview element:', previewEl ? 'encontrado' : 'NÃO encontrado');
       if (!previewEl) {
         toast.dismiss('wa-pdf-canvas');
-        toast.error('Preview do relatório não encontrado');
+        toast.error('Preview do relatório não encontrado. Abra o modal de resumo primeiro.', { duration: 8000 });
         return;
       }
 
       // ⚠️ CLONAR o elemento para capturar altura TOTAL (não só a visível)
-      // O preview está dentro de um Dialog com max-h-[90vh] overflow-y-auto,
-      // então html2canvas só capturaria a parte visível sem o clone.
       const clone = previewEl.cloneNode(true) as HTMLElement;
       clone.id = 'relatorio-resumo-clone';
 
-      // Posicionar o clone fora da tela mas com largura fixa e sem restrições de altura
       const cloneWidth = previewEl.scrollWidth || previewEl.getBoundingClientRect().width || 400;
+      console.log('[WhatsApp PDF Canvas] Largura do clone:', cloneWidth);
 
       clone.style.position = 'fixed';
       clone.style.left = '-9999px';
@@ -9104,7 +9104,6 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       clone.style.backgroundColor = '#ffffff';
       clone.style.boxSizing = 'border-box';
 
-      // Remover restrições de altura em todos os filhos
       clone.querySelectorAll('*').forEach(el => {
         const htmlEl = el as HTMLElement;
         htmlEl.style.maxHeight = 'none';
@@ -9112,30 +9111,34 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
       });
 
       document.body.appendChild(clone);
+      console.log('[WhatsApp PDF Canvas] Clone adicionado ao DOM');
 
       // Aguardar imagens carregarem no clone
       const imgs = clone.querySelectorAll('img');
-      await Promise.all(Array.from(imgs).map(img => {
-        if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      console.log(`[WhatsApp PDF Canvas] ${imgs.length} imagem(ns) para carregar`);
+      await Promise.all(Array.from(imgs).map((img, i) => {
+        if (img.complete && img.naturalWidth > 0) {
+          console.log(`[WhatsApp PDF Canvas] Imagem ${i} já carregada`);
+          return Promise.resolve();
+        }
         return new Promise<void>(resolve => {
-          img.onload = () => resolve();
-          img.onerror = () => resolve();
+          img.onload = () => { console.log(`[WhatsApp PDF Canvas] Imagem ${i} carregou`); resolve(); };
+          img.onerror = () => { console.warn(`[WhatsApp PDF Canvas] Imagem ${i} falhou`); resolve(); };
           setTimeout(resolve, 3000);
         });
       }));
 
-      // Pequeno delay para garantir renderização do clone
       await new Promise(r => setTimeout(r, 100));
+      console.log(`[WhatsApp PDF Canvas] Clone scrollWidth=${clone.scrollWidth} scrollHeight=${clone.scrollHeight}`);
 
       try {
-        // Capturar clone com html2canvas (scale 3 para alta resolução)
-        // O PDF fica IGUAL à visualização — captura altura total do conteúdo
+        console.log('[WhatsApp PDF Canvas] Chamando html2canvas...');
         const canvas = await html2canvas(clone, {
           scale: 3,
           useCORS: true,
           allowTaint: false,
           backgroundColor: '#ffffff',
-          logging: false,
+          logging: true,
           imageTimeout: 5000,
           width: clone.scrollWidth,
           height: clone.scrollHeight,
@@ -9214,7 +9217,15 @@ function LeiturasPage({ empresaId, isSupervisor, usuarioId, usuarioNome, ajusteM
     } catch (error) {
       toast.dismiss('wa-pdf-canvas');
       console.error('[WhatsApp PDF Canvas] Erro:', error);
-      toast.error('Erro ao gerar PDF do canvas');
+      const errMsg = error instanceof Error ? error.message : String(error);
+      // Mensagem mais específica para o usuário
+      if (errMsg.includes('taint') || errMsg.includes('CORS')) {
+        toast.error('Erro: imagem bloqueada por CORS. Tente novamente.', { duration: 8000 });
+      } else if (errMsg.includes('Preview')) {
+        toast.error(errMsg, { duration: 8000 });
+      } else {
+        toast.error('Erro ao gerar PDF do canvas: ' + errMsg, { duration: 8000 });
+      }
     }
   };
 
